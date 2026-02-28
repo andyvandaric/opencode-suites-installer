@@ -220,7 +220,7 @@ fi
 
   # Download SHA256SUMS
   local sums_url
-  sums_url="$(echo "${release_json}" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS[^"]*"' | head -1 | grep -o '"https[^"]*"' | tr -d '"')"
+  sums_url="$(echo "${release_json}" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS[^"]*"' | head -1 | grep -o '"https[^"]*"' | tr -d '"' || true)"
   local sums_path="${TMP_DIR}/SHA256SUMS"
 
   if [[ -n "${sums_url}" ]]; then
