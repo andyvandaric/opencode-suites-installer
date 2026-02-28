@@ -30,7 +30,7 @@ resolve_token() {
 
     GH_TOKEN="$(gh auth token 2>/dev/null)"
     if [[ -n "${GH_TOKEN}" ]]; then
-      info "Auth: using gh CLI token"
+      echo "  Auth: using gh CLI token" >&2
       echo "${GH_TOKEN}"
       return 0
     fi
@@ -41,7 +41,7 @@ resolve_token() {
   if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
     GH_TOKEN="$(gh auth token 2>/dev/null)"
     if [[ -n "${GH_TOKEN}" ]]; then
-      info "Auth: using gh CLI token"
+      echo "  Auth: using gh CLI token" >&2
       echo "${GH_TOKEN}"
       return 0
     fi
@@ -49,7 +49,7 @@ resolve_token() {
 
   # Path 2: GITHUB_TOKEN env var
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    info "Auth: using GITHUB_TOKEN environment variable"
+    echo "  Auth: using GITHUB_TOKEN environment variable" >&2
     echo "${GITHUB_TOKEN}"
     return 0
   fi
@@ -59,7 +59,7 @@ resolve_token() {
     local stored_token
     stored_token="$(cat "${TOKEN_FILE}")"
     if [[ -n "${stored_token}" ]]; then
-      info "Auth: using stored token from ${TOKEN_FILE}"
+      echo "  Auth: using stored token from ${TOKEN_FILE}" >&2
       echo "${stored_token}"
       return 0
     fi
@@ -80,7 +80,7 @@ resolve_token() {
   mkdir -p "$(dirname "${TOKEN_FILE}")"
   echo "${token}" > "${TOKEN_FILE}"
   chmod 600 "${TOKEN_FILE}"
-  info "Token saved to ${TOKEN_FILE}"
+  echo "  Token saved to ${TOKEN_FILE}" >&2
   echo "${token}"
 }
 
