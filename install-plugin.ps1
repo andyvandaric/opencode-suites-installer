@@ -200,6 +200,35 @@ function Add-PathEntryToUserPath {
     }
 }
 
+function Ensure-WindowsShellEnv {
+    if ($env:OS -ne "Windows_NT") {
+        return
+    }
+
+    $systemRoot = if ($env:SystemRoot) { $env:SystemRoot } else { "C:\Windows" }
+    $fallbackCmd = Join-Path $systemRoot "System32\cmd.exe"
+
+    $currentComSpecRaw = if ($env:ComSpec) { $env:ComSpec } else { $env:COMSPEC }
+    $currentComSpec = if ($currentComSpecRaw) {
+        $currentComSpecRaw.Trim().Trim('"')
+    } else {
+        ""
+    }
+
+    if ((-not $currentComSpec) -or (-not (Test-Path $currentComSpec))) {
+        if (Test-Path $fallbackCmd) {
+            $env:ComSpec = $fallbackCmd
+            $env:COMSPEC = $fallbackCmd
+            Write-Host "Normalized COMSPEC to $fallbackCmd"
+        } else {
+            Write-Warning "cmd.exe not found at expected path: $fallbackCmd"
+        }
+    } else {
+        $env:ComSpec = $currentComSpec
+        $env:COMSPEC = $currentComSpec
+    }
+}
+
 function Ensure-GitHubCli {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         return $true
@@ -666,6 +695,7 @@ Write-Output "--------------------------------------"
 
 $null = Ensure-PowerShellRuntime
 Ensure-Bun
+Ensure-WindowsShellEnv
 
 $isLocalSource = Test-Path ".\plugins\opencode-multi-auth\package.json"
 $version = "local-source"
