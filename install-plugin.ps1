@@ -14,6 +14,61 @@ $TMP_DIR = [System.IO.Path]::Combine(
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
 
+function Resolve-PwshPath {
+    $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($pwshCmd -and $pwshCmd.Path) {
+        return $pwshCmd.Path
+    }
+
+    $candidates = @(
+        (Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe"),
+        (Join-Path $env:LOCALAPPDATA "Microsoft\PowerShell\7\pwsh.exe"),
+        (Join-Path $env:USERPROFILE "scoop\shims\pwsh.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Invoke-PwshRelaunch {
+    param([string]$PwshPath)
+
+    if (-not $PwshPath) {
+        return $false
+    }
+
+    if ($env:OCS_PWSH_RELAUNCHED -eq "1") {
+        return $false
+    }
+
+    Write-Output "Relaunching installer in PowerShell 7 for better compatibility..."
+    $env:OCS_PWSH_RELAUNCHED = "1"
+
+    $scriptPath = $PSCommandPath
+    $exitCode = 0
+
+    if ($scriptPath -and (Test-Path $scriptPath)) {
+        & $PwshPath -NoProfile -ExecutionPolicy Bypass -File $scriptPath
+        if ($LASTEXITCODE -ne $null) {
+            $exitCode = $LASTEXITCODE
+        }
+        exit $exitCode
+    }
+
+    $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1"
+    $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
+    & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
+    if ($LASTEXITCODE -ne $null) {
+        $exitCode = $LASTEXITCODE
+    }
+    exit $exitCode
+}
+
 function Ensure-PowerShellRuntime {
     $psVersion = $PSVersionTable.PSVersion
     if ($psVersion.Major -ge 7) {
@@ -23,8 +78,11 @@ function Ensure-PowerShellRuntime {
 
     Write-Warning "Running on Windows PowerShell $($psVersion.ToString()). PowerShell 7+ is recommended."
 
-    if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-        Write-Output "PowerShell 7 is already installed (pwsh found). Continuing in current shell."
+    $pwshPath = Resolve-PwshPath
+    if ($pwshPath) {
+        Write-Output "PowerShell 7 is already installed."
+        Invoke-PwshRelaunch -PwshPath $pwshPath
+        Write-Output "Continuing in current shell."
         return
     }
 
@@ -60,8 +118,11 @@ function Ensure-PowerShellRuntime {
         }
     }
 
-    if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+    $pwshPath = Resolve-PwshPath
+    if ($pwshPath) {
         Write-Output "PowerShell 7 detected after installation attempt."
+        Invoke-PwshRelaunch -PwshPath $pwshPath
+        Write-Output "Continuing in current shell."
     } else {
         Write-Warning "PowerShell 7 installation was skipped or failed. Continuing with current shell."
     }
