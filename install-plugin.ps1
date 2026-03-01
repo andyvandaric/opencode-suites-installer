@@ -47,7 +47,7 @@ function Invoke-PwshRelaunch {
         return $false
     }
 
-    Write-Output "Relaunching installer in PowerShell 7 for better compatibility..."
+    Write-Host "Relaunching installer in PowerShell 7 for better compatibility..."
     $env:OCS_PWSH_RELAUNCHED = "1"
 
     $scriptPath = $PSCommandPath
@@ -79,7 +79,7 @@ function Invoke-PwshRelaunch {
 function Ensure-PowerShellRuntime {
     $psVersion = $PSVersionTable.PSVersion
     if ($psVersion.Major -ge 7) {
-        Write-Output "PowerShell $($psVersion.ToString()) detected"
+        Write-Host "PowerShell $($psVersion.ToString()) detected"
         return $false
     }
 
@@ -87,20 +87,20 @@ function Ensure-PowerShellRuntime {
 
     $pwshPath = Resolve-PwshPath
     if ($pwshPath) {
-        Write-Output "PowerShell 7 is already installed."
+        Write-Host "PowerShell 7 is already installed."
         $relaunched = Invoke-PwshRelaunch -PwshPath $pwshPath
         if ($relaunched) {
-            Write-Output "Relaunch completed. Keeping current terminal open."
+            Write-Host "Relaunch completed. Keeping current terminal open."
             return $true
         }
-        Write-Output "Continuing in current shell."
+        Write-Host "Continuing in current shell."
         return $false
     }
 
     $installed = $false
 
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Output "Attempting PowerShell 7 install via winget..."
+        Write-Host "Attempting PowerShell 7 install via winget..."
         try {
             & winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements --silent
             if ($LASTEXITCODE -eq 0) { $installed = $true }
@@ -110,7 +110,7 @@ function Ensure-PowerShellRuntime {
     }
 
     if ((-not $installed) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Output "Attempting PowerShell 7 install via Chocolatey..."
+        Write-Host "Attempting PowerShell 7 install via Chocolatey..."
         try {
             & choco install powershell-core -y
             if ($LASTEXITCODE -eq 0) { $installed = $true }
@@ -120,7 +120,7 @@ function Ensure-PowerShellRuntime {
     }
 
     if ((-not $installed) -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-        Write-Output "Attempting PowerShell 7 install via Scoop..."
+        Write-Host "Attempting PowerShell 7 install via Scoop..."
         try {
             & scoop install pwsh
             if ($LASTEXITCODE -eq 0) { $installed = $true }
@@ -131,13 +131,13 @@ function Ensure-PowerShellRuntime {
 
     $pwshPath = Resolve-PwshPath
     if ($pwshPath) {
-        Write-Output "PowerShell 7 detected after installation attempt."
+        Write-Host "PowerShell 7 detected after installation attempt."
         $relaunched = Invoke-PwshRelaunch -PwshPath $pwshPath
         if ($relaunched) {
-            Write-Output "Relaunch completed. Keeping current terminal open."
+            Write-Host "Relaunch completed. Keeping current terminal open."
             return $true
         }
-        Write-Output "Continuing in current shell."
+        Write-Host "Continuing in current shell."
     } else {
         Write-Warning "PowerShell 7 installation was skipped or failed. Continuing with current shell."
     }
@@ -561,7 +561,7 @@ function Ensure-Bun {
 
 function Test-LockRelatedError {
     param([string]$Message)
-    return $Message -match "EBUSY|EFAULT|EPERM|ENOENT|resource busy|being used by another process|Access is denied"
+    return $Message -match "EBUSY|EFAULT|EPERM|resource busy|being used by another process|Access is denied"
 }
 
 function Stop-WindowsLockHolders {
@@ -603,46 +603,84 @@ function Invoke-BunInstallWithRetry {
         [int]$MaxAttempts = 5
     )
 
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $frozenSucceeded = $true
-        try {
-            & bun install --frozen-lockfile *> $null
-        } catch {
-            $frozenSucceeded = $false
-        }
+    Push-Location $Directory
+    try {
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            $lastOutput = ""
 
-        if ($frozenSucceeded -and $LASTEXITCODE -eq 0) {
-            return
-        }
-
-        Write-Output "Retrying bun install without frozen lockfile..."
-        try {
-            & bun install *> $null
-            if ($LASTEXITCODE -eq 0) {
-                return
+            if ($attempt -eq 3) {
+                Write-Warning "Attempt $attempt/${MaxAttempts}: cleaning local node_modules before retry..."
+                Remove-Item -Path ".\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
             }
-        } catch {
-            # handled below
-        }
 
-        $message = ""
-        if ($Error.Count -gt 0 -and $Error[0]) {
-            $message = "$($Error[0].Exception.Message)"
-        }
+            if ($attempt -eq 4) {
+                Write-Warning "Attempt $attempt/${MaxAttempts}: normalizing shell environment before retry..."
+                Ensure-WindowsShellEnv
+            }
 
-        if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
-            Write-Warning "bun install hit file lock (attempt $attempt/$MaxAttempts). Applying lock handler..."
-            Stop-WindowsLockHolders -PathHint $Directory
-            Start-Sleep -Milliseconds (700 * $attempt)
-            continue
-        }
+            if ($attempt -eq 1) {
+                $args = @("install", "--frozen-lockfile")
+            } else {
+                $args = @("install")
+                if ($attempt -ge 3) {
+                    $args += "--no-cache"
+                }
+                if ($attempt -eq $MaxAttempts) {
+                    $args += "--verbose"
+                }
+            }
 
-        if ($attempt -lt $MaxAttempts) {
-            Start-Sleep -Milliseconds (700 * $attempt)
-            continue
-        }
+            try {
+                $bunOutput = & bun @args 2>&1
+                if ($bunOutput) {
+                    $lastOutput = ($bunOutput | Out-String).Trim()
+                }
+                if ($LASTEXITCODE -eq 0) {
+                    return
+                }
+            } catch {
+                $lastOutput = $_.Exception.Message
+            }
 
-        throw "bun install failed after $MaxAttempts attempts. Last error: $message"
+            $message = ""
+            if ($lastOutput) {
+                $lines = $lastOutput -split "`r?`n"
+                $tail = $lines | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -Last 6
+                $message = ($tail -join " | ").Trim()
+            }
+            if ((-not $message) -and $Error.Count -gt 0 -and $Error[0]) {
+                $message = "$($Error[0].Exception.Message)"
+            }
+
+            if ($message) {
+                Write-Warning "bun install attempt $attempt/${MaxAttempts} failed: $message"
+            } else {
+                Write-Warning "bun install attempt $attempt/${MaxAttempts} failed with unknown error."
+            }
+
+            if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
+                Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
+                Ensure-WindowsShellEnv
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
+            }
+
+            if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
+                Write-Warning "Detected likely file-lock issue. Applying lock handler..."
+                Stop-WindowsLockHolders -PathHint $Directory
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
+            }
+
+            if ($attempt -lt $MaxAttempts) {
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
+            }
+
+            throw "bun install failed after $MaxAttempts attempts. Last error: $message"
+        }
+    } finally {
+        Pop-Location
     }
 }
 
@@ -693,11 +731,17 @@ Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
 
-$null = Ensure-PowerShellRuntime
+$relaunchHandled = [bool](Ensure-PowerShellRuntime)
+if ($relaunchHandled) {
+    return
+}
 Ensure-Bun
 Ensure-WindowsShellEnv
 
-$isLocalSource = Test-Path ".\plugins\opencode-multi-auth\package.json"
+$isLocalSource =
+    (Test-Path ".\plugins\opencode-multi-auth\package.json") -and
+    (Test-Path ".\scripts\setup.js") -and
+    (Test-Path ".\configs")
 $version = "local-source"
 
 if ($isLocalSource) {
