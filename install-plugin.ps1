@@ -48,13 +48,28 @@ function Invoke-PwshRelaunch {
     }
 
     Write-Host "Relaunching installer in PowerShell 7 for better compatibility..."
+    $previousRelaunchFlag = $env:OCS_PWSH_RELAUNCHED
     $env:OCS_PWSH_RELAUNCHED = "1"
 
     $scriptPath = $PSCommandPath
     $exitCode = 0
 
-    if ($scriptPath -and (Test-Path $scriptPath)) {
-        & $PwshPath -NoProfile -ExecutionPolicy Bypass -File $scriptPath
+    try {
+        if ($scriptPath -and (Test-Path $scriptPath)) {
+            & $PwshPath -NoProfile -ExecutionPolicy Bypass -File $scriptPath
+            if ($LASTEXITCODE -ne $null) {
+                $exitCode = $LASTEXITCODE
+            }
+            if ($exitCode -ne 0) {
+                Write-Warning "Relaunched installer exited with code $exitCode"
+                return $false
+            }
+            return $true
+        }
+
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1"
+        $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
+        & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
             $exitCode = $LASTEXITCODE
         }
@@ -63,19 +78,13 @@ function Invoke-PwshRelaunch {
             return $false
         }
         return $true
+    } finally {
+        if ($previousRelaunchFlag) {
+            $env:OCS_PWSH_RELAUNCHED = $previousRelaunchFlag
+        } else {
+            Remove-Item Env:OCS_PWSH_RELAUNCHED -ErrorAction SilentlyContinue
+        }
     }
-
-    $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1"
-    $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
-    & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
-    if ($LASTEXITCODE -ne $null) {
-        $exitCode = $LASTEXITCODE
-    }
-    if ($exitCode -ne 0) {
-        Write-Warning "Relaunched installer exited with code $exitCode"
-        return $false
-    }
-    return $true
 }
 
 function Ensure-PowerShellRuntime {
@@ -584,118 +593,13 @@ function Invoke-BunCachePurge {
     }
 }
 
-function Invoke-PnpmInstallWithRetry {
-    param(
-        [string]$Directory,
-        [int]$MaxAttempts = 2
-    )
-
-    $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
-    if (-not $pnpmCmd) {
-        return $false
-    }
-
-    $resolvedDirectory = (Resolve-Path $Directory).Path
-    $pnpmLockPath = Join-Path $resolvedDirectory "pnpm-lock.yaml"
-    if (-not (Test-Path $pnpmLockPath)) {
-        return $false
-    }
-
-    Push-Location $resolvedDirectory
+function Test-BunRegistryReachable {
     try {
-        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            try {
-                $args = @("install", "--frozen-lockfile")
-                if ($attempt -eq $MaxAttempts) {
-                    $args += "--reporter=append-only"
-                }
-                & pnpm @args 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Output "Dependency install succeeded via pnpm fallback."
-                    return $true
-                }
-            } catch {
-                # handled by retry below
-            }
-
-            if ($attempt -lt $MaxAttempts) {
-                Start-Sleep -Milliseconds (1000 * $attempt)
-            }
-        }
-    } finally {
-        Pop-Location
-    }
-
-    return $false
-}
-
-function Invoke-NpmInstallWithRetry {
-    param(
-        [string]$Directory,
-        [int]$MaxAttempts = 3
-    )
-
-    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-    if (-not $npmCmd) {
-        Write-Warning "npm not found. Cannot use npm fallback."
+        $response = Invoke-WebRequest -Uri "https://registry.npmjs.org/@types%2Fnode" -Method Head -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
+        return [bool]($response.StatusCode -ge 200 -and $response.StatusCode -lt 400)
+    } catch {
         return $false
     }
-
-    $resolvedDirectory = (Resolve-Path $Directory).Path
-
-    $env:NPM_CONFIG_REGISTRY = "https://registry.npmjs.org/"
-    $env:NPM_CONFIG_FETCH_RETRIES = "5"
-    $env:NPM_CONFIG_FETCH_RETRY_MINTIMEOUT = "2000"
-    $env:NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT = "120000"
-
-    Push-Location $resolvedDirectory
-    try {
-        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            $lastOutput = ""
-            $args = @("install", "--no-save", "--package-lock=false", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/")
-
-            if ($attempt -eq $MaxAttempts) {
-                $args += @("--loglevel", "verbose")
-            }
-
-            try {
-                $npmOutput = & npm @args 2>&1
-                if ($npmOutput) {
-                    $lastOutput = ($npmOutput | Out-String).Trim()
-                }
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Output "Dependency install succeeded via npm fallback."
-                    return $true
-                }
-            } catch {
-                $lastOutput = $_.Exception.Message
-            }
-
-            $message = ""
-            if ($lastOutput) {
-                $lines = $lastOutput -split "`r?`n"
-                $tail = $lines | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -Last 6
-                $message = ($tail -join " | ").Trim()
-            }
-            if (-not $message) {
-                $message = "unknown npm error"
-            }
-
-            Write-Warning "npm fallback attempt $attempt/${MaxAttempts} failed: $message"
-
-            if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
-                Stop-WindowsLockHolders -PathHint $resolvedDirectory
-            }
-
-            if ($attempt -lt $MaxAttempts) {
-                Start-Sleep -Milliseconds (900 * $attempt)
-            }
-        }
-    } finally {
-        Pop-Location
-    }
-
-    return $false
 }
 
 function Stop-WindowsLockHolders {
@@ -756,17 +660,14 @@ function Invoke-BunInstallWithRetry {
                 Ensure-WindowsShellEnv
             }
 
-            if ($attempt -le 4) {
-                $args = @("install", "--frozen-lockfile", "--no-progress", "--network-concurrency=16")
+            $args = @("install", "--frozen-lockfile", "--no-progress", "--network-concurrency=16", "--registry", "https://registry.npmjs.org/")
+            if ($attempt -ge 5) {
+                $args += @("--no-cache", "--force", "--network-concurrency=8")
+            }
+            if ($attempt -eq $MaxAttempts) {
+                $args += "--verbose"
             } else {
-                $args = @("install", "--no-progress", "--network-concurrency=16")
-                if ($attempt -ge 5) {
-                    $args += "--no-cache"
-                }
-                $args += @("--force", "--network-concurrency=8", "--registry", "https://registry.npmjs.org/")
-                if ($attempt -eq $MaxAttempts) {
-                    $args += "--verbose"
-                }
+                $env:BUN_CONFIG_REGISTRY = "https://registry.npmjs.org/"
             }
 
             try {
@@ -820,8 +721,11 @@ function Invoke-BunInstallWithRetry {
                 if ($attempt -ge 3) {
                     Invoke-BunCachePurge
                 }
+                if (-not (Test-BunRegistryReachable)) {
+                    Write-Warning "Registry check failed for https://registry.npmjs.org/@types%2Fnode (network/proxy/DNS/TLS issue likely)."
+                }
                 Ensure-WindowsShellEnv
-                Start-Sleep -Milliseconds (1200 * $attempt)
+                Start-Sleep -Milliseconds (1500 * $attempt)
                 continue
             }
 
@@ -833,22 +737,7 @@ function Invoke-BunInstallWithRetry {
             break
         }
 
-        Write-Warning "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
-
-        Write-Warning "Attempting pnpm fallback for dependency installation..."
-        $pnpmSucceeded = Invoke-PnpmInstallWithRetry -Directory $resolvedDirectory -MaxAttempts 2
-        if ($pnpmSucceeded) {
-            return
-        }
-
-        Write-Warning "pnpm fallback unavailable or failed. Attempting npm fallback for dependency installation..."
-
-        $npmSucceeded = Invoke-NpmInstallWithRetry -Directory $resolvedDirectory -MaxAttempts 3
-        if ($npmSucceeded) {
-            return
-        }
-
-        throw "Dependency install failed via bun, pnpm fallback, and npm fallback. Last bun error: $finalMessage"
+        throw "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
     } finally {
         Pop-Location
     }
