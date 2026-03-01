@@ -622,11 +622,7 @@ Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
 
-$relaunchHandled = Ensure-PowerShellRuntime
-if ($relaunchHandled) {
-    Write-Output "Installer handoff to PowerShell 7 finished. Terminal remains open for logs."
-    return
-}
+Ensure-PowerShellRuntime
 Ensure-Bun
 
 $isLocalSource = (Test-Path ".\plugins\opencode-multi-auth\package.json") -or (Test-Path ".\package.json")
