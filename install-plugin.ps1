@@ -605,7 +605,9 @@ function Invoke-BunInstallWithRetry {
         [int]$MaxAttempts = 5
     )
 
-    Push-Location $Directory
+    $resolvedDirectory = (Resolve-Path $Directory).Path
+
+    Push-Location $resolvedDirectory
     try {
         for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
             $lastOutput = ""
@@ -669,7 +671,7 @@ function Invoke-BunInstallWithRetry {
 
             if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
                 Write-Warning "Detected likely file-lock issue. Applying lock handler..."
-                Stop-WindowsLockHolders -PathHint $Directory
+                Stop-WindowsLockHolders -PathHint $resolvedDirectory
                 Start-Sleep -Milliseconds (700 * $attempt)
                 continue
             }
@@ -863,12 +865,8 @@ if ($isLocalSource) {
 
 Write-Output "opencode-multi-auth installed to $PLUGIN_DIR"
 Write-Output "Installing dependencies..."
-Push-Location $PLUGIN_DIR
-try {
-    Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 5
-} finally {
-    Pop-Location
-}
+$pluginFullPath = (Resolve-Path $PLUGIN_DIR).Path
+Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
 
