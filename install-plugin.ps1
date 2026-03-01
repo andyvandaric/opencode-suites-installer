@@ -1,5 +1,5 @@
 # install-plugin.ps1 - Install opencode-multi-auth plugin for OpenCode Config Suites
-# Auth path: GitHub CLI web login only (https protocol)
+# Auth path: env token -> cached token -> gh CLI -> secure prompt
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
@@ -129,29 +129,168 @@ function Ensure-PowerShellRuntime {
     }
 }
 
-function Resolve-Token {
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        Write-Error "GitHub CLI (gh) is required. Install from https://cli.github.com/ then rerun installer."
-        exit 1
+function Refresh-SessionPath {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+    if ($machinePath -and $userPath) {
+        $env:PATH = "$machinePath;$userPath"
+    } elseif ($machinePath) {
+        $env:PATH = $machinePath
+    } elseif ($userPath) {
+        $env:PATH = $userPath
     }
 
-    gh auth status 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Output "GitHub CLI not authenticated. Opening browser login..."
-        & gh auth login --hostname github.com --git-protocol https --web
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "GitHub CLI login failed. Please run 'gh auth login --hostname github.com --git-protocol https --web' and retry."
-            exit 1
+    $ghBinCandidates = @(
+        (Join-Path $env:ProgramFiles "GitHub CLI"),
+        (Join-Path $env:LOCALAPPDATA "Programs\GitHub CLI")
+    )
+
+    foreach ($ghBin in $ghBinCandidates) {
+        if ($ghBin -and (Test-Path (Join-Path $ghBin "gh.exe")) -and ($env:PATH -notlike "*$ghBin*")) {
+            $env:PATH = "$ghBin;$env:PATH"
+        }
+    }
+}
+
+function Ensure-GitHubCli {
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        return $true
+    }
+
+    Write-Warning "GitHub CLI (gh) not found. Attempting auto install..."
+    $installed = $false
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Output "Attempting GitHub CLI install via winget..."
+        $wingetIds = @("GitHub.cli", "Microsoft.GitHub.CLI")
+        foreach ($wingetId in $wingetIds) {
+            if ($installed) { break }
+            try {
+                & winget install --id $wingetId --exact --silent --accept-package-agreements --accept-source-agreements
+                if ($LASTEXITCODE -eq 0) { $installed = $true }
+            } catch {
+                $installed = $false
+            }
         }
     }
 
-    $ghToken = gh auth token 2>&1
-    if ($LASTEXITCODE -eq 0 -and $ghToken) {
-        Write-Host "Auth: using gh CLI token"
-        return $ghToken.Trim()
+    if ((-not $installed) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Output "Attempting GitHub CLI install via Chocolatey..."
+        try {
+            & choco install gh -y
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } catch {
+            $installed = $false
+        }
     }
 
-    Write-Error "Unable to obtain token from GitHub CLI. Run 'gh auth status' to troubleshoot, then retry."
+    if ((-not $installed) -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        Write-Output "Attempting GitHub CLI install via Scoop..."
+        try {
+            & scoop install gh
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    Refresh-SessionPath
+    return [bool](Get-Command gh -ErrorAction SilentlyContinue)
+}
+
+function Save-TokenFile {
+    param([string]$Token)
+
+    if (-not $Token) { return }
+
+    try {
+        $tokenDir = Split-Path -Parent $TOKEN_FILE
+        if ($tokenDir -and (-not (Test-Path $tokenDir))) {
+            New-Item -ItemType Directory -Path $tokenDir -Force | Out-Null
+        }
+
+        Set-Content -Path $TOKEN_FILE -Value $Token -Encoding UTF8
+    } catch {
+        Write-Warning "Could not persist token cache to $TOKEN_FILE"
+    }
+}
+
+function Resolve-Token {
+    param([switch]$NonInteractive)
+
+    if ($env:GH_TOKEN) {
+        Write-Output "Auth: using GH_TOKEN environment variable"
+        return $env:GH_TOKEN.Trim()
+    }
+
+    if ($env:GITHUB_TOKEN) {
+        Write-Output "Auth: using GITHUB_TOKEN environment variable"
+        return $env:GITHUB_TOKEN.Trim()
+    }
+
+    if (Test-Path $TOKEN_FILE) {
+        try {
+            $cachedToken = (Get-Content -Path $TOKEN_FILE -Raw -Encoding UTF8).Trim()
+            if ($cachedToken) {
+                Write-Output "Auth: using cached token file"
+                return $cachedToken
+            }
+        } catch {
+            Write-Warning "Token cache exists but could not be read: $TOKEN_FILE"
+        }
+    }
+
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        $ghInstalled = Ensure-GitHubCli
+        if (-not $ghInstalled) {
+            Write-Warning "GitHub CLI auto-install failed. Falling back to manual token input."
+        }
+    }
+
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        gh auth status 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output "GitHub CLI not authenticated. Opening browser login..."
+            & gh auth login --hostname github.com --git-protocol https --web
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "GitHub CLI login failed. Falling back to manual token input."
+            }
+        }
+
+        $ghToken = gh auth token 2>$null
+        if ($LASTEXITCODE -eq 0 -and $ghToken) {
+            $trimmed = $ghToken.Trim()
+            Write-Output "Auth: using gh CLI token"
+            Save-TokenFile -Token $trimmed
+            return $trimmed
+        }
+    }
+
+    if ($NonInteractive) {
+        Write-Error "Unable to resolve GitHub token in non-interactive mode. Set GH_TOKEN/GITHUB_TOKEN or authenticate gh."
+        exit 1
+    }
+
+    Write-Output "GitHub token required for release download."
+    Write-Output "Create a token at: https://github.com/settings/tokens"
+    try {
+        $secureToken = Read-Host "Enter GitHub PAT (input hidden)" -AsSecureString
+        $cred = New-Object System.Management.Automation.PSCredential("token", $secureToken)
+        $manualToken = $cred.GetNetworkCredential().Password
+        if ($manualToken) {
+            $manualToken = $manualToken.Trim()
+            if ($manualToken) {
+                Write-Output "Auth: using manually provided token"
+                Save-TokenFile -Token $manualToken
+                return $manualToken
+            }
+        }
+    } catch {
+        Write-Warning "Manual token prompt failed: $($_.Exception.Message)"
+    }
+
+    Write-Error "Unable to obtain GitHub token. Provide GH_TOKEN/GITHUB_TOKEN, authenticate gh, or rerun and enter a PAT."
     exit 1
 }
 
@@ -299,6 +438,93 @@ function Ensure-Bun {
     Write-Output "Bun $installedVersion detected"
 }
 
+function Test-LockRelatedError {
+    param([string]$Message)
+    return $Message -match "EBUSY|EFAULT|EPERM|ENOENT|resource busy|being used by another process|Access is denied"
+}
+
+function Stop-WindowsLockHolders {
+    param([string]$PathHint)
+
+    if ($env:OS -ne "Windows_NT") { return }
+
+    $safeHint = $PathHint.Replace("'", "''")
+    $script = @"
+$hint = '$safeHint'
+$names = @('bun.exe','node.exe','opencode.exe','biome.exe','powershell.exe','bash.exe')
+$self = `$PID
+$procs = Get-CimInstance Win32_Process | Where-Object {
+  `$_.ProcessId -ne `$self -and
+  `$_.Name -and
+  ($names -contains `$_.Name.ToLower()) -and
+  `$_.CommandLine -and
+  (`$_.CommandLine -like "*`$hint*" -or `$_.CommandLine -like "*\\.config\\opencode*")
+}
+foreach (`$p in `$procs) {
+  try {
+    Stop-Process -Id `$p.ProcessId -Force -ErrorAction Stop
+    Write-Output ("   [lock-handler] Killed " + `$p.Name + " PID=" + `$p.ProcessId)
+  } catch {}
+}
+"@
+
+    try {
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+        & powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded *> $null
+    } catch {
+        # best effort only
+    }
+}
+
+function Invoke-BunInstallWithRetry {
+    param(
+        [string]$Directory,
+        [int]$MaxAttempts = 5
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $frozenSucceeded = $true
+        try {
+            & bun install --frozen-lockfile *> $null
+        } catch {
+            $frozenSucceeded = $false
+        }
+
+        if ($frozenSucceeded -and $LASTEXITCODE -eq 0) {
+            return
+        }
+
+        Write-Output "Retrying bun install without frozen lockfile..."
+        try {
+            & bun install *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        } catch {
+            # handled below
+        }
+
+        $message = ""
+        if ($Error.Count -gt 0 -and $Error[0]) {
+            $message = "$($Error[0].Exception.Message)"
+        }
+
+        if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
+            Write-Warning "bun install hit file lock (attempt $attempt/$MaxAttempts). Applying lock handler..."
+            Stop-WindowsLockHolders -PathHint $Directory
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        throw "bun install failed after $MaxAttempts attempts. Last error: $message"
+    }
+}
+
 function Invoke-AutoSetup {
     param([bool]$IsLocalSource)
 
@@ -441,17 +667,7 @@ Write-Output "opencode-multi-auth installed to $PLUGIN_DIR"
 Write-Output "Installing dependencies..."
 Push-Location $PLUGIN_DIR
 try {
-    $frozenSucceeded = $true
-    try {
-        bun install --frozen-lockfile *> $null
-    } catch {
-        $frozenSucceeded = $false
-    }
-
-    if ((-not $frozenSucceeded) -or ($LASTEXITCODE -ne 0)) {
-        Write-Output "Retrying bun install without frozen lockfile..."
-        bun install
-    }
+    Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 5
 } finally {
     Pop-Location
 }
