@@ -264,7 +264,10 @@ function Save-TokenFile {
 }
 
 function Resolve-Token {
-    param([switch]$NonInteractive)
+    param(
+        [switch]$NonInteractive,
+        [switch]$SkipTokenCache
+    )
 
     if ($env:GH_TOKEN) {
         Write-Host "Auth: using GH_TOKEN environment variable"
@@ -276,7 +279,7 @@ function Resolve-Token {
         return $env:GITHUB_TOKEN.Trim()
     }
 
-    if (Test-Path $TOKEN_FILE) {
+    if ((-not $SkipTokenCache) -and (Test-Path $TOKEN_FILE)) {
         try {
             $cachedToken = (Get-Content -Path $TOKEN_FILE -Raw -Encoding UTF8).Trim()
             if ($cachedToken) {
@@ -351,7 +354,10 @@ function Open-LandingPage {
 }
 
 function Test-RepoAccess {
-    param([string]$Token)
+    param(
+        [string]$Token,
+        [switch]$SuppressLandingPage
+    )
 
     $headers = @{
         Authorization = "token $Token"
@@ -371,7 +377,9 @@ function Test-RepoAccess {
         if ($code -in @(401, 403, 404)) {
             Write-Warning "You do not have OCS access yet. To buy access, visit https://ocs.flowcrate.app/"
             Write-Host "GitHub API response: HTTP $code"
-            Open-LandingPage
+            if (-not $SuppressLandingPage) {
+                Open-LandingPage
+            }
             return $false
         }
 
@@ -400,6 +408,32 @@ function Get-Asset {
     }
 
     Invoke-WebRequest -Uri $Url -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+}
+
+function Extract-TarGz {
+    param(
+        [string]$ArchivePath,
+        [string]$Destination,
+        [switch]$StripFirstComponent
+    )
+
+    $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if (-not $tarCommand) {
+        $tarCommand = Get-Command tar -ErrorAction SilentlyContinue
+    }
+    if (-not $tarCommand) {
+        throw "tar command not found. Please ensure tar.exe is available on PATH."
+    }
+
+    $args = @("-xzf", $ArchivePath, "-C", $Destination)
+    if ($StripFirstComponent) {
+        $args += "--strip-components=1"
+    }
+
+    & $tarCommand.Source @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "tar extraction failed with exit code $LASTEXITCODE"
+    }
 }
 
 function Test-SHA256Sums {
@@ -651,7 +685,23 @@ if ($isLocalSource) {
 
     Write-Output ""
     Write-Output "Verifying repo access..."
-    $hasRepoAccess = [bool](Test-RepoAccess -Token $token)
+    $hasRepoAccess = [bool](Test-RepoAccess -Token $token -SuppressLandingPage)
+    if (-not $hasRepoAccess) {
+        Write-Warning "Access check failed with current token. Retrying with fresh authentication..."
+
+        if (Test-Path $TOKEN_FILE) {
+            try {
+                Remove-Item -Path $TOKEN_FILE -Force -ErrorAction Stop
+                Write-Host "Cleared cached token at $TOKEN_FILE"
+            } catch {
+                Write-Warning "Could not clear cached token: $($_.Exception.Message)"
+            }
+        }
+
+        $token = [string](Resolve-Token -SkipTokenCache)
+        $hasRepoAccess = [bool](Test-RepoAccess -Token $token)
+    }
+
     if (-not $hasRepoAccess) {
         Write-Output "Installation stopped. Complete access purchase/activation, then rerun installer."
         return
@@ -689,7 +739,7 @@ if ($isLocalSource) {
         New-Item -ItemType Directory -Force $verifyDir | Out-Null
         Push-Location $TMP_DIR
         try {
-            tar --force-local -xzf $tarName -C "./verify" --strip-components=1
+            Extract-TarGz -ArchivePath $tarName -Destination "./verify" -StripFirstComponent
         } finally {
             Pop-Location
         }
@@ -709,12 +759,22 @@ if ($isLocalSource) {
     New-Item -ItemType Directory -Force $extractTmp | Out-Null
     Push-Location $TMP_DIR
     try {
-        tar --force-local -xzf $tarName -C "./extract" --strip-components=1
+        Extract-TarGz -ArchivePath $tarName -Destination "./extract" -StripFirstComponent
     } finally {
         Pop-Location
     }
 
+    if (-not (Test-Path (Join-Path $extractTmp "package.json"))) {
+        Write-Error "Extraction failed: package.json not found in extracted bundle."
+        exit 1
+    }
+
     Copy-Item -Path "$extractTmp\*" -Destination $PLUGIN_DIR -Recurse -Force
+
+    if (-not (Test-Path (Join-Path $PLUGIN_DIR "package.json"))) {
+        Write-Error "Installation failed: package.json not found in $PLUGIN_DIR after extraction."
+        exit 1
+    }
 }
 
 Write-Output "opencode-multi-auth installed to $PLUGIN_DIR"
