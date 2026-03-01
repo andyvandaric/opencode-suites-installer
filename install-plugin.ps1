@@ -934,9 +934,11 @@ Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output ""
 Write-Output "   Next steps:"
 if ($isLocalSource) {
-    Write-Output "   1. Run setup (interactive): bun ./scripts/setup.js"
+    Write-Output "   1. Run setup (interactive): bun .\scripts\setup.js"
 } else {
-    Write-Output "   1. Run setup (interactive): bun $PLUGIN_DIR/scripts/setup.js"
+    Write-Output "   1. Run setup (interactive): bun .\plugins\opencode-multi-auth\scripts\setup.js"
 }
-Write-Output "   2. Verify runtime: opencode auth login"
+Write-Output "   2. Add account via: opencode auth login"
+Write-Output "   3. Running Opencode via web UI:"
+Write-Output "      opencode web --port 8089"
 Write-Output ""
