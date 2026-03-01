@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_RELEASES_REPO = "andyvandaric/opencode-config-suites-releases"
-$ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/checkout"
+$ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/"
 $PLUGIN_DIR = ".\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $TMP_DIR = [System.IO.Path]::Combine(
@@ -150,6 +150,37 @@ function Refresh-SessionPath {
         if ($ghBin -and (Test-Path (Join-Path $ghBin "gh.exe")) -and ($env:PATH -notlike "*$ghBin*")) {
             $env:PATH = "$ghBin;$env:PATH"
         }
+    }
+}
+
+function Add-PathEntryToUserPath {
+    param([string]$PathEntry)
+
+    if (-not $PathEntry) { return }
+    if (-not (Test-Path $PathEntry)) { return }
+
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $entries = @()
+    if ($userPath) {
+        $entries = $userPath -split ";"
+    }
+
+    $normalized = $PathEntry.TrimEnd("\\")
+    $alreadyPresent = $false
+    foreach ($entry in $entries) {
+        if ($entry -and ($entry.TrimEnd("\\") -ieq $normalized)) {
+            $alreadyPresent = $true
+            break
+        }
+    }
+
+    if (-not $alreadyPresent) {
+        $newPath = if ($userPath) { "$userPath;$PathEntry" } else { $PathEntry }
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    }
+
+    if (($env:PATH -split ";") -notcontains $PathEntry) {
+        $env:PATH = "$PathEntry;$env:PATH"
     }
 }
 
@@ -314,6 +345,7 @@ function Test-RepoAccess {
     try {
         $response = Invoke-WebRequest -Uri "https://api.github.com/repos/$GITHUB_RELEASES_REPO/releases/latest" -Headers $headers -UseBasicParsing -ErrorAction Stop
         Write-Output "Repo access verified (HTTP $($response.StatusCode))"
+        return $true
     } catch {
         $code = 0
         if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
@@ -321,14 +353,14 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Error "GitHub login succeeded, but your account does not have access to $GITHUB_RELEASES_REPO (HTTP $code)."
-            Write-Output "Please buy/activate access first, then rerun installer."
+            Write-Warning "You do not have OCS access yet. To buy access, visit https://ocs.flowcrate.app/"
+            Write-Output "GitHub API response: HTTP $code"
             Open-LandingPage
-            exit 1
+            return $false
         }
 
-        Write-Error "Cannot access repo $GITHUB_RELEASES_REPO (HTTP $code). Check network and GitHub auth state."
-        exit 1
+        Write-Warning "Cannot access repo $GITHUB_RELEASES_REPO (HTTP $code). Check network and GitHub auth state."
+        return $false
     }
 }
 
@@ -382,6 +414,10 @@ function Test-SHA256Sums {
 }
 
 function Ensure-Bun {
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
+
     $bunCmd = Get-Command bun -ErrorAction SilentlyContinue
     if ($bunCmd) {
         $bunVersion = bun --version
@@ -418,10 +454,8 @@ function Ensure-Bun {
         exit 1
     }
 
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
-    if ((Test-Path $bunBin) -and (-not (($env:PATH -split ";") -contains $bunBin))) {
-        $env:PATH = "$bunBin;$env:PATH"
-    }
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
 
     if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
         Write-Error "Bun installed but bun command is still unavailable. Restart terminal and retry."
@@ -601,7 +635,11 @@ if ($isLocalSource) {
 
     Write-Output ""
     Write-Output "Verifying repo access..."
-    Test-RepoAccess -Token $token
+    $hasRepoAccess = Test-RepoAccess -Token $token
+    if (-not $hasRepoAccess) {
+        Write-Output "Installation stopped. Complete access purchase/activation, then rerun installer."
+        return
+    }
 
     Write-Output ""
     Write-Output "Fetching latest release..."
