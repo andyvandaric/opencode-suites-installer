@@ -60,6 +60,7 @@ function Invoke-PwshRelaunch {
         }
         if ($exitCode -ne 0) {
             Write-Warning "Relaunched installer exited with code $exitCode"
+            return $false
         }
         return $true
     }
@@ -72,6 +73,7 @@ function Invoke-PwshRelaunch {
     }
     if ($exitCode -ne 0) {
         Write-Warning "Relaunched installer exited with code $exitCode"
+        return $false
     }
     return $true
 }
