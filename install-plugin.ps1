@@ -14,6 +14,59 @@ $TMP_DIR = [System.IO.Path]::Combine(
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
 
+function Ensure-PowerShellRuntime {
+    $psVersion = $PSVersionTable.PSVersion
+    if ($psVersion.Major -ge 7) {
+        Write-Output "PowerShell $($psVersion.ToString()) detected"
+        return
+    }
+
+    Write-Warning "Running on Windows PowerShell $($psVersion.ToString()). PowerShell 7+ is recommended."
+
+    if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+        Write-Output "PowerShell 7 is already installed (pwsh found). Continuing in current shell."
+        return
+    }
+
+    $installed = $false
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Output "Attempting PowerShell 7 install via winget..."
+        try {
+            & winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements --silent
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    if ((-not $installed) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Output "Attempting PowerShell 7 install via Chocolatey..."
+        try {
+            & choco install powershell-core -y
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    if ((-not $installed) -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        Write-Output "Attempting PowerShell 7 install via Scoop..."
+        try {
+            & scoop install pwsh
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+        Write-Output "PowerShell 7 detected after installation attempt."
+    } else {
+        Write-Warning "PowerShell 7 installation was skipped or failed. Continuing with current shell."
+    }
+}
+
 function Resolve-Token {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         gh auth status 2>&1 | Out-Null
@@ -147,8 +200,22 @@ function Ensure-Bun {
     }
 
     try {
-        $installer = Invoke-RestMethod -Uri "https://bun.sh/install.ps1" -ErrorAction Stop
-        Invoke-Expression $installer
+        if (-not (Test-Path $TMP_DIR)) {
+            New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
+        }
+
+        $bunInstallerPath = Join-Path $TMP_DIR "bun-install.ps1"
+        Invoke-WebRequest -Uri "https://bun.sh/install.ps1" -UseBasicParsing -OutFile $bunInstallerPath -ErrorAction Stop
+
+        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+            & pwsh -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
+        } else {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Bun installer exited with code $LASTEXITCODE"
+        }
     } catch {
         Write-Error "Failed to auto-install Bun: $($_.Exception.Message)"
         Write-Error "Install Bun manually at https://bun.sh and retry."
@@ -156,7 +223,7 @@ function Ensure-Bun {
     }
 
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
-    if (Test-Path $bunBin -and -not (($env:PATH -split ";") -contains $bunBin)) {
+    if ((Test-Path $bunBin) -and (-not (($env:PATH -split ";") -contains $bunBin))) {
         $env:PATH = "$bunBin;$env:PATH"
     }
 
@@ -222,6 +289,7 @@ Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
 
+Ensure-PowerShellRuntime
 Ensure-Bun
 
 $isLocalSource = (Test-Path ".\plugins\opencode-multi-auth\package.json") -or (Test-Path ".\package.json")
