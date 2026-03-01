@@ -625,7 +625,7 @@ function Invoke-AutoSetup {
         return
     }
 
-    $setupScript = if ($IsLocalSource) { ".\scripts\setup.js" } else { "$PLUGIN_DIR\scripts\setup.js" }
+    $setupScript = "$PLUGIN_DIR\scripts\setup.js"
     if (-not (Test-Path $setupScript)) {
         Write-Warning "Setup script not found at $setupScript. Skipping auto setup."
         return
@@ -667,7 +667,7 @@ Write-Output "--------------------------------------"
 $null = Ensure-PowerShellRuntime
 Ensure-Bun
 
-$isLocalSource = (Test-Path ".\plugins\opencode-multi-auth\package.json") -or (Test-Path ".\package.json")
+$isLocalSource = Test-Path ".\plugins\opencode-multi-auth\package.json"
 $version = "local-source"
 
 if ($isLocalSource) {
