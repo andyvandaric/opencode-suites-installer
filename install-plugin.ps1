@@ -209,7 +209,7 @@ function Ensure-GitHubCli {
     $installed = $false
 
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Output "Attempting GitHub CLI install via winget..."
+        Write-Host "Attempting GitHub CLI install via winget..."
         $wingetIds = @("GitHub.cli", "Microsoft.GitHub.CLI")
         foreach ($wingetId in $wingetIds) {
             if ($installed) { break }
@@ -223,7 +223,7 @@ function Ensure-GitHubCli {
     }
 
     if ((-not $installed) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Output "Attempting GitHub CLI install via Chocolatey..."
+        Write-Host "Attempting GitHub CLI install via Chocolatey..."
         try {
             & choco install gh -y
             if ($LASTEXITCODE -eq 0) { $installed = $true }
@@ -233,7 +233,7 @@ function Ensure-GitHubCli {
     }
 
     if ((-not $installed) -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-        Write-Output "Attempting GitHub CLI install via Scoop..."
+        Write-Host "Attempting GitHub CLI install via Scoop..."
         try {
             & scoop install gh
             if ($LASTEXITCODE -eq 0) { $installed = $true }
@@ -267,12 +267,12 @@ function Resolve-Token {
     param([switch]$NonInteractive)
 
     if ($env:GH_TOKEN) {
-        Write-Output "Auth: using GH_TOKEN environment variable"
+        Write-Host "Auth: using GH_TOKEN environment variable"
         return $env:GH_TOKEN.Trim()
     }
 
     if ($env:GITHUB_TOKEN) {
-        Write-Output "Auth: using GITHUB_TOKEN environment variable"
+        Write-Host "Auth: using GITHUB_TOKEN environment variable"
         return $env:GITHUB_TOKEN.Trim()
     }
 
@@ -280,7 +280,7 @@ function Resolve-Token {
         try {
             $cachedToken = (Get-Content -Path $TOKEN_FILE -Raw -Encoding UTF8).Trim()
             if ($cachedToken) {
-                Write-Output "Auth: using cached token file"
+                Write-Host "Auth: using cached token file"
                 return $cachedToken
             }
         } catch {
@@ -298,7 +298,7 @@ function Resolve-Token {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         gh auth status 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Output "GitHub CLI not authenticated. Opening browser login..."
+            Write-Host "GitHub CLI not authenticated. Opening browser login..."
             & gh auth login --hostname github.com --git-protocol https --web
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "GitHub CLI login failed. Falling back to manual token input."
@@ -308,7 +308,7 @@ function Resolve-Token {
         $ghToken = gh auth token 2>$null
         if ($LASTEXITCODE -eq 0 -and $ghToken) {
             $trimmed = $ghToken.Trim()
-            Write-Output "Auth: using gh CLI token"
+            Write-Host "Auth: using gh CLI token"
             Save-TokenFile -Token $trimmed
             return $trimmed
         }
@@ -319,8 +319,8 @@ function Resolve-Token {
         exit 1
     }
 
-    Write-Output "GitHub token required for release download."
-    Write-Output "Create a token at: https://github.com/settings/tokens"
+    Write-Host "GitHub token required for release download."
+    Write-Host "Create a token at: https://github.com/settings/tokens"
     try {
         $secureToken = Read-Host "Enter GitHub PAT (input hidden)" -AsSecureString
         $cred = New-Object System.Management.Automation.PSCredential("token", $secureToken)
@@ -328,7 +328,7 @@ function Resolve-Token {
         if ($manualToken) {
             $manualToken = $manualToken.Trim()
             if ($manualToken) {
-                Write-Output "Auth: using manually provided token"
+                Write-Host "Auth: using manually provided token"
                 Save-TokenFile -Token $manualToken
                 return $manualToken
             }
@@ -360,7 +360,7 @@ function Test-RepoAccess {
 
     try {
         $response = Invoke-WebRequest -Uri "https://api.github.com/repos/$GITHUB_RELEASES_REPO/releases/latest" -Headers $headers -UseBasicParsing -ErrorAction Stop
-        Write-Output "Repo access verified (HTTP $($response.StatusCode))"
+        Write-Host "Repo access verified (HTTP $($response.StatusCode))"
         return $true
     } catch {
         $code = 0
@@ -370,7 +370,7 @@ function Test-RepoAccess {
 
         if ($code -in @(401, 403, 404)) {
             Write-Warning "You do not have OCS access yet. To buy access, visit https://ocs.flowcrate.app/"
-            Write-Output "GitHub API response: HTTP $code"
+            Write-Host "GitHub API response: HTTP $code"
             Open-LandingPage
             return $false
         }
@@ -622,7 +622,7 @@ Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
 
-Ensure-PowerShellRuntime
+$null = Ensure-PowerShellRuntime
 Ensure-Bun
 
 $isLocalSource = (Test-Path ".\plugins\opencode-multi-auth\package.json") -or (Test-Path ".\package.json")
@@ -647,11 +647,11 @@ if ($isLocalSource) {
 } else {
     Write-Output ""
     Write-Output "Resolving GitHub auth..."
-    $token = Resolve-Token
+    $token = [string](Resolve-Token)
 
     Write-Output ""
     Write-Output "Verifying repo access..."
-    $hasRepoAccess = Test-RepoAccess -Token $token
+    $hasRepoAccess = [bool](Test-RepoAccess -Token $token)
     if (-not $hasRepoAccess) {
         Write-Output "Installation stopped. Complete access purchase/activation, then rerun installer."
         return
