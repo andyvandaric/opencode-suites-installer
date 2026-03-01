@@ -160,24 +160,50 @@ verify_sha256() {
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
+# ─── Bun installation ───────────────────────────────────────────────────────────
+install_bun() {
+  info "Bun not found. Attempting auto-install..."
+  if ! command -v curl &>/dev/null; then
+    error "curl is required to install Bun. Please install curl first."
+  fi
+  curl -fsSL https://bun.sh/install | bash
+  
+  # Source bun environment for current session
+  if [[ -f "${HOME}/.bashrc" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.bashrc" || true
+  fi
+  if [[ -d "${HOME}/.bun" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+  if [[ -d "${HOME}/.local/bin" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+  fi
+  
+  if ! command -v bun &>/dev/null; then
+    error "Bun installation failed or not found in PATH. Please install manually at https://bun.sh"
+  fi
+  success "Bun $(bun --version) installed successfully"
+}
+
 main() {
   echo ""
   echo "🔌 opencode-multi-auth — Plugin Installer"
   echo "────────────────────────────────────────"
 
   # Bun version check
-  if command -v bun &>/dev/null; then
-    local bun_version
-    bun_version="$(bun --version)"
-    local bun_major
-    bun_major="$(echo "${bun_version}" | cut -d. -f1)"
-    if [[ "${bun_major}" -lt 1 ]]; then
-      error "Bun >= 1.0.0 required (found ${bun_version}). Install at https://bun.sh"
-    fi
-    info "Bun ${bun_version} detected"
-  else
-    error "Bun not found. Install at https://bun.sh"
+  if ! command -v bun &>/dev/null; then
+    install_bun
   fi
+
+  local bun_version
+  bun_version="$(bun --version)"
+  local bun_major
+  bun_major="$(echo "${bun_version}" | cut -d. -f1)"
+  if [[ "${bun_major}" -lt 1 ]]; then
+    error "Bun >= 1.0.0 required (found ${bun_version}). Install at https://bun.sh"
+  fi
+  info "Bun ${bun_version} detected"
 # Check if we are running in the repo locally
 is_local_source=false
 if [[ -f "./plugins/opencode-multi-auth/package.json" || -f "./package.json" ]]; then
@@ -250,19 +276,40 @@ fi
 
   echo ""
   info "Installing dependencies..."
+  local root_dir="${PWD}"
   cd "${PLUGIN_DIR}"
   bun install --frozen-lockfile 2>/dev/null || bun install
 
   echo ""
   success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR}"
   echo ""
-  echo "   Next steps:"
+  info "Running setup script..."
+  local setup_script
   if [[ "${is_local_source}" == "true" ]]; then
-    echo "   1. Run setup (interactive): bun ./scripts/setup.js"
+    setup_script="${root_dir}/scripts/setup.js"
   else
-    echo "   1. Run setup (interactive): bun ${PLUGIN_DIR}/scripts/setup.js"
+    setup_script="${root_dir}/${PLUGIN_DIR}/scripts/setup.js"
   fi
-  echo "   2. Verify runtime: opencode auth login"
+
+  if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
+    warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
+  else
+    if bun "${setup_script}" --headless --profile codex-5.3-all --mode balanced; then
+      success "Setup completed automatically (headless)."
+    else
+      warn "Headless setup failed. Falling back to interactive setup..."
+      if ! bun "${setup_script}"; then
+        error "Setup script failed."
+      fi
+    fi
+  fi
+
+  echo ""
+  success "opencode-multi-auth ${version} installed and configured!"
+  echo ""
+  echo "   Next steps:"
+  echo "   1. Verify runtime: opencode auth login"
+  echo "   2. Start coding!"
   echo ""
 }
 
