@@ -1,5 +1,5 @@
 # install-plugin.ps1 - Install opencode-multi-auth plugin for OpenCode Config Suites
-# Supports auth paths: gh CLI -> GITHUB_TOKEN env -> stored token -> interactive prompt
+# Auth path: GitHub CLI web login only (https protocol)
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_RELEASES_REPO = "andyvandaric/opencode-config-suites-releases"
+$ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/checkout"
 $PLUGIN_DIR = ".\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $TMP_DIR = [System.IO.Path]::Combine(
@@ -129,54 +130,38 @@ function Ensure-PowerShellRuntime {
 }
 
 function Resolve-Token {
-    if (Get-Command gh -ErrorAction SilentlyContinue) {
-        gh auth status 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "GitHub CLI (gh) is installed but not authenticated."
-            Write-Host "Logging in via GitHub CLI (browser flow)..."
-            gh auth login --git-protocol https -w
-        }
-
-        $ghToken = gh auth token 2>&1
-        if ($LASTEXITCODE -eq 0 -and $ghToken) {
-            Write-Host "Auth: using gh CLI token"
-            return $ghToken.Trim()
-        }
-    }
-
-    if ($env:GITHUB_TOKEN) {
-        Write-Host "Auth: using GITHUB_TOKEN environment variable"
-        return $env:GITHUB_TOKEN
-    }
-
-    if (Test-Path $TOKEN_FILE) {
-        $stored = (Get-Content $TOKEN_FILE -Raw -Encoding UTF8).Trim()
-        if ($stored) {
-            Write-Host "Auth: using stored token from $TOKEN_FILE"
-            return $stored
-        }
-    }
-
-    Write-Warning "No GitHub token found. Generate one at:"
-    Write-Warning "https://github.com/settings/tokens/new?scopes=repo"
-    Write-Host ""
-    $secureToken = Read-Host "GitHub Personal Access Token (repo scope)" -AsSecureString
-    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
-    $token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-    if (-not $token) {
-        Write-Error "No token provided. Cannot continue."
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Error "GitHub CLI (gh) is required. Install from https://cli.github.com/ then rerun installer."
         exit 1
     }
 
-    $tokenDir = Split-Path $TOKEN_FILE -Parent
-    if (-not (Test-Path $tokenDir)) {
-        New-Item -ItemType Directory -Force $tokenDir | Out-Null
+    gh auth status 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "GitHub CLI not authenticated. Opening browser login..."
+        & gh auth login --hostname github.com --git-protocol https --web
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "GitHub CLI login failed. Please run 'gh auth login --hostname github.com --git-protocol https --web' and retry."
+            exit 1
+        }
     }
-    Set-Content -Path $TOKEN_FILE -Value $token -Encoding UTF8
-    Write-Host "Token saved to $TOKEN_FILE"
-    return $token
+
+    $ghToken = gh auth token 2>&1
+    if ($LASTEXITCODE -eq 0 -and $ghToken) {
+        Write-Host "Auth: using gh CLI token"
+        return $ghToken.Trim()
+    }
+
+    Write-Error "Unable to obtain token from GitHub CLI. Run 'gh auth status' to troubleshoot, then retry."
+    exit 1
+}
+
+function Open-LandingPage {
+    Write-Output "Open purchase page: $ACCESS_LANDING_PAGE"
+    try {
+        Start-Process $ACCESS_LANDING_PAGE | Out-Null
+    } catch {
+        Write-Warning "Could not open browser automatically. Visit: $ACCESS_LANDING_PAGE"
+    }
 }
 
 function Test-RepoAccess {
@@ -191,8 +176,19 @@ function Test-RepoAccess {
         $response = Invoke-WebRequest -Uri "https://api.github.com/repos/$GITHUB_RELEASES_REPO/releases/latest" -Headers $headers -UseBasicParsing -ErrorAction Stop
         Write-Output "Repo access verified (HTTP $($response.StatusCode))"
     } catch {
-        $code = $_.Exception.Response.StatusCode.value__
-        Write-Error "Cannot access repo $GITHUB_RELEASES_REPO (HTTP $code). Check token scopes or repo access."
+        $code = 0
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $code = $_.Exception.Response.StatusCode.value__
+        }
+
+        if ($code -in @(401, 403, 404)) {
+            Write-Error "GitHub login succeeded, but your account does not have access to $GITHUB_RELEASES_REPO (HTTP $code)."
+            Write-Output "Please buy/activate access first, then rerun installer."
+            Open-LandingPage
+            exit 1
+        }
+
+        Write-Error "Cannot access repo $GITHUB_RELEASES_REPO (HTTP $code). Check network and GitHub auth state."
         exit 1
     }
 }
