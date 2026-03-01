@@ -58,7 +58,10 @@ function Invoke-PwshRelaunch {
         if ($LASTEXITCODE -ne $null) {
             $exitCode = $LASTEXITCODE
         }
-        exit $exitCode
+        if ($exitCode -ne 0) {
+            Write-Warning "Relaunched installer exited with code $exitCode"
+        }
+        return $true
     }
 
     $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1"
@@ -67,14 +70,17 @@ function Invoke-PwshRelaunch {
     if ($LASTEXITCODE -ne $null) {
         $exitCode = $LASTEXITCODE
     }
-    exit $exitCode
+    if ($exitCode -ne 0) {
+        Write-Warning "Relaunched installer exited with code $exitCode"
+    }
+    return $true
 }
 
 function Ensure-PowerShellRuntime {
     $psVersion = $PSVersionTable.PSVersion
     if ($psVersion.Major -ge 7) {
         Write-Output "PowerShell $($psVersion.ToString()) detected"
-        return
+        return $false
     }
 
     Write-Warning "Running on Windows PowerShell $($psVersion.ToString()). PowerShell 7+ is recommended."
@@ -82,9 +88,13 @@ function Ensure-PowerShellRuntime {
     $pwshPath = Resolve-PwshPath
     if ($pwshPath) {
         Write-Output "PowerShell 7 is already installed."
-        Invoke-PwshRelaunch -PwshPath $pwshPath
+        $relaunched = Invoke-PwshRelaunch -PwshPath $pwshPath
+        if ($relaunched) {
+            Write-Output "Relaunch completed. Keeping current terminal open."
+            return $true
+        }
         Write-Output "Continuing in current shell."
-        return
+        return $false
     }
 
     $installed = $false
@@ -122,11 +132,17 @@ function Ensure-PowerShellRuntime {
     $pwshPath = Resolve-PwshPath
     if ($pwshPath) {
         Write-Output "PowerShell 7 detected after installation attempt."
-        Invoke-PwshRelaunch -PwshPath $pwshPath
+        $relaunched = Invoke-PwshRelaunch -PwshPath $pwshPath
+        if ($relaunched) {
+            Write-Output "Relaunch completed. Keeping current terminal open."
+            return $true
+        }
         Write-Output "Continuing in current shell."
     } else {
         Write-Warning "PowerShell 7 installation was skipped or failed. Continuing with current shell."
     }
+
+    return $false
 }
 
 function Refresh-SessionPath {
@@ -606,7 +622,11 @@ Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
 
-Ensure-PowerShellRuntime
+$relaunchHandled = Ensure-PowerShellRuntime
+if ($relaunchHandled) {
+    Write-Output "Installer handoff to PowerShell 7 finished. Terminal remains open for logs."
+    return
+}
 Ensure-Bun
 
 $isLocalSource = (Test-Path ".\plugins\opencode-multi-auth\package.json") -or (Test-Path ".\package.json")
