@@ -417,15 +417,23 @@ function Extract-TarGz {
         [switch]$StripFirstComponent
     )
 
-    $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if (-not $tarCommand) {
-        $tarCommand = Get-Command tar -ErrorAction SilentlyContinue
+    $systemTarPath = Join-Path $env:SystemRoot "System32\tar.exe"
+    if (Test-Path $systemTarPath) {
+        $tarCommand = @{ Source = $systemTarPath }
+    } else {
+        $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+        if (-not $tarCommand) {
+            $tarCommand = Get-Command tar -ErrorAction SilentlyContinue
+        }
     }
     if (-not $tarCommand) {
         throw "tar command not found. Please ensure tar.exe is available on PATH."
     }
 
-    $args = @("-xzf", $ArchivePath, "-C", $Destination)
+    $archiveFullPath = (Resolve-Path $ArchivePath).Path
+    $destinationFullPath = (Resolve-Path $Destination).Path
+
+    $args = @("-xzf", $archiveFullPath, "-C", $destinationFullPath)
     if ($StripFirstComponent) {
         $args += "--strip-components=1"
     }
