@@ -593,6 +593,61 @@ function Invoke-BunCachePurge {
     }
 }
 
+function Apply-InstallerDefaults {
+    param([string]$PluginPath)
+
+    $runtimePath = Join-Path $PluginPath "scripts\constants\setup-runtime.json"
+    $fallbacksPath = Join-Path $PluginPath "scripts\constants\setup-fallbacks.json"
+    $catalogPath = Join-Path $PluginPath "scripts\constants\profile-catalog.json"
+
+    try {
+        if (Test-Path $runtimePath) {
+            $runtime = Get-Content -Raw -Path $runtimePath | ConvertFrom-Json
+            if ($runtime.resourceModes) {
+                $runtime.resourceModes.default = "performance"
+                foreach ($option in $runtime.resourceModes.options) {
+                    if ($option.id -eq "balanced") {
+                        $option.label = "Balanced"
+                    }
+                    if ($option.id -eq "performance") {
+                        $option.label = "Performance (Recommended)"
+                    }
+                }
+            }
+            ($runtime | ConvertTo-Json -Depth 50) | Set-Content -Path $runtimePath -Encoding UTF8
+        }
+
+        if (Test-Path $fallbacksPath) {
+            $fallbacks = Get-Content -Raw -Path $fallbacksPath | ConvertFrom-Json
+            if ($fallbacks.setupRuntime -and $fallbacks.setupRuntime.resourceModes) {
+                $fallbacks.setupRuntime.resourceModes.default = "performance"
+                foreach ($option in $fallbacks.setupRuntime.resourceModes.options) {
+                    if ($option.id -eq "balanced") {
+                        $option.label = "Balanced"
+                    }
+                    if ($option.id -eq "performance") {
+                        $option.label = "Performance (Recommended)"
+                    }
+                }
+            }
+            ($fallbacks | ConvertTo-Json -Depth 50) | Set-Content -Path $fallbacksPath -Encoding UTF8
+        }
+
+        if (Test-Path $catalogPath) {
+            $catalog = Get-Content -Raw -Path $catalogPath | ConvertFrom-Json
+            if ($catalog.profileDisplayOrder) {
+                $profiles = @($catalog.profileDisplayOrder | Where-Object { $_ -ne "codex-5.3-hybrid" })
+                $catalog.profileDisplayOrder = @("codex-5.3-hybrid") + $profiles
+            }
+            ($catalog | ConvertTo-Json -Depth 50) | Set-Content -Path $catalogPath -Encoding UTF8
+        }
+
+        Write-Output "Applied installer defaults: codex-5.3-hybrid + performance mode."
+    } catch {
+        Write-Warning "Could not apply installer defaults: $($_.Exception.Message)"
+    }
+}
+
 function Test-BunRegistryReachable {
     try {
         $response = Invoke-WebRequest -Uri "https://registry.npmjs.org/@types%2Fnode" -Method Head -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
@@ -919,8 +974,9 @@ if ($isLocalSource) {
 }
 
 Write-Output "opencode-multi-auth installed to $PLUGIN_DIR"
-Write-Output "Installing dependencies..."
 $pluginFullPath = (Resolve-Path $PLUGIN_DIR).Path
+Apply-InstallerDefaults -PluginPath $pluginFullPath
+Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
