@@ -566,6 +566,138 @@ function Test-LockRelatedError {
     return $Message -match "EBUSY|EFAULT|EPERM|resource busy|being used by another process|Access is denied"
 }
 
+function Test-TransientInstallError {
+    param([string]$Message)
+
+    if (-not $Message) {
+        return $false
+    }
+
+    return $Message -match "Resolving dependencies|Enqueue package manifest|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|fetch failed|timed out|TLS|429|5\d\d"
+}
+
+function Invoke-BunCachePurge {
+    try {
+        & bun pm cache rm *> $null
+    } catch {
+        # best effort only
+    }
+}
+
+function Invoke-PnpmInstallWithRetry {
+    param(
+        [string]$Directory,
+        [int]$MaxAttempts = 2
+    )
+
+    $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
+    if (-not $pnpmCmd) {
+        return $false
+    }
+
+    $resolvedDirectory = (Resolve-Path $Directory).Path
+    $pnpmLockPath = Join-Path $resolvedDirectory "pnpm-lock.yaml"
+    if (-not (Test-Path $pnpmLockPath)) {
+        return $false
+    }
+
+    Push-Location $resolvedDirectory
+    try {
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            try {
+                $args = @("install", "--frozen-lockfile")
+                if ($attempt -eq $MaxAttempts) {
+                    $args += "--reporter=append-only"
+                }
+                & pnpm @args 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Output "Dependency install succeeded via pnpm fallback."
+                    return $true
+                }
+            } catch {
+                # handled by retry below
+            }
+
+            if ($attempt -lt $MaxAttempts) {
+                Start-Sleep -Milliseconds (1000 * $attempt)
+            }
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return $false
+}
+
+function Invoke-NpmInstallWithRetry {
+    param(
+        [string]$Directory,
+        [int]$MaxAttempts = 3
+    )
+
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmCmd) {
+        Write-Warning "npm not found. Cannot use npm fallback."
+        return $false
+    }
+
+    $resolvedDirectory = (Resolve-Path $Directory).Path
+
+    $env:NPM_CONFIG_REGISTRY = "https://registry.npmjs.org/"
+    $env:NPM_CONFIG_FETCH_RETRIES = "5"
+    $env:NPM_CONFIG_FETCH_RETRY_MINTIMEOUT = "2000"
+    $env:NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT = "120000"
+
+    Push-Location $resolvedDirectory
+    try {
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            $lastOutput = ""
+            $args = @("install", "--no-save", "--package-lock=false", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/")
+
+            if ($attempt -eq $MaxAttempts) {
+                $args += @("--loglevel", "verbose")
+            }
+
+            try {
+                $npmOutput = & npm @args 2>&1
+                if ($npmOutput) {
+                    $lastOutput = ($npmOutput | Out-String).Trim()
+                }
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Output "Dependency install succeeded via npm fallback."
+                    return $true
+                }
+            } catch {
+                $lastOutput = $_.Exception.Message
+            }
+
+            $message = ""
+            if ($lastOutput) {
+                $lines = $lastOutput -split "`r?`n"
+                $tail = $lines | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -Last 6
+                $message = ($tail -join " | ").Trim()
+            }
+            if (-not $message) {
+                $message = "unknown npm error"
+            }
+
+            Write-Warning "npm fallback attempt $attempt/${MaxAttempts} failed: $message"
+
+            if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
+                Stop-WindowsLockHolders -PathHint $resolvedDirectory
+            }
+
+            if ($attempt -lt $MaxAttempts) {
+                Start-Sleep -Milliseconds (900 * $attempt)
+            }
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return $false
+}
+
 function Stop-WindowsLockHolders {
     param([string]$PathHint)
 
@@ -609,6 +741,8 @@ function Invoke-BunInstallWithRetry {
 
     Push-Location $resolvedDirectory
     try {
+        $finalMessage = "unknown error"
+
         for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
             $lastOutput = ""
 
@@ -622,13 +756,14 @@ function Invoke-BunInstallWithRetry {
                 Ensure-WindowsShellEnv
             }
 
-            if ($attempt -eq 1) {
-                $args = @("install", "--frozen-lockfile")
+            if ($attempt -le 4) {
+                $args = @("install", "--frozen-lockfile", "--no-progress", "--network-concurrency=16")
             } else {
-                $args = @("install")
-                if ($attempt -ge 3) {
+                $args = @("install", "--no-progress", "--network-concurrency=16")
+                if ($attempt -ge 5) {
                     $args += "--no-cache"
                 }
+                $args += @("--force", "--network-concurrency=8", "--registry", "https://registry.npmjs.org/")
                 if ($attempt -eq $MaxAttempts) {
                     $args += "--verbose"
                 }
@@ -662,6 +797,10 @@ function Invoke-BunInstallWithRetry {
                 Write-Warning "bun install attempt $attempt/${MaxAttempts} failed with unknown error."
             }
 
+            if ($message) {
+                $finalMessage = $message
+            }
+
             if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
                 Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
                 Ensure-WindowsShellEnv
@@ -676,13 +815,40 @@ function Invoke-BunInstallWithRetry {
                 continue
             }
 
+            if (($attempt -lt $MaxAttempts) -and (Test-TransientInstallError -Message $message)) {
+                Write-Warning "Detected likely network/registry issue. Retrying with stronger network settings..."
+                if ($attempt -ge 3) {
+                    Invoke-BunCachePurge
+                }
+                Ensure-WindowsShellEnv
+                Start-Sleep -Milliseconds (1200 * $attempt)
+                continue
+            }
+
             if ($attempt -lt $MaxAttempts) {
                 Start-Sleep -Milliseconds (700 * $attempt)
                 continue
             }
 
-            throw "bun install failed after $MaxAttempts attempts. Last error: $message"
+            break
         }
+
+        Write-Warning "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
+
+        Write-Warning "Attempting pnpm fallback for dependency installation..."
+        $pnpmSucceeded = Invoke-PnpmInstallWithRetry -Directory $resolvedDirectory -MaxAttempts 2
+        if ($pnpmSucceeded) {
+            return
+        }
+
+        Write-Warning "pnpm fallback unavailable or failed. Attempting npm fallback for dependency installation..."
+
+        $npmSucceeded = Invoke-NpmInstallWithRetry -Directory $resolvedDirectory -MaxAttempts 3
+        if ($npmSucceeded) {
+            return
+        }
+
+        throw "Dependency install failed via bun, pnpm fallback, and npm fallback. Last bun error: $finalMessage"
     } finally {
         Pop-Location
     }
