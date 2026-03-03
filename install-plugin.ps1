@@ -680,10 +680,10 @@ function Install-OcsShimFromBundle {
     $cmdPath = Join-Path $bunBin "ocs.cmd"
     $ps1Path = Join-Path $bunBin "ocs.ps1"
 
-    $cmdContent = "@echo off`r`nnode `"$ocsJs`" %*`r`n"
+    $cmdContent = "@echo off`r`nbun `"$ocsJs`" %*`r`n"
     Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
 
-    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& node `"$ocsJs`" @Args`r`n"
+    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& bun `"$ocsJs`" @Args`r`n"
     Set-Content -Path $ps1Path -Value $ps1Content -Encoding ASCII
 
     Add-PathEntryToUserPath -PathEntry $bunBin
