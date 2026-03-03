@@ -5,7 +5,7 @@ set -euo pipefail
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_RELEASES_REPO="andyvandaric/opencode-config-suites-releases"
-PLUGIN_DIR="./plugins/opencode-multi-auth"
+PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 
@@ -413,6 +413,12 @@ fi
   echo ""
   info "Installing dependencies..."
   local root_dir="${PWD}"
+  if [[ "${is_local_source}" == "true" ]]; then
+    PLUGIN_DIR="${root_dir}/plugins/opencode-multi-auth"
+  else
+    PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
+  fi
+
   cd "${PLUGIN_DIR}"
   install_dependencies_with_retry "${PLUGIN_DIR}" || error "Dependency installation failed after retries."
 
@@ -424,7 +430,7 @@ fi
   if [[ "${is_local_source}" == "true" ]]; then
     setup_script="${root_dir}/scripts/setup.js"
   else
-    setup_script="${root_dir}/${PLUGIN_DIR}/scripts/setup.js"
+    setup_script="${PLUGIN_DIR}/scripts/setup.js"
   fi
 
   if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
@@ -443,7 +449,7 @@ fi
   echo ""
   success "opencode-multi-auth ${version} installed and configured!"
   echo ""
-  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${root_dir}/${PLUGIN_DIR}"; then
+  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
     warn "ocs command still unavailable after auto-install attempts."
     warn "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
     warn "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."

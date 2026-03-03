@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 # --- Config ---
 $GITHUB_RELEASES_REPO = "andyvandaric/opencode-config-suites-releases"
 $ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/"
-$PLUGIN_DIR = ".\plugins\opencode-multi-auth"
+$PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
@@ -1060,6 +1060,12 @@ $isLocalSource =
     (Test-Path ".\configs")
 $rootDir = (Resolve-Path ".").Path
 $version = "local-source"
+
+if ($isLocalSource) {
+    $PLUGIN_DIR = Join-Path $rootDir "plugins\opencode-multi-auth"
+} else {
+    $PLUGIN_DIR = Join-Path $env:USERPROFILE ".config\opencode\plugins\opencode-multi-auth"
+}
 
 if ($isLocalSource) {
     Write-Output "Detected local plugin source. Skipping download."
