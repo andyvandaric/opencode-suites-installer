@@ -61,9 +61,9 @@ install_ocs_shim_from_bundle() {
   local bun_bin="${HOME}/.bun/bin"
   mkdir -p "$bun_bin"
 
-  cat > "${bun_bin}/ocs" <<EOF
+cat > "${bun_bin}/ocs" <<EOF
 #!/usr/bin/env bash
-node "$ocs_js" "\$@"
+bun "$ocs_js" "\$@"
 EOF
   chmod +x "${bun_bin}/ocs"
 
