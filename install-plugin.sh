@@ -18,6 +18,68 @@ success() { echo "✅ $*"; }
 error()   { echo "❌ $*" >&2; exit 1; }
 warn()    { echo "⚠️  $*" >&2; }
 
+ocs_works() {
+  if ! command -v ocs >/dev/null 2>&1; then
+    return 1
+  fi
+  ocs --version >/dev/null 2>&1 || return 1
+  ocs --help >/dev/null 2>&1 || return 1
+  ocs prefs --dry-run </dev/null >/dev/null 2>&1 || return 1
+  return 0
+}
+
+install_ocs_from_path() {
+  local source_path="$1"
+  [[ -n "$source_path" && -d "$source_path" ]] || return 1
+  info "Attempting ocs install from local path..."
+  bun install -g "$source_path" >/dev/null 2>&1 || return 1
+  if [[ -d "${HOME}/.bun/bin" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+  ocs_works
+}
+
+install_ocs_from_private_repo() {
+  local token="$1"
+  [[ -n "$token" ]] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+
+  local suite_tmp="${TMP_DIR}/opencode-config-suites"
+  rm -rf "$suite_tmp"
+  info "Attempting ocs install from private repository source..."
+  git clone "https://x-access-token:${token}@github.com/andyvandaric/opencode-config-suites.git" "$suite_tmp" >/dev/null 2>&1 || return 1
+  install_ocs_from_path "$suite_tmp"
+}
+
+ensure_ocs_command() {
+  local token="$1"
+  local root_dir="$2"
+  local is_local_source="$3"
+
+  if [[ -d "${HOME}/.bun/bin" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+
+  if ocs_works; then
+    info "ocs verification passed."
+    return 0
+  fi
+
+  if [[ "$is_local_source" == "true" ]]; then
+    if install_ocs_from_path "$root_dir"; then
+      success "ocs auto-install and verification passed."
+      return 0
+    fi
+  fi
+
+  if install_ocs_from_private_repo "$token"; then
+    success "ocs auto-install and verification passed."
+    return 0
+  fi
+
+  return 1
+}
+
 is_lock_error() {
   local msg="$1"
   [[ "$msg" =~ EBUSY|EFAULT|EPERM|ENOENT|resource\ busy|being\ used\ by\ another\ process|Access\ is\ denied ]]
@@ -353,13 +415,10 @@ fi
   echo ""
   success "opencode-multi-auth ${version} installed and configured!"
   echo ""
-  if command -v ocs >/dev/null 2>&1; then
-    info "Verifying global ocs command..."
-    ocs --version >/dev/null 2>&1 || warn "ocs --version failed"
-    ocs --help >/dev/null 2>&1 || warn "ocs --help failed"
-    ocs prefs --dry-run </dev/null >/dev/null 2>&1 || warn "ocs prefs --dry-run failed"
-  else
-    warn "ocs command not found in PATH yet. Install or repair global CLI: bun install -g @andyvandaric/opencode-config-suites"
+  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}"; then
+    warn "ocs command still unavailable after auto-install attempts."
+    warn "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+    warn "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
   fi
   echo ""
   echo "   Next steps:"
