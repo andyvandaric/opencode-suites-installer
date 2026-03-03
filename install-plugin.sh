@@ -51,10 +51,31 @@ install_ocs_from_private_repo() {
   install_ocs_from_path "$suite_tmp"
 }
 
+install_ocs_shim_from_bundle() {
+  local plugin_path="$1"
+  local ocs_js="${plugin_path}/bin/ocs.js"
+  [[ -f "$ocs_js" ]] || return 1
+
+  local bun_bin="${HOME}/.bun/bin"
+  mkdir -p "$bun_bin"
+
+  cat > "${bun_bin}/ocs" <<EOF
+#!/usr/bin/env bash
+node "$ocs_js" "\$@"
+EOF
+  chmod +x "${bun_bin}/ocs"
+
+  export PATH="${bun_bin}:${PATH}"
+  hash -r 2>/dev/null || true
+
+  ocs_works
+}
+
 ensure_ocs_command() {
   local token="$1"
   local root_dir="$2"
   local is_local_source="$3"
+  local plugin_dir="$4"
 
   if [[ -d "${HOME}/.bun/bin" ]]; then
     export PATH="${HOME}/.bun/bin:${PATH}"
@@ -62,6 +83,11 @@ ensure_ocs_command() {
 
   if ocs_works; then
     info "ocs verification passed."
+    return 0
+  fi
+
+  if install_ocs_shim_from_bundle "$plugin_dir"; then
+    success "ocs shim install and verification passed."
     return 0
   fi
 
@@ -415,7 +441,7 @@ fi
   echo ""
   success "opencode-multi-auth ${version} installed and configured!"
   echo ""
-  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}"; then
+  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${root_dir}/${PLUGIN_DIR}"; then
     warn "ocs command still unavailable after auto-install attempts."
     warn "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
     warn "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
