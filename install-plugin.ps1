@@ -592,21 +592,30 @@ function Ensure-Bun {
 }
 
 function Test-OcsWorks {
-    if (-not (Get-Command ocs -ErrorAction SilentlyContinue)) {
-        return $false
+    $preferredCmd = Join-Path $env:USERPROFILE ".bun\bin\ocs.cmd"
+    $commandToRun = ""
+
+    if (Test-Path $preferredCmd) {
+        $commandToRun = $preferredCmd
+    } else {
+        $resolved = Get-Command ocs -ErrorAction SilentlyContinue
+        if (-not $resolved) {
+            return $false
+        }
+        $commandToRun = $resolved.Source
     }
 
-    & ocs --version *> $null
+    & $commandToRun --version *> $null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
 
-    & ocs --help *> $null
+    & $commandToRun --help *> $null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
 
-    & ocs prefs --dry-run *> $null
+    & $commandToRun prefs --dry-run *> $null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
@@ -685,7 +694,20 @@ function Install-OcsShimFromBundle {
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
-    return (Test-OcsWorks)
+    & $cmdPath --version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    & $cmdPath --help *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    & $cmdPath prefs --dry-run *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return $true
 }
 
 function Install-OcsFromPrivateRepo {
