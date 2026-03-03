@@ -596,14 +596,22 @@ function Test-OcsWorks {
         return $false
     }
 
-    try {
-        ocs --version | Out-Null
-        ocs --help | Out-Null
-        ocs prefs --dry-run | Out-Null
-        return $true
-    } catch {
+    & ocs --version *> $null
+    if ($LASTEXITCODE -ne 0) {
         return $false
     }
+
+    & ocs --help *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    & ocs prefs --dry-run *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return $true
 }
 
 function Install-OcsFromPath {
