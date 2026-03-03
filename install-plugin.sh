@@ -24,7 +24,6 @@ ocs_works() {
   fi
   ocs --version >/dev/null 2>&1 || return 1
   ocs --help >/dev/null 2>&1 || return 1
-  ocs prefs --dry-run </dev/null >/dev/null 2>&1 || return 1
   return 0
 }
 
