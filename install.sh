@@ -30,9 +30,9 @@ ensure_local_ocs_shim() {
   local shim_dir="${HOME}/.local/bin"
   local shim_path="${shim_dir}/ocs"
   mkdir -p "${shim_dir}"
-  cat > "${shim_path}" <<EOF
+cat > "${shim_path}" <<EOF
 #!/usr/bin/env bash
-bun "${REPO_DIR}/bin/ocs.js" "\$@"
+bun "${REPO_DIR}/bin/ocs.cjs" "\$@"
 EOF
   chmod +x "${shim_path}"
   ok "Created local ocs shim: ${shim_path}"

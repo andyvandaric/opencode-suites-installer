@@ -53,7 +53,10 @@ install_ocs_from_private_repo() {
 
 install_ocs_shim_from_bundle() {
   local plugin_path="$1"
-  local ocs_js="${plugin_path}/bin/ocs.js"
+  local ocs_js="${plugin_path}/bin/ocs.cjs"
+  if [[ ! -f "$ocs_js" ]]; then
+    ocs_js="${plugin_path}/bin/ocs.js"
+  fi
   [[ -f "$ocs_js" ]] || return 1
 
   local bun_bin="${HOME}/.bun/bin"
