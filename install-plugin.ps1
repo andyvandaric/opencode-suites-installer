@@ -633,7 +633,10 @@ function Install-OcsShimFromBundle {
         return $false
     }
 
-    $ocsJs = Join-Path $pluginAbsPath "bin\ocs.js"
+    $ocsJs = Join-Path $pluginAbsPath "bin\ocs.cjs"
+    if (-not (Test-Path $ocsJs)) {
+        $ocsJs = Join-Path $pluginAbsPath "bin\ocs.js"
+    }
     if (-not (Test-Path $ocsJs)) {
         return $false
     }
