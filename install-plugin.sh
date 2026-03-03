@@ -18,6 +18,52 @@ success() { echo "✅ $*"; }
 error()   { echo "❌ $*" >&2; exit 1; }
 warn()    { echo "⚠️  $*" >&2; }
 
+is_lock_error() {
+  local msg="$1"
+  [[ "$msg" =~ EBUSY|EFAULT|EPERM|ENOENT|resource\ busy|being\ used\ by\ another\ process|Access\ is\ denied ]]
+}
+
+stop_windows_lock_holders() {
+  if ! command -v powershell >/dev/null 2>&1; then
+    return 0
+  fi
+
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process bun,node,opencode,biome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" >/dev/null 2>&1 || true
+}
+
+install_dependencies_with_retry() {
+  local install_dir="$1"
+  local attempts=5
+  local i
+
+  for ((i=1; i<=attempts; i++)); do
+    if bun install --frozen-lockfile >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if bun install >/tmp/ocs-bun-install.err 2>&1; then
+      return 0
+    fi
+
+    local err
+    err="$(cat /tmp/ocs-bun-install.err 2>/dev/null || true)"
+
+    if (( i < attempts )); then
+      warn "bun install failed (attempt ${i}/${attempts}), retrying..."
+      if is_lock_error "$err"; then
+        stop_windows_lock_holders "$install_dir"
+      fi
+      sleep "$i"
+      continue
+    fi
+
+    warn "$err"
+    return 1
+  done
+
+  return 1
+}
+
 # ─── Auth: resolve GitHub token ───────────────────────────────────────────────
 resolve_token() {
   # Path 1: gh CLI
@@ -278,7 +324,7 @@ fi
   info "Installing dependencies..."
   local root_dir="${PWD}"
   cd "${PLUGIN_DIR}"
-  bun install --frozen-lockfile 2>/dev/null || bun install
+  install_dependencies_with_retry "${PLUGIN_DIR}" || error "Dependency installation failed after retries."
 
   echo ""
   success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR}"
@@ -307,9 +353,20 @@ fi
   echo ""
   success "opencode-multi-auth ${version} installed and configured!"
   echo ""
+  if command -v ocs >/dev/null 2>&1; then
+    info "Verifying global ocs command..."
+    ocs --version >/dev/null 2>&1 || warn "ocs --version failed"
+    ocs --help >/dev/null 2>&1 || warn "ocs --help failed"
+    ocs prefs --dry-run </dev/null >/dev/null 2>&1 || warn "ocs prefs --dry-run failed"
+  else
+    warn "ocs command not found in PATH yet. Install or repair global CLI: bun install -g @andyvandaric/opencode-config-suites"
+  fi
+  echo ""
   echo "   Next steps:"
-  echo "   1. Verify runtime: opencode auth login"
-  echo "   2. Start coding!"
+  echo "   1. Configure profile: ocs setup profile"
+  echo "   2. Configure preferences: ocs prefs"
+  echo "   3. Verify runtime: opencode auth login"
+  echo "   4. Start coding!"
   echo ""
 }
 

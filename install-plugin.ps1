@@ -988,13 +988,29 @@ if (Test-Path $TMP_DIR) {
 Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output ""
+Write-Output "Checking global ocs command..."
+if (Get-Command ocs -ErrorAction SilentlyContinue) {
+    try {
+        ocs --version | Out-Null
+        ocs --help | Out-Null
+        ocs prefs --dry-run | Out-Null
+        Write-Output "ocs verification passed."
+    } catch {
+        Write-Warning "ocs command found but verification failed. Run: ocs --help"
+    }
+} else {
+    Write-Warning "ocs command not found in PATH. Install/repair global CLI: bun install -g @andyvandaric/opencode-config-suites"
+}
+Write-Output ""
 Write-Output "   Next steps:"
 if ($isLocalSource) {
     Write-Output "   1. Run setup (interactive): bun .\scripts\setup.js"
 } else {
     Write-Output "   1. Run setup (interactive): bun .\plugins\opencode-multi-auth\scripts\setup.js"
 }
-Write-Output "   2. Add account via: opencode auth login"
-Write-Output "   3. Running Opencode via web UI:"
+Write-Output "   2. Configure profile globally: ocs setup profile"
+Write-Output "   3. Configure preferences: ocs prefs"
+Write-Output "   4. Add account via: opencode auth login"
+Write-Output "   5. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
