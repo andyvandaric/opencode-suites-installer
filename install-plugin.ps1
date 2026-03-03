@@ -440,14 +440,35 @@ function Get-ReleaseInfo {
 }
 
 function Get-Asset {
-    param([string]$Token, [string]$Url, [string]$OutPath)
+    param(
+        [string]$Token,
+        [string]$PrimaryUrl,
+        [string]$FallbackUrl,
+        [string]$OutPath
+    )
 
     $headers = @{
         Authorization = "token $Token"
         Accept        = "application/octet-stream"
     }
 
-    Invoke-WebRequest -Uri $Url -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+    if ($PrimaryUrl) {
+        try {
+            Invoke-WebRequest -Uri $PrimaryUrl -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+            return
+        } catch {
+            if (-not $FallbackUrl) {
+                throw
+            }
+        }
+    }
+
+    if ($FallbackUrl) {
+        Invoke-WebRequest -Uri $FallbackUrl -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+        return
+    }
+
+    throw "No release asset URL available."
 }
 
 function Extract-TarGz {
@@ -1086,22 +1107,14 @@ if ($isLocalSource) {
 
     Write-Output ""
     Write-Output "Downloading $($tarAsset.name)..."
-    $tarUrl = $tarAsset.browser_download_url
-    if (-not $tarUrl) {
-        $tarUrl = $tarAsset.url
-    }
-    Get-Asset -Token $token -Url $tarUrl -OutPath $tarPath
+    Get-Asset -Token $token -PrimaryUrl $tarAsset.url -FallbackUrl $tarAsset.browser_download_url -OutPath $tarPath
 
     $sumsAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS" } | Select-Object -First 1
     $tarName = Split-Path -Leaf $tarPath
 
     if ($sumsAsset) {
         $sumsPath = Join-Path $TMP_DIR "SHA256SUMS"
-        $sumsUrl = $sumsAsset.browser_download_url
-        if (-not $sumsUrl) {
-            $sumsUrl = $sumsAsset.url
-        }
-        Get-Asset -Token $token -Url $sumsUrl -OutPath $sumsPath
+        Get-Asset -Token $token -PrimaryUrl $sumsAsset.url -FallbackUrl $sumsAsset.browser_download_url -OutPath $sumsPath
 
         $verifyDir = Join-Path $TMP_DIR "verify"
         New-Item -ItemType Directory -Force $verifyDir | Out-Null
