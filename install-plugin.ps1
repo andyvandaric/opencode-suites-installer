@@ -10,6 +10,7 @@ $GITHUB_RELEASES_REPO = "andyvandaric/opencode-config-suites-releases"
 $ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
+$script:ResolvedReleaseToken = ""
 $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
