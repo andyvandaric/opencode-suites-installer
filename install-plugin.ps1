@@ -1086,14 +1086,22 @@ if ($isLocalSource) {
 
     Write-Output ""
     Write-Output "Downloading $($tarAsset.name)..."
-    Get-Asset -Token $token -Url $tarAsset.url -OutPath $tarPath
+    $tarUrl = $tarAsset.browser_download_url
+    if (-not $tarUrl) {
+        $tarUrl = $tarAsset.url
+    }
+    Get-Asset -Token $token -Url $tarUrl -OutPath $tarPath
 
     $sumsAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS" } | Select-Object -First 1
     $tarName = Split-Path -Leaf $tarPath
 
     if ($sumsAsset) {
         $sumsPath = Join-Path $TMP_DIR "SHA256SUMS"
-        Get-Asset -Token $token -Url $sumsAsset.url -OutPath $sumsPath
+        $sumsUrl = $sumsAsset.browser_download_url
+        if (-not $sumsUrl) {
+            $sumsUrl = $sumsAsset.url
+        }
+        Get-Asset -Token $token -Url $sumsUrl -OutPath $sumsPath
 
         $verifyDir = Join-Path $TMP_DIR "verify"
         New-Item -ItemType Directory -Force $verifyDir | Out-Null
