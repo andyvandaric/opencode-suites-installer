@@ -570,6 +570,64 @@ function Ensure-Bun {
     Write-Output "Bun $installedVersion detected"
 }
 
+function Test-OcsWorks {
+    if (-not (Get-Command ocs -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    try {
+        ocs --version | Out-Null
+        ocs --help | Out-Null
+        ocs prefs --dry-run | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Ensure-OcsCommand {
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
+
+    if (Test-OcsWorks) {
+        Write-Output "ocs verification passed."
+        return $true
+    }
+
+    $installAttempts = @(
+        @("install", "-g", "@andyvandaric/opencode-config-suites"),
+        @("install", "-g", "github:andyvandaric/opencode-config-suites")
+    )
+
+    if ($isLocalSource) {
+        $workspaceRoot = (Resolve-Path ".").Path
+        $installAttempts += ,@("install", "-g", $workspaceRoot)
+    }
+
+    foreach ($attempt in $installAttempts) {
+        try {
+            Write-Output "Attempting ocs install: bun $($attempt -join ' ')"
+            & bun @attempt
+            if ($LASTEXITCODE -ne 0) {
+                continue
+            }
+
+            Add-PathEntryToUserPath -PathEntry $bunBin
+            Refresh-SessionPath
+
+            if (Test-OcsWorks) {
+                Write-Output "ocs auto-install and verification passed."
+                return $true
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return $false
+}
+
 function Test-LockRelatedError {
     param([string]$Message)
     return $Message -match "EBUSY|EFAULT|EPERM|resource busy|being used by another process|Access is denied"
@@ -989,17 +1047,11 @@ Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output ""
 Write-Output "Checking global ocs command..."
-if (Get-Command ocs -ErrorAction SilentlyContinue) {
-    try {
-        ocs --version | Out-Null
-        ocs --help | Out-Null
-        ocs prefs --dry-run | Out-Null
-        Write-Output "ocs verification passed."
-    } catch {
-        Write-Warning "ocs command found but verification failed. Run: ocs --help"
-    }
-} else {
-    Write-Warning "ocs command not found in PATH. Install/repair global CLI: bun install -g @andyvandaric/opencode-config-suites"
+if (-not (Ensure-OcsCommand)) {
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    Write-Warning "ocs command still unavailable after auto-install attempts."
+    Write-Warning "Try manual repair: bun install -g @andyvandaric/opencode-config-suites"
+    Write-Warning "If needed, add to PATH: $bunBin"
 }
 Write-Output ""
 Write-Output "   Next steps:"
