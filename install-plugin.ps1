@@ -607,6 +607,55 @@ function Install-OcsFromPath {
     }
 }
 
+function Resolve-AbsolutePathSafe {
+    param([string]$BasePath, [string]$Candidate)
+
+    if (-not $Candidate) {
+        return ""
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Candidate)) {
+        return $Candidate
+    }
+
+    if (-not $BasePath) {
+        return (Resolve-Path $Candidate).Path
+    }
+
+    return (Join-Path $BasePath $Candidate)
+}
+
+function Install-OcsShimFromBundle {
+    param([string]$PluginPath, [string]$BasePath)
+
+    $pluginAbsPath = Resolve-AbsolutePathSafe -BasePath $BasePath -Candidate $PluginPath
+    if (-not $pluginAbsPath) {
+        return $false
+    }
+
+    $ocsJs = Join-Path $pluginAbsPath "bin\ocs.js"
+    if (-not (Test-Path $ocsJs)) {
+        return $false
+    }
+
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
+
+    $cmdPath = Join-Path $bunBin "ocs.cmd"
+    $ps1Path = Join-Path $bunBin "ocs.ps1"
+
+    $cmdContent = "@echo off`r`nnode `"$ocsJs`" %*`r`n"
+    Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
+
+    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& node `"$ocsJs`" @Args`r`n"
+    Set-Content -Path $ps1Path -Value $ps1Content -Encoding ASCII
+
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
+
+    return (Test-OcsWorks)
+}
+
 function Install-OcsFromPrivateRepo {
     param([string]$Token)
 
@@ -636,12 +685,22 @@ function Install-OcsFromPrivateRepo {
 }
 
 function Ensure-OcsCommand {
+    param(
+        [string]$PluginPath,
+        [string]$BasePath
+    )
+
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
     if (Test-OcsWorks) {
         Write-Output "ocs verification passed."
+        return $true
+    }
+
+    if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
+        Write-Output "ocs shim install and verification passed."
         return $true
     }
 
@@ -1090,7 +1149,7 @@ Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output ""
 Write-Output "Checking global ocs command..."
-if (-not (Ensure-OcsCommand)) {
+if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir)) {
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
     Write-Warning "ocs command still unavailable after auto-install attempts."
     Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
