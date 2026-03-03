@@ -615,11 +615,6 @@ function Test-OcsWorks {
         return $false
     }
 
-    & $commandToRun prefs --dry-run *> $null
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-
     return $true
 }
 
@@ -702,11 +697,6 @@ function Install-OcsShimFromBundle {
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
-    & $cmdPath prefs --dry-run *> $null
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-
     return $true
 }
 
