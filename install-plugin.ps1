@@ -1014,6 +1014,7 @@ $isLocalSource =
     (Test-Path ".\plugins\opencode-multi-auth\package.json") -and
     (Test-Path ".\scripts\setup.js") -and
     (Test-Path ".\configs")
+$rootDir = (Resolve-Path ".").Path
 $version = "local-source"
 
 if ($isLocalSource) {
