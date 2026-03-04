@@ -1016,11 +1016,11 @@ function Invoke-AutoSetup {
     }
 
     Write-Output ""
-    Write-Output "Running auto setup (headless)..."
+    Write-Output "Running auto setup (headless, installer defaults)..."
 
     $headlessSucceeded = $true
     try {
-        & bun $setupScript "--headless" "--profile" "codex-5.3-all" "--mode" "balanced"
+        & bun $setupScript "--headless" "--profile" "codex-5.3-hybrid" "--mode" "performance" *> $null
     } catch {
         $headlessSucceeded = $false
     }
@@ -1209,14 +1209,9 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir)) {
 }
 Write-Output ""
 Write-Output "   Next steps:"
-if ($isLocalSource) {
-    Write-Output "   1. Run setup (interactive): bun .\scripts\setup.js"
-} else {
-    Write-Output "   1. Run setup (interactive): bun .\plugins\opencode-multi-auth\scripts\setup.js"
-}
-Write-Output "   2. Configure profile globally: ocs setup profile"
-Write-Output "   3. Configure preferences: ocs prefs"
-Write-Output "   4. Add account via: opencode auth login"
-Write-Output "   5. Running Opencode via web UI:"
+Write-Output "   1. Configure profile globally: ocs setup:profile"
+Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
+Write-Output "   3. Add account via: opencode auth login"
+Write-Output "   4. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
