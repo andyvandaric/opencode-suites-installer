@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCS Installer - Beta Release</title>
+    <meta name="description" content="OpenCode Config Suites installer beta channel with verified branch and release metadata." />
+    <style>
+      :root {
+        --bg: #0b1220;
+        --panel: #101a2e;
+        --ink: #e7ecf8;
+        --muted: #9eb0d7;
+        --accent: #59d39b;
+        --accent-2: #2e7df6;
+        --warn: #ffd166;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+        background: radial-gradient(1200px 500px at 20% -10%, #17325f 0%, transparent 55%), var(--bg);
+        color: var(--ink);
+        line-height: 1.5;
+      }
+      .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
+      .pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(255, 209, 102, 0.15);
+        color: var(--warn);
+        border: 1px solid rgba(255, 209, 102, 0.3);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      h1 { margin: 14px 0 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.1; }
+      p { color: var(--muted); margin: 0; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 24px;
+      }
+      .card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+        border: 1px solid rgba(158, 176, 215, 0.25);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .card h2 { margin: 0 0 10px; font-size: 16px; }
+      .kv { margin: 6px 0; color: var(--muted); font-size: 14px; }
+      .kv b { color: var(--ink); font-weight: 600; }
+      .cta {
+        margin-top: 22px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .btn {
+        display: inline-block;
+        padding: 11px 14px;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn.primary { background: var(--accent); color: #032819; }
+      .btn.secondary { background: var(--accent-2); color: #eaf2ff; }
+      pre {
+        margin: 0;
+        padding: 10px;
+        border-radius: 8px;
+        background: #0d1628;
+        border: 1px solid rgba(158, 176, 215, 0.2);
+        overflow: auto;
+        color: #cfe0ff;
+        font-size: 13px;
+      }
+      .foot { margin-top: 20px; color: var(--muted); font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <span class="pill">Beta Channel</span>
+      <h1>OpenCode Config Suites Installer</h1>
+      <p>
+        This page tracks the public beta channel consumed by installer scripts.
+        Source repository: <b>andyvandaric/andyvand-opencode-config</b>, branch <b>beta</b>.
+      </p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Beta Release Metadata</h2>
+          <div class="kv">Tag: <b id="betaTag">loading...</b></div>
+          <div class="kv">Release: <b id="betaName">loading...</b></div>
+          <div class="kv">Target Branch: <b id="betaBranch">beta</b></div>
+          <div class="kv">Updated: <b id="betaDate">loading...</b></div>
+        </section>
+
+        <section class="card">
+          <h2>Install Commands</h2>
+          <pre>curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.sh | bash</pre>
+          <div style="height:8px"></div>
+          <pre>irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1 | iex</pre>
+        </section>
+      </div>
+
+      <div class="cta">
+        <a class="btn primary" href="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya" target="_blank" rel="noreferrer noopener">Order via WhatsApp</a>
+        <a class="btn secondary" href="https://github.com/andyvandaric/andyvand-opencode-config/tree/beta" target="_blank" rel="noreferrer noopener">View Beta Branch</a>
+      </div>
+
+      <p class="foot">
+        Non-buyer access flow in installer redirects to the same WhatsApp CTA above.
+      </p>
+    </div>
+
+    <script>
+      (async () => {
+        const betaRepo = "andyvandaric/andyvand-opencode-config";
+        const releaseRes = await fetch(`https://api.github.com/repos/${betaRepo}/releases?per_page=20`);
+        if (!releaseRes.ok) return;
+        const releases = await releaseRes.json();
+        const betaRelease = releases.find(r => typeof r.tag_name === "string" && r.tag_name.startsWith("beta-"));
+        if (!betaRelease) return;
+
+        document.getElementById("betaTag").textContent = betaRelease.tag_name || "-";
+        document.getElementById("betaName").textContent = betaRelease.name || "-";
+        document.getElementById("betaDate").textContent = new Date(betaRelease.published_at || betaRelease.created_at).toLocaleString();
+      })();
+    </script>
+  </body>
+</html>
