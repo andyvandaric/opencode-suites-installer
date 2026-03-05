@@ -1,162 +1,322 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OCS Installer - Beta Release</title>
-    <meta name="description" content="OpenCode Config Suites installer beta channel with verified branch and release metadata." />
+    <title>OCS Beta - OpenCode Config Suites</title>
+    <meta
+      name="description"
+      content="OCS Beta Channel: multi-agent ngebut, kuota tetap terjaga. Installer publik langsung ambil branch beta buyer channel."
+    />
     <style>
       :root {
-        --bg: #0b1220;
-        --panel: #101a2e;
-        --ink: #e7ecf8;
-        --muted: #9eb0d7;
-        --accent: #59d39b;
-        --accent-2: #2e7df6;
-        --warn: #ffd166;
+        --bg: #070b16;
+        --ink: #ecf1ff;
+        --muted: #a8b8de;
+        --panel: #0f1730;
+        --line: rgba(168, 184, 222, 0.25);
+        --cyan: #66d7f3;
+        --green: #6ae3aa;
+        --blue: #4b88ff;
+        --gold: #ffd67a;
       }
       * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
       body {
-        margin: 0;
-        font-family: ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
-        background: radial-gradient(1200px 500px at 20% -10%, #17325f 0%, transparent 55%), var(--bg);
+        font-family: "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
         color: var(--ink);
-        line-height: 1.5;
+        background:
+          radial-gradient(1200px 500px at -10% -5%, rgba(75, 136, 255, 0.3) 0%, transparent 55%),
+          radial-gradient(900px 400px at 110% -10%, rgba(102, 215, 243, 0.18) 0%, transparent 50%),
+          var(--bg);
       }
-      .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
-      .pill {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 999px;
-        background: rgba(255, 209, 102, 0.15);
-        color: var(--warn);
-        border: 1px solid rgba(255, 209, 102, 0.3);
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 54px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-size: 12px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
+        border: 1px solid rgba(255, 214, 122, 0.35);
+        color: var(--gold);
+        background: rgba(255, 214, 122, 0.1);
+        border-radius: 999px;
+        padding: 6px 12px;
       }
-      h1 { margin: 14px 0 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.1; }
-      p { color: var(--muted); margin: 0; }
-      .grid {
+      h1 {
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 1.05;
+        margin: 14px 0 10px;
+      }
+      .lead {
+        font-size: clamp(16px, 2.4vw, 22px);
+        color: var(--muted);
+        max-width: 860px;
+      }
+      .hero-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: 1.2fr 0.8fr;
         gap: 16px;
-        margin-top: 24px;
+        margin-top: 20px;
       }
       .card {
-        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-        border: 1px solid rgba(158, 176, 215, 0.25);
-        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+        border: 1px solid var(--line);
+        border-radius: 16px;
         padding: 16px;
       }
-      .card h2 { margin: 0 0 10px; font-size: 16px; }
-      .kv { margin: 6px 0; color: var(--muted); font-size: 14px; }
-      .kv b { color: var(--ink); font-weight: 600; }
+      .label {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      pre {
+        margin: 0;
+        background: #090f20;
+        border: 1px solid rgba(168, 184, 222, 0.2);
+        color: #d7e4ff;
+        border-radius: 10px;
+        padding: 10px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow: auto;
+        font-size: 13px;
+      }
+      .meta p { margin: 8px 0; color: var(--muted); }
+      .meta b { color: var(--ink); }
+      .row { display: grid; gap: 14px; margin-top: 24px; }
+      .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      h2 { margin: 0 0 10px; font-size: clamp(24px, 3.5vw, 36px); }
+      .section-intro { color: var(--muted); margin: 0 0 8px; }
+      .problem h3, .pricing h3, .faq h3 { margin: 0 0 8px; font-size: 18px; }
+      .problem p, .pricing p, .faq p { margin: 0; color: var(--muted); }
+      .check { color: var(--green); font-weight: 600; }
+      .price {
+        font-size: 28px;
+        font-weight: 700;
+        margin: 4px 0 10px;
+      }
+      .popular {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        display: inline-block;
+        margin-bottom: 8px;
+        border: 1px solid rgba(102, 215, 243, 0.4);
+        color: var(--cyan);
+        padding: 4px 8px;
+        border-radius: 999px;
+      }
+      ul { margin: 10px 0 0 18px; color: var(--muted); }
+      li { margin-bottom: 6px; }
       .cta {
-        margin-top: 22px;
+        margin-top: 26px;
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
       }
       .btn {
-        display: inline-block;
-        padding: 11px 14px;
-        border-radius: 10px;
         text-decoration: none;
-        font-weight: 600;
+        border-radius: 11px;
+        font-weight: 700;
+        padding: 12px 16px;
+        display: inline-flex;
+        align-items: center;
       }
-      .btn.primary { background: var(--accent); color: #032819; }
-      .btn.secondary { background: var(--accent-2); color: #eaf2ff; }
-      pre {
-        margin: 0;
-        padding: 10px;
-        border-radius: 8px;
-        background: #0d1628;
-        border: 1px solid rgba(158, 176, 215, 0.2);
-        overflow: auto;
-        color: #cfe0ff;
+      .btn.wa { background: var(--green); color: #042617; }
+      .btn.alt { background: var(--blue); color: #eef4ff; }
+      details {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: rgba(255,255,255,0.02);
+      }
+      summary { cursor: pointer; font-weight: 600; }
+      details p { margin: 8px 0 0; color: var(--muted); }
+      .foot {
+        margin-top: 18px;
         font-size: 13px;
+        color: var(--muted);
       }
-      .foot { margin-top: 20px; color: var(--muted); font-size: 13px; }
-      .whats { margin-top: 16px; }
-      .whats h2 { margin-bottom: 8px; }
+      @media (max-width: 900px) {
+        .hero-grid, .row.cols-3, .row.cols-2 { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <span class="pill">Beta Channel</span>
-      <h1>OpenCode Config Suites Installer</h1>
-      <p>
-        This page tracks the public beta channel consumed by installer scripts.
-        Source repository: <b>andyvandaric/andyvand-opencode-config</b>, branch <b>beta</b>.
+    <main class="wrap">
+      <span class="badge">Beta Channel • Installer Public</span>
+      <h1>Mau multi-agent ngebut, tapi kuota tetap terjaga?</h1>
+      <p class="lead">
+        OCS Beta sudah disiapkan untuk performa, efisiensi, dan keamanan akun.
+        Tinggal jalankan installer, dan channel beta langsung mengarah ke buyer repo branch <b>beta</b>.
       </p>
 
-      <div class="grid">
-        <section class="card">
-          <h2>Beta Release Metadata</h2>
-          <div class="kv">Tag: <b id="betaTag">loading...</b></div>
-          <div class="kv">Release: <b id="betaName">loading...</b></div>
-          <div class="kv">Target Branch: <b id="betaBranch">beta</b></div>
-          <div class="kv">Updated: <b id="betaDate">loading...</b></div>
-          <div class="kv">Release URL: <b><a id="betaUrl" href="#" target="_blank" rel="noreferrer noopener" style="color:#cfe0ff">loading...</a></b></div>
-        </section>
-
-        <section class="card">
-          <h2>Source Release Sync</h2>
-          <div class="kv">Source Repo: <b>andyvandaric/opencode-config-suites-releases</b></div>
-          <div class="kv">Latest Source Tag: <b id="sourceTag">loading...</b></div>
-          <div class="kv">Channel Mapping: <b>source release -> buyer beta branch</b></div>
-        </section>
-
-        <section class="card">
-          <h2>Install Commands</h2>
+      <section class="hero-grid">
+        <article class="card">
+          <p class="label">Install Sekarang</p>
           <pre>curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.sh | bash</pre>
           <div style="height:8px"></div>
           <pre>irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1 | iex</pre>
-        </section>
-      </div>
-
-      <section class="card whats">
-        <h2 id="whatsTitle">🆕 What's New (Beta)</h2>
-        <pre id="whatsBody">Loading latest beta release notes...</pre>
+        </article>
+        <article class="card meta">
+          <p class="label">Beta Metadata</p>
+          <p>Tag: <b id="betaTag">beta-v2.0.8</b></p>
+          <p>Release: <b id="betaName">Beta v2.0.8</b></p>
+          <p>Source: <b id="sourceTag">v2.0.8</b> -> buyer branch <b>beta</b></p>
+          <p>Updated: <b id="betaDate">-</b></p>
+          <p>Release URL: <b><a id="betaUrl" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.8" target="_blank" rel="noreferrer noopener" style="color:#d9e8ff">Open</a></b></p>
+        </article>
       </section>
 
-      <div class="cta">
-        <a class="btn primary" href="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya" target="_blank" rel="noreferrer noopener">Order via WhatsApp</a>
-        <a class="btn secondary" href="https://github.com/andyvandaric/andyvand-opencode-config/tree/beta" target="_blank" rel="noreferrer noopener">View Beta Branch</a>
-      </div>
+      <section class="row" style="margin-top:30px">
+        <h2>Masalah setup AI coding itu sama di mana-mana</h2>
+        <p class="section-intro">Setup memakan waktu, konfigurasi rumit, dan tim sering tidak konsisten antar environment.</p>
+        <div class="row cols-3 problem">
+          <article class="card">
+            <h3>Setup Memakan Waktu</h3>
+            <p>Berjam-jam hanya untuk nyiapin agent, profile, dan workflow sebelum coding jalan.</p>
+          </article>
+          <article class="card">
+            <h3>Konfigurasi Rumit</h3>
+            <p>Rute provider, kuota, dan policy manual bikin onboarding developer jadi lambat.</p>
+          </article>
+          <article class="card">
+            <h3>Tanpa Workflow</h3>
+            <p>Tidak ada standar eksekusi + verifikasi yang konsisten untuk multi-agent development.</p>
+          </article>
+        </div>
+      </section>
 
-      <p class="foot">
-        Non-buyer access flow in installer redirects to the same WhatsApp CTA above.
-      </p>
-    </div>
+      <section class="row" style="margin-top:30px">
+        <h2>Kenapa OCS Beta relevan sekarang</h2>
+        <div class="row cols-3">
+          <article class="card">
+            <h3>Quota-Safe Routing</h3>
+            <p class="check">Buffer + rest lock + recovery policy</p>
+            <ul>
+              <li>Auto-stop saat buffer threshold kena</li>
+              <li>Resume setelah restore sesuai policy</li>
+              <li>Fallback path terkontrol</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Beta Release Channel</h3>
+            <p class="check">Branch-based delivery</p>
+            <ul>
+              <li>Installer publik default ke buyer repo `beta`</li>
+              <li>Tag/release note beta sinkron otomatis</li>
+              <li>Source release sinkron ke payload beta</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Ready Untuk Scale</h3>
+            <p class="check">Provider-layer roadmap</p>
+            <ul>
+              <li>Pemisahan core vs provider logic</li>
+              <li>Jalur OpenAI/Codex dipersiapkan</li>
+              <li>Regression gate via test matrix</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="row" style="margin-top:30px">
+        <h2>Harga sederhana dan transparan</h2>
+        <div class="row cols-2 pricing">
+          <article class="card">
+            <h3>Starter</h3>
+            <p class="price">Mulai dari paket onboarding</p>
+            <p>Cocok untuk individual dev yang mau setup cepat dan aman.</p>
+          </article>
+          <article class="card">
+            <span class="popular">Terpopuler</span>
+            <h3>Lifetime</h3>
+            <p class="price">Bayar sekali, miliki selamanya</p>
+            <p>Akses update berkelanjutan + channel beta + support jalur WhatsApp.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="row" style="margin-top:30px">
+        <h2 id="whatsTitle">🆕 What's New (v2.0.8 Beta)</h2>
+        <article class="card">
+          <pre id="whatsBody">Loading latest beta release notes...</pre>
+        </article>
+      </section>
+
+      <section class="row" style="margin-top:30px">
+        <h2>FAQ Singkat</h2>
+        <div class="row faq">
+          <details open>
+            <summary>Ini beneran channel beta yang dipakai installer public?</summary>
+            <p>Ya. Installer publik sekarang default ke `andyvand-opencode-config@beta` untuk jalur buyer.</p>
+          </details>
+          <details>
+            <summary>Kalau belum beli, diarahkan ke mana?</summary>
+            <p>Fallback non-access diarahkan ke WhatsApp order dengan pesan default yang sudah disiapkan.</p>
+          </details>
+          <details>
+            <summary>Tag beta dan release note ikut update otomatis?</summary>
+            <p>Ya, pipeline release managed sekarang auto-sync branch beta + metadata beta release.</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="row" style="margin-top:30px">
+        <article class="card">
+          <h2>Mulai coding lebih cerdas hari ini</h2>
+          <p class="section-intro">Kalau mau akses OCS + channel beta, langsung hubungi WhatsApp. Tim akan bantu aktivasi dan onboarding.</p>
+          <div class="cta">
+            <a class="btn wa" href="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya" target="_blank" rel="noreferrer noopener">Order via WhatsApp</a>
+            <a class="btn alt" href="https://github.com/andyvandaric/andyvand-opencode-config/tree/beta" target="_blank" rel="noreferrer noopener">Lihat Branch Beta</a>
+            <a class="btn alt" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.8" target="_blank" rel="noreferrer noopener">Lihat Beta Release</a>
+          </div>
+          <p class="foot">Non-buyer access flow di installer juga mengarah ke CTA WhatsApp yang sama.</p>
+        </article>
+      </section>
+    </main>
 
     <script>
       (async () => {
-        const betaRepo = "andyvandaric/andyvand-opencode-config";
-        const releaseRes = await fetch(`https://api.github.com/repos/${betaRepo}/releases?per_page=20`);
-        if (!releaseRes.ok) return;
-        const releases = await releaseRes.json();
-        const betaRelease = releases.find(r => typeof r.tag_name === "string" && r.tag_name.startsWith("beta-"));
-        if (!betaRelease) return;
+        const buyerRepo = "andyvandaric/andyvand-opencode-config";
+        const sourceRepo = "andyvandaric/opencode-config-suites-releases";
 
-        document.getElementById("betaTag").textContent = betaRelease.tag_name || "-";
-        document.getElementById("betaName").textContent = betaRelease.name || "-";
-        document.getElementById("betaDate").textContent = new Date(betaRelease.published_at || betaRelease.created_at).toLocaleString();
-        const betaUrl = document.getElementById("betaUrl");
-        betaUrl.href = betaRelease.html_url || "#";
-        betaUrl.textContent = betaRelease.html_url || "-";
+        try {
+          const [buyerRes, sourceRes] = await Promise.all([
+            fetch(`https://api.github.com/repos/${buyerRepo}/releases?per_page=30`),
+            fetch(`https://api.github.com/repos/${sourceRepo}/releases/latest`),
+          ]);
 
-        const srcRes = await fetch("https://api.github.com/repos/andyvandaric/opencode-config-suites-releases/releases/latest");
-        if (srcRes.ok) {
-          const src = await srcRes.json();
-          document.getElementById("sourceTag").textContent = src.tag_name || "-";
-          const version = src.tag_name || "Beta";
-          document.getElementById("whatsTitle").textContent = `🆕 What's New (${version} Beta)`;
-          const body = (src.body || "").trim();
-          document.getElementById("whatsBody").textContent = body || "Release notes are not available yet for this version.";
-        } else {
-          document.getElementById("whatsBody").textContent = "Unable to load release notes right now. Please refresh in a moment.";
+          if (buyerRes.ok) {
+            const releases = await buyerRes.json();
+            const beta = releases.find((r) => typeof r.tag_name === "string" && r.tag_name.startsWith("beta-"));
+            if (beta) {
+              document.getElementById("betaTag").textContent = beta.tag_name || "beta-v2.0.8";
+              document.getElementById("betaName").textContent = beta.name || "Beta v2.0.8";
+              document.getElementById("betaDate").textContent = new Date(beta.published_at || beta.created_at).toLocaleString();
+              const betaUrl = document.getElementById("betaUrl");
+              betaUrl.href = beta.html_url || betaUrl.href;
+              betaUrl.textContent = beta.html_url || betaUrl.textContent;
+            }
+          }
+
+          if (sourceRes.ok) {
+            const source = await sourceRes.json();
+            const sourceTag = source.tag_name || "v2.0.8";
+            document.getElementById("sourceTag").textContent = sourceTag;
+            document.getElementById("whatsTitle").textContent = `🆕 What's New (${sourceTag} Beta)`;
+            const notes = (source.body || "").trim();
+            document.getElementById("whatsBody").textContent = notes || "Release notes belum tersedia untuk versi ini.";
+          } else {
+            document.getElementById("whatsBody").textContent = "Gagal memuat release notes. Coba refresh halaman sebentar lagi.";
+          }
+        } catch (_) {
+          document.getElementById("whatsBody").textContent = "Jaringan sedang bermasalah, release notes belum bisa dimuat.";
         }
       })();
     </script>
