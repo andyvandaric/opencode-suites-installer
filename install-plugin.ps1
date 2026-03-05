@@ -6,8 +6,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # --- Config ---
-$GITHUB_RELEASES_REPO = "andyvandaric/opencode-config-suites-releases"
-$ACCESS_LANDING_PAGE = "https://ocs.flowcrate.app/"
+$GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
+$GITHUB_SOURCE_BRANCH = if ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
+$ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $script:ResolvedReleaseToken = ""
@@ -386,7 +387,7 @@ function Resolve-Token {
 }
 
 function Open-LandingPage {
-    Write-Output "Open purchase page: $ACCESS_LANDING_PAGE"
+    Write-Output "Open purchase chat: $ACCESS_LANDING_PAGE"
     try {
         Start-Process $ACCESS_LANDING_PAGE | Out-Null
     } catch {
@@ -406,8 +407,8 @@ function Test-RepoAccess {
     }
 
     try {
-        $response = Invoke-WebRequest -Uri "https://api.github.com/repos/$GITHUB_RELEASES_REPO/releases/latest" -Headers $headers -UseBasicParsing -ErrorAction Stop
-        Write-Host "Repo access verified (HTTP $($response.StatusCode))"
+        $response = Invoke-WebRequest -Uri "https://api.github.com/repos/$GITHUB_SOURCE_REPO/branches/$GITHUB_SOURCE_BRANCH" -Headers $headers -UseBasicParsing -ErrorAction Stop
+        Write-Host "Repo branch access verified: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH (HTTP $($response.StatusCode))"
         return $true
     } catch {
         $code = 0
@@ -416,7 +417,7 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Warning "You do not have OCS access yet. To buy access, visit https://ocs.flowcrate.app/"
+            Write-Warning "You do not have OCS beta access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
             Write-Host "GitHub API response: HTTP $code"
             if (-not $SuppressLandingPage) {
                 Open-LandingPage
@@ -424,20 +425,24 @@ function Test-RepoAccess {
             return $false
         }
 
-        Write-Warning "Cannot access repo $GITHUB_RELEASES_REPO (HTTP $code). Check network and GitHub auth state."
+        Write-Warning "Cannot access repo branch $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH (HTTP $code). Check network and GitHub auth state."
         return $false
     }
 }
 
-function Get-ReleaseInfo {
-    param([string]$Token)
+function Get-SourceArchive {
+    param(
+        [string]$Token,
+        [string]$OutPath
+    )
 
     $headers = @{
         Authorization = "token $Token"
-        Accept        = "application/vnd.github+json"
+        Accept        = "application/octet-stream"
     }
 
-    return Invoke-RestMethod -Uri "https://api.github.com/repos/$GITHUB_RELEASES_REPO/releases/latest" -Headers $headers -ErrorAction Stop
+    $archiveUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/tarball/$GITHUB_SOURCE_BRANCH"
+    Invoke-WebRequest -Uri $archiveUri -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
 }
 
 function Get-Asset {
@@ -718,8 +723,8 @@ function Install-OcsFromPrivateRepo {
 
     try {
         Write-Output "Attempting ocs install from private repository source..."
-        $cloneUrl = "https://x-access-token:$Token@github.com/andyvandaric/opencode-config-suites.git"
-        & git clone $cloneUrl $suitePath *> $null
+        $cloneUrl = "https://x-access-token:$Token@github.com/$GITHUB_SOURCE_REPO.git"
+        & git clone --branch $GITHUB_SOURCE_BRANCH --single-branch $cloneUrl $suitePath *> $null
         if ($LASTEXITCODE -ne 0) {
             return $false
         }
@@ -1116,46 +1121,17 @@ if ($isLocalSource) {
     }
 
     Write-Output ""
-    Write-Output "Fetching latest release..."
-    $release = Get-ReleaseInfo -Token $token
-    $version = $release.tag_name
-    Write-Output "Latest version: $version"
-
-    $tarAsset = $release.assets | Where-Object { $_.name -like "*.tar.gz" } | Select-Object -First 1
-    if (-not $tarAsset) {
-        Write-Error "No .tar.gz asset found in latest release."
-        exit 1
-    }
+    Write-Output "Downloading source bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
 
     if (-not (Test-Path $TMP_DIR)) {
         New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
     }
-    $tarPath = Join-Path $TMP_DIR $tarAsset.name
+    $tarName = "$GITHUB_SOURCE_BRANCH.tar.gz"
+    $tarPath = Join-Path $TMP_DIR $tarName
 
     Write-Output ""
-    Write-Output "Downloading $($tarAsset.name)..."
-    Get-Asset -Token $token -PrimaryUrl $tarAsset.url -FallbackUrl $tarAsset.browser_download_url -OutPath $tarPath
-
-    $sumsAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS" } | Select-Object -First 1
-    $tarName = Split-Path -Leaf $tarPath
-
-    if ($sumsAsset) {
-        $sumsPath = Join-Path $TMP_DIR "SHA256SUMS"
-        Get-Asset -Token $token -PrimaryUrl $sumsAsset.url -FallbackUrl $sumsAsset.browser_download_url -OutPath $sumsPath
-
-        $verifyDir = Join-Path $TMP_DIR "verify"
-        New-Item -ItemType Directory -Force $verifyDir | Out-Null
-        Push-Location $TMP_DIR
-        try {
-            Extract-TarGz -ArchivePath $tarName -Destination "./verify" -StripFirstComponent
-        } finally {
-            Pop-Location
-        }
-        Copy-Item $sumsPath (Join-Path $verifyDir "SHA256SUMS")
-        Test-SHA256Sums -SumsFile (Join-Path $verifyDir "SHA256SUMS") -TargetDir $verifyDir
-    } else {
-        Write-Warning "SHA256SUMS not found in release - skipping checksum verification"
-    }
+    Write-Output "Downloading $tarName..."
+    Get-SourceArchive -Token $token -OutPath $tarPath
 
     Write-Output ""
     Write-Output "Extracting to $PLUGIN_DIR..."
@@ -1172,12 +1148,20 @@ if ($isLocalSource) {
         Pop-Location
     }
 
-    if (-not (Test-Path (Join-Path $extractTmp "package.json"))) {
-        Write-Error "Extraction failed: package.json not found in extracted bundle."
+    $pluginSource = Join-Path $extractTmp "plugins\opencode-multi-auth"
+    if (-not (Test-Path (Join-Path $pluginSource "package.json"))) {
+        Write-Error "Extraction failed: plugins/opencode-multi-auth/package.json not found in source archive."
         exit 1
     }
 
-    Copy-Item -Path "$extractTmp\*" -Destination $PLUGIN_DIR -Recurse -Force
+    try {
+        $sourcePkg = Get-Content (Join-Path $pluginSource "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($sourcePkg.version) { $version = "$($sourcePkg.version)-$GITHUB_SOURCE_BRANCH" }
+    } catch {
+        $version = "$GITHUB_SOURCE_BRANCH"
+    }
+
+    Copy-Item -Path "$pluginSource\*" -Destination $PLUGIN_DIR -Recurse -Force
 
     if (-not (Test-Path (Join-Path $PLUGIN_DIR "package.json"))) {
         Write-Error "Installation failed: package.json not found in $PLUGIN_DIR after extraction."

@@ -4,7 +4,9 @@
 set -euo pipefail
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-GITHUB_RELEASES_REPO="andyvandaric/opencode-config-suites-releases"
+GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
+WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
@@ -46,8 +48,20 @@ install_ocs_from_private_repo() {
   local suite_tmp="${TMP_DIR}/opencode-config-suites"
   rm -rf "$suite_tmp"
   info "Attempting ocs install from private repository source..."
-  git clone "https://x-access-token:${token}@github.com/andyvandaric/opencode-config-suites.git" "$suite_tmp" >/dev/null 2>&1 || return 1
+  git clone --branch "${GITHUB_SOURCE_BRANCH}" --single-branch "https://x-access-token:${token}@github.com/${GITHUB_SOURCE_REPO}.git" "$suite_tmp" >/dev/null 2>&1 || return 1
   install_ocs_from_path "$suite_tmp"
+}
+
+open_purchase_page() {
+  echo "  Open purchase chat: ${WHATSAPP_ORDER_URL}"
+  if command -v open >/dev/null 2>&1; then
+    open "${WHATSAPP_ORDER_URL}" >/dev/null 2>&1 || true
+    return
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "${WHATSAPP_ORDER_URL}" >/dev/null 2>&1 || true
+    return
+  fi
 }
 
 install_ocs_shim_from_bundle() {
@@ -227,52 +241,30 @@ verify_access() {
   status_code="$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: token ${token}" \
     -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${GITHUB_RELEASES_REPO}/releases/latest")"
+    "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
 
-  if [[ "${status_code}" == "403" || "${status_code}" == "404" ]]; then
-    error "Cannot access repo ${GITHUB_RELEASES_REPO} (HTTP ${status_code}). Check token scopes or repo access."
+  if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
+    warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    warn "If you haven't purchased OCS yet, contact support at: ${WHATSAPP_ORDER_URL}"
+    open_purchase_page
+    return 1
   elif [[ "${status_code}" != "200" ]]; then
     error "Unexpected response from GitHub API (HTTP ${status_code})."
   fi
 
-  info "Repo access verified (HTTP ${status_code})"
+  info "Repo branch access verified: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH} (HTTP ${status_code})"
 }
 
-# ─── Get latest release info ──────────────────────────────────────────────────
-get_release_info() {
+download_source_archive() {
   local token="$1"
-  local api_url="https://api.github.com/repos/${GITHUB_RELEASES_REPO}/releases/latest"
+  local output="$2"
+  local archive_url="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/tarball/${GITHUB_SOURCE_BRANCH}"
 
-  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    gh api "repos/${GITHUB_RELEASES_REPO}/releases/latest" 2>/dev/null
-  else
-    curl -fsSL \
-      -H "Authorization: token ${token}" \
-      -H "Accept: application/vnd.github+json" \
-      "${api_url}"
-  fi
-}
-
-# ─── Download asset ───────────────────────────────────────────────────────────
-download_asset() {
-  local token="$1"
-  local download_url="$2"
-  local output="$3"
-
-  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    gh release download \
-      --repo "${GITHUB_RELEASES_REPO}" \
-      --pattern "$(basename "${output}")" \
-      --dir "${TMP_DIR}" 2>/dev/null || true
-  fi
-
-  if [[ ! -f "${output}" ]]; then
-    curl -fsSL \
-      -H "Authorization: token ${token}" \
-      -H "Accept: application/octet-stream" \
-      -L "${download_url}" \
-      -o "${output}"
-  fi
+  curl -fsSL \
+    -H "Authorization: token ${token}" \
+    -H "Accept: application/octet-stream" \
+    -L "${archive_url}" \
+    -o "${output}"
 }
 
 # ─── Verify SHA256 ────────────────────────────────────────────────────────────
@@ -353,54 +345,23 @@ fi
 
   echo ""
   info "Verifying repo access..."
-  verify_access "${token}"
-
-  echo ""
-  info "Fetching latest release..."
-  local release_json
-  release_json="$(get_release_info "${token}")"
-
-  local version
-  version="$(echo "${release_json}" | grep -o '"tag_name": *"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
-  info "Latest version: ${version}"
-
-  # Find tar.gz asset URL
-  local tar_url
-  tar_url="$(echo "${release_json}" | grep -o '"browser_download_url": *"[^"]*\.tar\.gz"' | head -1 | grep -o '"https[^"]*"' | tr -d '"')"
-
-  if [[ -z "${tar_url}" ]]; then
-    error "No .tar.gz asset found in latest release."
+  if ! verify_access "${token}"; then
+    warn "Access check failed with current token. Retrying with fresh authentication..."
+    rm -f "${TOKEN_FILE}" || true
+    token="$(resolve_token)"
+    if ! verify_access "${token}"; then
+      error "Installation stopped. Complete purchase/activation first, then rerun installer."
+    fi
   fi
 
-  local tar_filename
-  tar_filename="$(basename "${tar_url}")"
+  echo ""
+  info "Downloading source bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+  local tar_filename="${GITHUB_SOURCE_BRANCH}.tar.gz"
   local tar_path="${TMP_DIR}/${tar_filename}"
 
   echo ""
   info "Downloading ${tar_filename}..."
-  download_asset "${token}" "${tar_url}" "${tar_path}"
-
-  # Download SHA256SUMS
-  local sums_url
-  sums_url="$(echo "${release_json}" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS[^"]*"' | head -1 | grep -o '"https[^"]*"' | tr -d '"' || true)"
-  local sums_path="${TMP_DIR}/SHA256SUMS"
-
-  if [[ -n "${sums_url}" ]]; then
-    curl -fsSL \
-      -H "Authorization: token ${token}" \
-      -H "Accept: application/octet-stream" \
-      -L "${sums_url}" \
-      -o "${sums_path}"
-
-    # Extract tar into tmp for verification
-    local verify_dir="${TMP_DIR}/verify"
-    mkdir -p "${verify_dir}"
-    tar -xzf "${tar_path}" -C "${verify_dir}" --strip-components=1
-    cp "${sums_path}" "${verify_dir}/SHA256SUMS"
-    verify_sha256 "${verify_dir}/SHA256SUMS" "${verify_dir}"
-  else
-    warn "SHA256SUMS not found in release — skipping checksum verification"
-  fi
+  download_source_archive "${token}" "${tar_path}"
 
   echo ""
   info "Extracting to ${PLUGIN_DIR}..."
@@ -408,7 +369,13 @@ fi
   local extract_tmp="${TMP_DIR}/extract"
   mkdir -p "${extract_tmp}"
   tar -xzf "${tar_path}" -C "${extract_tmp}" --strip-components=1
-  cp -R "${extract_tmp}/"* "${PLUGIN_DIR}/"
+  local plugin_source_dir="${extract_tmp}/plugins/opencode-multi-auth"
+  [[ -f "${plugin_source_dir}/package.json" ]] || error "Invalid source archive: plugins/opencode-multi-auth/package.json not found"
+  cp -R "${plugin_source_dir}/"* "${PLUGIN_DIR}/"
+
+  local version
+  version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
+  [[ -n "${version}" ]] || version="${GITHUB_SOURCE_BRANCH}"
 
   echo ""
   info "Installing dependencies..."
@@ -447,7 +414,7 @@ fi
   fi
 
   echo ""
-  success "opencode-multi-auth ${version} installed and configured!"
+  success "opencode-multi-auth ${version} (${GITHUB_SOURCE_BRANCH}) installed and configured!"
   echo ""
   if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
     warn "ocs command still unavailable after auto-install attempts."
