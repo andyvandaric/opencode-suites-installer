@@ -96,6 +96,14 @@
           <div class="kv">Release: <b id="betaName">loading...</b></div>
           <div class="kv">Target Branch: <b id="betaBranch">beta</b></div>
           <div class="kv">Updated: <b id="betaDate">loading...</b></div>
+          <div class="kv">Release URL: <b><a id="betaUrl" href="#" target="_blank" rel="noreferrer noopener" style="color:#cfe0ff">loading...</a></b></div>
+        </section>
+
+        <section class="card">
+          <h2>Source Release Sync</h2>
+          <div class="kv">Source Repo: <b>andyvandaric/opencode-config-suites-releases</b></div>
+          <div class="kv">Latest Source Tag: <b id="sourceTag">loading...</b></div>
+          <div class="kv">Channel Mapping: <b>source release -> buyer beta branch</b></div>
         </section>
 
         <section class="card">
@@ -128,6 +136,15 @@
         document.getElementById("betaTag").textContent = betaRelease.tag_name || "-";
         document.getElementById("betaName").textContent = betaRelease.name || "-";
         document.getElementById("betaDate").textContent = new Date(betaRelease.published_at || betaRelease.created_at).toLocaleString();
+        const betaUrl = document.getElementById("betaUrl");
+        betaUrl.href = betaRelease.html_url || "#";
+        betaUrl.textContent = betaRelease.html_url || "-";
+
+        const srcRes = await fetch("https://api.github.com/repos/andyvandaric/opencode-config-suites-releases/releases/latest");
+        if (srcRes.ok) {
+          const src = await srcRes.json();
+          document.getElementById("sourceTag").textContent = src.tag_name || "-";
+        }
       })();
     </script>
   </body>
