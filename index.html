@@ -78,6 +78,8 @@
         font-size: 13px;
       }
       .foot { margin-top: 20px; color: var(--muted); font-size: 13px; }
+      .whats { margin-top: 16px; }
+      .whats h2 { margin-bottom: 8px; }
     </style>
   </head>
   <body>
@@ -114,6 +116,11 @@
         </section>
       </div>
 
+      <section class="card whats">
+        <h2 id="whatsTitle">🆕 What's New (Beta)</h2>
+        <pre id="whatsBody">Loading latest beta release notes...</pre>
+      </section>
+
       <div class="cta">
         <a class="btn primary" href="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya" target="_blank" rel="noreferrer noopener">Order via WhatsApp</a>
         <a class="btn secondary" href="https://github.com/andyvandaric/andyvand-opencode-config/tree/beta" target="_blank" rel="noreferrer noopener">View Beta Branch</a>
@@ -144,6 +151,12 @@
         if (srcRes.ok) {
           const src = await srcRes.json();
           document.getElementById("sourceTag").textContent = src.tag_name || "-";
+          const version = src.tag_name || "Beta";
+          document.getElementById("whatsTitle").textContent = `🆕 What's New (${version} Beta)`;
+          const body = (src.body || "").trim();
+          document.getElementById("whatsBody").textContent = body || "Release notes are not available yet for this version.";
+        } else {
+          document.getElementById("whatsBody").textContent = "Unable to load release notes right now. Please refresh in a moment.";
         }
       })();
     </script>
