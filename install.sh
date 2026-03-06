@@ -29,11 +29,40 @@ ocs_works() {
   return 0
 }
 
+install_bun_global_with_retry() {
+  local source_path="$1"
+  local attempts=5
+  local i
+
+  for ((i=1; i<=attempts; i++)); do
+    if bun install -g "$source_path" >/tmp/ocs-bun-global.err 2>&1; then
+      return 0
+    fi
+
+    local err
+    err="$(cat /tmp/ocs-bun-global.err 2>/dev/null || true)"
+
+    if (( i < attempts )); then
+      warn "bun global install failed (attempt ${i}/${attempts}), retrying..."
+      if is_lock_error "$err"; then
+        stop_windows_lock_holders
+      fi
+      sleep "$i"
+      continue
+    fi
+
+    warn "$err"
+    return 1
+  done
+
+  return 1
+}
+
 install_ocs_from_path() {
   local source_path="$1"
   [[ -n "$source_path" && -d "$source_path" ]] || return 1
   info "Attempting ocs install from local path..."
-  bun install -g "$source_path" >/dev/null 2>&1 || return 1
+  install_bun_global_with_retry "$source_path" || return 1
   if [[ -d "${HOME}/.bun/bin" ]]; then
     export PATH="${HOME}/.bun/bin:${PATH}"
   fi
@@ -87,6 +116,25 @@ EOF
   ocs_works
 }
 
+install_ocs_shim_from_opencode() {
+  if ! command -v opencode >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local bun_bin="${HOME}/.bun/bin"
+  mkdir -p "$bun_bin"
+
+  cat > "${bun_bin}/ocs" <<EOF
+#!/usr/bin/env bash
+opencode "\$@"
+EOF
+  chmod +x "${bun_bin}/ocs"
+
+  export PATH="${bun_bin}:${PATH}"
+  hash -r 2>/dev/null || true
+  ocs_works
+}
+
 ensure_ocs_command() {
   local token="$1"
   local root_dir="$2"
@@ -104,6 +152,11 @@ ensure_ocs_command() {
 
   if install_ocs_shim_from_bundle "$plugin_dir"; then
     success "ocs shim install and verification passed."
+    return 0
+  fi
+
+  if install_ocs_shim_from_opencode; then
+    success "ocs shim via opencode install and verification passed."
     return 0
   fi
 
