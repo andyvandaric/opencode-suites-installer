@@ -463,7 +463,7 @@ function Get-PluginBundleFromAssets {
         Authorization = "token $Token"
         Accept        = "application/vnd.github.raw"
     }
-    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/$bundleName?ref=$GITHUB_SOURCE_BRANCH"
+    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/${bundleName}?ref=$GITHUB_SOURCE_BRANCH"
     Invoke-WebRequest -Uri $downloadUri -Headers $downloadHeaders -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
     return $bundleName
 }
