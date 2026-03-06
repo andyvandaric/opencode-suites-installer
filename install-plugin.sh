@@ -262,7 +262,7 @@ download_source_archive() {
 
   curl -fsSL \
     -H "Authorization: token ${token}" \
-    -H "Accept: application/octet-stream" \
+    -H "Accept: application/vnd.github+json" \
     -L "${archive_url}" \
     -o "${output}"
 }
