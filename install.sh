@@ -20,6 +20,105 @@ success() { echo "✅ $*"; }
 error()   { echo "❌ $*" >&2; exit 1; }
 warn()    { echo "⚠️  $*" >&2; }
 
+is_root_user() {
+  [[ "${EUID:-$(id -u)}" -eq 0 ]]
+}
+
+run_with_privilege() {
+  if is_root_user; then
+    "$@"
+    return $?
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+    return $?
+  fi
+
+  return 127
+}
+
+detect_package_manager() {
+  if command -v apt-get >/dev/null 2>&1; then echo "apt"; return; fi
+  if command -v dnf >/dev/null 2>&1; then echo "dnf"; return; fi
+  if command -v yum >/dev/null 2>&1; then echo "yum"; return; fi
+  if command -v pacman >/dev/null 2>&1; then echo "pacman"; return; fi
+  if command -v zypper >/dev/null 2>&1; then echo "zypper"; return; fi
+  if command -v apk >/dev/null 2>&1; then echo "apk"; return; fi
+  if command -v brew >/dev/null 2>&1; then echo "brew"; return; fi
+  echo ""
+}
+
+install_packages_auto() {
+  local pm="$1"
+  shift
+  local pkgs=("$@")
+
+  case "$pm" in
+    apt)
+      run_with_privilege apt-get update && run_with_privilege apt-get install -y "${pkgs[@]}"
+      ;;
+    dnf)
+      run_with_privilege dnf install -y "${pkgs[@]}"
+      ;;
+    yum)
+      run_with_privilege yum install -y "${pkgs[@]}"
+      ;;
+    pacman)
+      run_with_privilege pacman -Sy --noconfirm --needed "${pkgs[@]}"
+      ;;
+    zypper)
+      run_with_privilege zypper --non-interactive install --no-recommends "${pkgs[@]}"
+      ;;
+    apk)
+      run_with_privilege apk add --no-cache "${pkgs[@]}"
+      ;;
+    brew)
+      brew install "${pkgs[@]}"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+ensure_shell_dependencies() {
+  local required=(curl git tar unzip)
+  local missing=()
+  local dep
+
+  for dep in "${required[@]}"; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+      missing+=("$dep")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  warn "Missing dependencies: ${missing[*]}"
+
+  local pm
+  pm="$(detect_package_manager)"
+  if [[ -z "$pm" ]]; then
+    error "Cannot auto-install dependencies (${missing[*]}): no supported package manager detected"
+  fi
+
+  info "Attempting to auto-install dependencies via ${pm}..."
+  if ! install_packages_auto "$pm" "${missing[@]}"; then
+    error "Auto-install failed for dependencies (${missing[*]}). Please install them manually and rerun."
+  fi
+
+  for dep in "${missing[@]}"; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+      error "Dependency '${dep}' still missing after auto-install"
+    fi
+  done
+
+  success "Dependencies installed: ${missing[*]}"
+}
+
 ocs_works() {
   if ! command -v ocs >/dev/null 2>&1; then
     return 1
@@ -383,6 +482,8 @@ main() {
   echo ""
   echo "🔌 opencode-multi-auth — Plugin Installer"
   echo "────────────────────────────────────────"
+
+  ensure_shell_dependencies
 
   # Bun version check
   if ! command -v bun &>/dev/null; then
