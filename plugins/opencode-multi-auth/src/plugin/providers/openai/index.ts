@@ -1,0 +1,1 @@
+export { createOpenAiProviderAdapter } from "./adapter";

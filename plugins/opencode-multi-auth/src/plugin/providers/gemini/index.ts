@@ -1,0 +1,1 @@
+export { createGeminiProviderAdapter } from "./adapter";
