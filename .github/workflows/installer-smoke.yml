@@ -1,0 +1,71 @@
+name: Installer Smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert shell resolver uses semantic ordering
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -qE 'sort -V \| tail -1' install.sh
+
+          sample_names=$'opencode-multi-auth-v2.0.9.tar.gz\nopencode-multi-auth-v2.0.10.tar.gz\nopencode-multi-auth-v2.0.11.tar.gz\nopencode-multi-auth-v2.0.12.tar.gz'
+          selected="$(printf '%s\n' "$sample_names" | grep -E '^opencode-multi-auth-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz$' | sort -V | tail -1)"
+
+          if [[ "$selected" != "opencode-multi-auth-v2.0.12.tar.gz" ]]; then
+            echo "Semantic bundle selection failed on shell path. Selected: $selected"
+            exit 1
+          fi
+
+  smoke-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert PowerShell resolver uses semantic ordering
+        shell: pwsh
+        run: |
+          $script = Get-Content -Path .\install.ps1 -Raw
+
+          if ($script -notmatch 'Sort-Object\s+Version\s+-Descending') {
+            throw 'install.ps1 does not sort bundle candidates by semantic Version descending.'
+          }
+
+          if ($script -notmatch '\$\{bundleName\}\?ref=') {
+            throw 'install.ps1 does not use safe bundleName URI interpolation (${bundleName}?ref=...).'
+          }
+
+          $sample = @(
+            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.9.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.10.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.11.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.12.tar.gz' }
+          )
+
+          $selected = $sample |
+            Where-Object { $_.name -match '^opencode-multi-auth-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
+            ForEach-Object {
+              [PSCustomObject]@{
+                Name = $_.name
+                Version = [version]$Matches.version
+              }
+            } |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+
+          if ($selected.Name -ne 'opencode-multi-auth-v2.0.12.tar.gz') {
+            throw "Semantic bundle selection failed on PowerShell path. Selected: $($selected.Name)"
+          }

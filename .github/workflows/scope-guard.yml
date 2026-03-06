@@ -1,0 +1,72 @@
+name: Scope Guard
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  enforce-public-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce tracked-file allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          allowed_regex='^(README\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml)$'
+
+          mapfile -t tracked < <(git ls-files)
+          disallowed=()
+          for file in "${tracked[@]}"; do
+            if [[ ! "$file" =~ $allowed_regex ]]; then
+              disallowed+=("$file")
+            fi
+          done
+
+          if (( ${#disallowed[@]} > 0 )); then
+            echo "Disallowed tracked files found in public installer repository:"
+            printf ' - %s\n' "${disallowed[@]}"
+            exit 1
+          fi
+
+      - name: Enforce changed-file allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          allowed_regex='^(README\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml)$'
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+          fi
+          head_sha="${{ github.sha }}"
+
+          if [[ -z "$base_sha" || "$base_sha" == "0000000000000000000000000000000000000000" ]]; then
+            echo "No comparable base SHA (initial push). Skipping changed-file diff gate."
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only "$base_sha" "$head_sha")
+          disallowed=()
+          for file in "${changed[@]}"; do
+            [[ -z "$file" ]] && continue
+            if [[ ! "$file" =~ $allowed_regex ]]; then
+              disallowed+=("$file")
+            fi
+          done
+
+          if (( ${#disallowed[@]} > 0 )); then
+            echo "Disallowed changed files detected for installer release scope:"
+            printf ' - %s\n' "${disallowed[@]}"
+            exit 1
+          fi
