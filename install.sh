@@ -117,16 +117,17 @@ EOF
 }
 
 install_ocs_shim_from_opencode() {
-  if ! command -v opencode >/dev/null 2>&1; then
-    return 1
+  local shim_cmd='bunx opencode-ai "\$@"'
+  if command -v opencode >/dev/null 2>&1; then
+    shim_cmd='opencode "\$@"'
   fi
 
   local bun_bin="${HOME}/.bun/bin"
   mkdir -p "$bun_bin"
 
-  cat > "${bun_bin}/ocs" <<EOF
+cat > "${bun_bin}/ocs" <<EOF
 #!/usr/bin/env bash
-opencode "\$@"
+${shim_cmd}
 EOF
   chmod +x "${bun_bin}/ocs"
 

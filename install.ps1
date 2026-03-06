@@ -742,9 +742,8 @@ function Install-OcsShimFromBundle {
 
 function Install-OcsShimFromOpencode {
     $opencodeCmd = Get-Command opencode -ErrorAction SilentlyContinue
-    if (-not $opencodeCmd) {
-        return $false
-    }
+    $cmdLine = if ($opencodeCmd) { "opencode %*" } else { "bunx opencode-ai %*" }
+    $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
 
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
@@ -752,10 +751,10 @@ function Install-OcsShimFromOpencode {
     $cmdPath = Join-Path $bunBin "ocs.cmd"
     $ps1Path = Join-Path $bunBin "ocs.ps1"
 
-    $cmdContent = "@echo off`r`nopencode %*`r`n"
+    $cmdContent = "@echo off`r`n$cmdLine`r`n"
     Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
 
-    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& opencode @Args`r`n"
+    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n$psLine`r`n"
     Set-Content -Path $ps1Path -Value $ps1Content -Encoding ASCII
 
     Add-PathEntryToUserPath -PathEntry $bunBin
