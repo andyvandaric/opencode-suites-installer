@@ -438,7 +438,7 @@ function Get-SourceArchive {
 
     $headers = @{
         Authorization = "token $Token"
-        Accept        = "application/octet-stream"
+        Accept        = "application/vnd.github+json"
     }
 
     $archiveUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/tarball/$GITHUB_SOURCE_BRANCH"
