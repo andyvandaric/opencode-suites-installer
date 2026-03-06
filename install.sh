@@ -1,274 +1,444 @@
 #!/usr/bin/env bash
-# OpenCode Configuration Suite — Linux / macOS Installer
-#
-# One-liner install:
-#   curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-config-suites/main/install.sh | bash
-#
+# install-plugin.sh — Install opencode-multi-auth plugin for OpenCode Config Suites
+# Supports 3 auth paths: gh CLI → GITHUB_TOKEN env → interactive prompt
 set -euo pipefail
 
-# ─── Colors ───────────────────────────────────────────────────────────────────
-CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; GRAY='\033[0;90m'; NC='\033[0m'
-step()  { echo -e "\n${CYAN}▶  $*${NC}"; }
-ok()    { echo -e "   ${GREEN}✅ $*${NC}"; }
-warn()  { echo -e "   ${YELLOW}⚠️  $*${NC}"; }
-fail()  { echo -e "   ${RED}❌ $*${NC}"; exit 1; }
-info()  { echo -e "   ${GRAY}ℹ️  $*${NC}"; }
+# ─── Config ──────────────────────────────────────────────────────────────────
+GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
+WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
+PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
+TOKEN_FILE="${HOME}/.opencode-suites/.token"
+TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 
-echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  OpenCode Configuration Suite — Installer          ${NC}"
-echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
-echo ""
+# ─── Cleanup on exit ─────────────────────────────────────────────────────────
+trap 'rm -rf "${TMP_DIR}"' EXIT
 
-OS="$(uname -s)"
-info "Detected OS: $OS"
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+info()    { echo "  $*"; }
+success() { echo "✅ $*"; }
+error()   { echo "❌ $*" >&2; exit 1; }
+warn()    { echo "⚠️  $*" >&2; }
 
-# ─── Helper ───────────────────────────────────────────────────────────────────
-cmd_exists() { command -v "$1" &>/dev/null; }
+ocs_works() {
+  if ! command -v ocs >/dev/null 2>&1; then
+    return 1
+  fi
+  ocs --version >/dev/null 2>&1 || return 1
+  ocs --help >/dev/null 2>&1 || return 1
+  return 0
+}
 
-ensure_local_ocs_shim() {
-  local shim_dir="${HOME}/.local/bin"
-  local shim_path="${shim_dir}/ocs"
-  mkdir -p "${shim_dir}"
-cat > "${shim_path}" <<EOF
-#!/usr/bin/env bash
-bun "${REPO_DIR}/bin/ocs.cjs" "\$@"
-EOF
-  chmod +x "${shim_path}"
-  ok "Created local ocs shim: ${shim_path}"
-  if ! echo ":$PATH:" | grep -q ":${shim_dir}:"; then
-    warn "${shim_dir} is not in PATH. Add this line to your shell profile:"
-    echo "      export PATH=\"${shim_dir}:\$PATH\""
+install_ocs_from_path() {
+  local source_path="$1"
+  [[ -n "$source_path" && -d "$source_path" ]] || return 1
+  info "Attempting ocs install from local path..."
+  bun install -g "$source_path" >/dev/null 2>&1 || return 1
+  if [[ -d "${HOME}/.bun/bin" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+  ocs_works
+}
+
+install_ocs_from_private_repo() {
+  local token="$1"
+  [[ -n "$token" ]] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+
+  local suite_tmp="${TMP_DIR}/opencode-config-suites"
+  rm -rf "$suite_tmp"
+  info "Attempting ocs install from private repository source..."
+  git clone --branch "${GITHUB_SOURCE_BRANCH}" --single-branch "https://x-access-token:${token}@github.com/${GITHUB_SOURCE_REPO}.git" "$suite_tmp" >/dev/null 2>&1 || return 1
+  install_ocs_from_path "$suite_tmp"
+}
+
+open_purchase_page() {
+  echo "  Open purchase chat: ${WHATSAPP_ORDER_URL}"
+  if command -v open >/dev/null 2>&1; then
+    open "${WHATSAPP_ORDER_URL}" >/dev/null 2>&1 || true
+    return
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "${WHATSAPP_ORDER_URL}" >/dev/null 2>&1 || true
+    return
   fi
 }
 
-# ─── 0. Pre-clean: Remove conflicting opencode-antigravity-auth ───────────────
-step "Pre-clean: Removing conflicting 'opencode-antigravity-auth' plugin..."
-CONFLICT_PKG="opencode-antigravity-auth"
-_removed=0
+install_ocs_shim_from_bundle() {
+  local plugin_path="$1"
+  local ocs_js="${plugin_path}/bin/ocs.cjs"
+  if [[ ! -f "$ocs_js" ]]; then
+    ocs_js="${plugin_path}/bin/ocs.js"
+  fi
+  [[ -f "$ocs_js" ]] || return 1
 
-# npm global
-if cmd_exists npm && npm list -g --depth=0 2>/dev/null | grep -q "${CONFLICT_PKG}"; then
-    info "Removing ${CONFLICT_PKG} via npm (global)..."
-    npm uninstall -g "${CONFLICT_PKG}" 2>/dev/null && _removed=1 || true
-fi
+  local bun_bin="${HOME}/.bun/bin"
+  mkdir -p "$bun_bin"
 
-# bun global
-if cmd_exists bun && bun pm ls -g 2>/dev/null | grep -q "${CONFLICT_PKG}"; then
-    info "Removing ${CONFLICT_PKG} via bun (global)..."
-    bun remove -g "${CONFLICT_PKG}" 2>/dev/null && _removed=1 || true
-fi
+cat > "${bun_bin}/ocs" <<EOF
+#!/usr/bin/env bash
+bun "$ocs_js" "\$@"
+EOF
+  chmod +x "${bun_bin}/ocs"
 
-# pnpm global
-if cmd_exists pnpm && pnpm list -g --depth=0 2>/dev/null | grep -q "${CONFLICT_PKG}"; then
-    info "Removing ${CONFLICT_PKG} via pnpm (global)..."
-    pnpm remove -g "${CONFLICT_PKG}" 2>/dev/null && _removed=1 || true
-fi
+  export PATH="${bun_bin}:${PATH}"
+  hash -r 2>/dev/null || true
 
-# yarn global
-if cmd_exists yarn && yarn global list 2>/dev/null | grep -q "${CONFLICT_PKG}"; then
-    info "Removing ${CONFLICT_PKG} via yarn (global)..."
-    yarn global remove "${CONFLICT_PKG}" 2>/dev/null && _removed=1 || true
-fi
+  ocs_works
+}
 
-# Remove from opencode plugin cache directories
-for PLUGIN_DIR in \
-    "${HOME}/.local/share/opencode/plugins" \
-    "${HOME}/.config/opencode/plugins" \
-    "${XDG_DATA_HOME:-${HOME}/.local/share}/opencode/plugins"
-do
-    if [ -d "${PLUGIN_DIR}/${CONFLICT_PKG}" ]; then
-        info "Removing cached plugin at ${PLUGIN_DIR}/${CONFLICT_PKG}..."
-        rm -rf "${PLUGIN_DIR:?}/${CONFLICT_PKG}" && _removed=1 || true
+ensure_ocs_command() {
+  local token="$1"
+  local root_dir="$2"
+  local is_local_source="$3"
+  local plugin_dir="$4"
+
+  if [[ -d "${HOME}/.bun/bin" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+
+  if ocs_works; then
+    info "ocs verification passed."
+    return 0
+  fi
+
+  if install_ocs_shim_from_bundle "$plugin_dir"; then
+    success "ocs shim install and verification passed."
+    return 0
+  fi
+
+  if [[ "$is_local_source" == "true" ]]; then
+    if install_ocs_from_path "$root_dir"; then
+      success "ocs auto-install and verification passed."
+      return 0
     fi
-    # Also check versioned subdirs e.g. opencode-antigravity-auth@1.5.1
-    for VERSIONED_DIR in "${PLUGIN_DIR}/${CONFLICT_PKG}"@*; do
-        if [ -d "${VERSIONED_DIR}" ]; then
-            info "Removing cached plugin at ${VERSIONED_DIR}..."
-            rm -rf "${VERSIONED_DIR}" && _removed=1 || true
-        fi
-    done
-done
+  fi
 
-if [ "${_removed}" -eq 1 ]; then
-    ok "Conflicting plugin '${CONFLICT_PKG}' removed."
-else
-    info "No conflicting '${CONFLICT_PKG}' installation found — skipping."
+  if install_ocs_from_private_repo "$token"; then
+    success "ocs auto-install and verification passed."
+    return 0
+  fi
+
+  return 1
+}
+
+is_lock_error() {
+  local msg="$1"
+  [[ "$msg" =~ EBUSY|EFAULT|EPERM|ENOENT|resource\ busy|being\ used\ by\ another\ process|Access\ is\ denied ]]
+}
+
+stop_windows_lock_holders() {
+  if ! command -v powershell >/dev/null 2>&1; then
+    return 0
+  fi
+
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process bun,node,opencode,biome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" >/dev/null 2>&1 || true
+}
+
+install_dependencies_with_retry() {
+  local install_dir="$1"
+  local attempts=5
+  local i
+
+  for ((i=1; i<=attempts; i++)); do
+    if bun install --frozen-lockfile >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if bun install >/tmp/ocs-bun-install.err 2>&1; then
+      return 0
+    fi
+
+    local err
+    err="$(cat /tmp/ocs-bun-install.err 2>/dev/null || true)"
+
+    if (( i < attempts )); then
+      warn "bun install failed (attempt ${i}/${attempts}), retrying..."
+      if is_lock_error "$err"; then
+        stop_windows_lock_holders "$install_dir"
+      fi
+      sleep "$i"
+      continue
+    fi
+
+    warn "$err"
+    return 1
+  done
+
+  return 1
+}
+
+# ─── Auth: resolve GitHub token ───────────────────────────────────────────────
+resolve_token() {
+  # Path 1: gh CLI
+  if command -v gh &>/dev/null; then
+    if ! gh auth status &>/dev/null; then
+      warn "GitHub CLI (gh) is installed but not authenticated."
+      info "Logging in via GitHub CLI (browser flow)..."
+      gh auth login --git-protocol https -w
+    fi
+
+    GH_TOKEN="$(gh auth token 2>/dev/null)"
+    if [[ -n "${GH_TOKEN}" ]]; then
+      echo "  Auth: using gh CLI token" >&2
+      echo "${GH_TOKEN}"
+      return 0
+    fi
+  else
+    warn "GitHub CLI (gh) is not installed. It is highly recommended for managing access."
+    warn "Please install it from https://cli.github.com/ or provide a token manually."
+  fi
+  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+    GH_TOKEN="$(gh auth token 2>/dev/null)"
+    if [[ -n "${GH_TOKEN}" ]]; then
+      echo "  Auth: using gh CLI token" >&2
+      echo "${GH_TOKEN}"
+      return 0
+    fi
+  fi
+
+  # Path 2: GITHUB_TOKEN env var
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    echo "  Auth: using GITHUB_TOKEN environment variable" >&2
+    echo "${GITHUB_TOKEN}"
+    return 0
+  fi
+
+  # Path 3: stored token file
+  if [[ -f "${TOKEN_FILE}" ]]; then
+    local stored_token
+    stored_token="$(cat "${TOKEN_FILE}")"
+    if [[ -n "${stored_token}" ]]; then
+      echo "  Auth: using stored token from ${TOKEN_FILE}" >&2
+      echo "${stored_token}"
+      return 0
+    fi
+  fi
+
+  # Path 3b: interactive prompt
+  warn "No GitHub token found. Generate one at:"
+  warn "https://github.com/settings/tokens/new?scopes=repo"
+  echo ""
+  read -rsp "GitHub Personal Access Token (repo scope): " token </dev/tty
+  echo ""
+
+  if [[ -z "${token}" ]]; then
+    error "No token provided. Cannot continue."
+  fi
+
+  # Save for future use
+  mkdir -p "$(dirname "${TOKEN_FILE}")"
+  echo "${token}" > "${TOKEN_FILE}"
+  chmod 600 "${TOKEN_FILE}"
+  echo "  Token saved to ${TOKEN_FILE}" >&2
+  echo "${token}"
+}
+
+# ─── Verify repo access ───────────────────────────────────────────────────────
+verify_access() {
+  local token="$1"
+  local status_code
+  status_code="$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: token ${token}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
+
+  if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
+    warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    warn "If you haven't purchased OCS yet, contact support at: ${WHATSAPP_ORDER_URL}"
+    open_purchase_page
+    return 1
+  elif [[ "${status_code}" != "200" ]]; then
+    error "Unexpected response from GitHub API (HTTP ${status_code})."
+  fi
+
+  info "Repo branch access verified: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH} (HTTP ${status_code})"
+}
+
+download_plugin_bundle() {
+  local token="$1"
+  local output="$2"
+  local assets_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}"
+
+  local assets_json
+  assets_json="$(curl -fsSL \
+    -H "Authorization: token ${token}" \
+    -H "Accept: application/vnd.github+json" \
+    "${assets_api}")"
+
+  local bundle_name
+  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-multi-auth-[^"]*\.tar\.gz"' | head -1 | cut -d '"' -f4)"
+  [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
+
+  local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
+  curl -fsSL \
+    -H "Authorization: token ${token}" \
+    -H "Accept: application/vnd.github.raw" \
+    -L "${file_api}" \
+    -o "${output}"
+}
+
+# ─── Verify SHA256 ────────────────────────────────────────────────────────────
+verify_sha256() {
+  local sums_file="$1"
+  local target_dir="$2"
+
+  info "Verifying SHA256SUMS..."
+  cd "${target_dir}"
+
+  if command -v sha256sum &>/dev/null; then
+    sha256sum --check "${sums_file}" --ignore-missing
+  elif command -v shasum &>/dev/null; then
+    shasum -a 256 --check "${sums_file}" --ignore-missing
+  else
+    warn "sha256sum/shasum not found — skipping checksum verification"
+    return 0
+  fi
+
+  success "Checksum verification passed"
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+# ─── Bun installation ───────────────────────────────────────────────────────────
+install_bun() {
+  info "Bun not found. Attempting auto-install..."
+  if ! command -v curl &>/dev/null; then
+    error "curl is required to install Bun. Please install curl first."
+  fi
+  curl -fsSL https://bun.sh/install | bash
+  
+  # Source bun environment for current session
+  if [[ -f "${HOME}/.bashrc" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.bashrc" || true
+  fi
+  if [[ -d "${HOME}/.bun" ]]; then
+    export PATH="${HOME}/.bun/bin:${PATH}"
+  fi
+  if [[ -d "${HOME}/.local/bin" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+  fi
+  
+  if ! command -v bun &>/dev/null; then
+    error "Bun installation failed or not found in PATH. Please install manually at https://bun.sh"
+  fi
+  success "Bun $(bun --version) installed successfully"
+}
+
+main() {
+  echo ""
+  echo "🔌 opencode-multi-auth — Plugin Installer"
+  echo "────────────────────────────────────────"
+
+  # Bun version check
+  if ! command -v bun &>/dev/null; then
+    install_bun
+  fi
+
+  local bun_version
+  bun_version="$(bun --version)"
+  local bun_major
+  bun_major="$(echo "${bun_version}" | cut -d. -f1)"
+  if [[ "${bun_major}" -lt 1 ]]; then
+    error "Bun >= 1.0.0 required (found ${bun_version}). Install at https://bun.sh"
+  fi
+  info "Bun ${bun_version} detected"
+# Check if we are running in the repo locally
+is_local_source=false
+if [[ -f "./plugins/opencode-multi-auth/package.json" || -f "./package.json" ]]; then
+  is_local_source=true
 fi
 
-# ─── 1. Check / Install Git ───────────────────────────────────────────────────
-step "Checking Git..."
-if cmd_exists git; then
-    ok "Git already installed: $(git --version)"
-else
-    warn "Git not found. Installing..."
-    case "$OS" in
-        Linux)
-            if cmd_exists apt-get; then
-                sudo apt-get update -qq && sudo apt-get install -y git
-            elif cmd_exists dnf; then
-                sudo dnf install -y git
-            elif cmd_exists pacman; then
-                sudo pacman -S --noconfirm git
-            else
-                fail "Cannot install Git automatically. Please install it manually: https://git-scm.com"
-            fi
-            ;;
-        Darwin)
-            if cmd_exists brew; then
-                brew install git
-            else
-                # Xcode CLT includes git
-                xcode-select --install 2>/dev/null || true
-                warn "If git is still missing after this, install Xcode Command Line Tools."
-            fi
-            ;;
-        *) fail "Unsupported OS: $OS" ;;
-    esac
-    ok "Git installed."
-fi
+  echo ""
+  info "Resolving GitHub auth..."
+  local token
+  token="$(resolve_token)"
 
-# ─── 2. Check / Install Bun ───────────────────────────────────────────────────
-step "Checking Bun..."
-if cmd_exists bun; then
-    ok "Bun already installed: v$(bun --version)"
-else
-    warn "Bun not found. Installing..."
-    curl -fsSL https://bun.sh/install | bash
-    # Make bun available in this session
-    export BUN_INSTALL="${HOME}/.bun"
-    export PATH="${BUN_INSTALL}/bin:${PATH}"
-    ok "Bun installed."
-fi
+  echo ""
+  info "Verifying repo access..."
+  if ! verify_access "${token}"; then
+    warn "Access check failed with current token. Retrying with fresh authentication..."
+    rm -f "${TOKEN_FILE}" || true
+    token="$(resolve_token)"
+    if ! verify_access "${token}"; then
+      error "Installation stopped. Complete purchase/activation first, then rerun installer."
+    fi
+  fi
 
-# ─── 3. Check / Install GitHub CLI ───────────────────────────────────────────
-step "Checking GitHub CLI (gh)..."
-if cmd_exists gh; then
-    ok "gh already installed: $(gh --version | head -1)"
-else
-    warn "gh not found. Installing..."
-    case "$OS" in
-        Linux)
-            if cmd_exists apt-get; then
-                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-                    | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-                    | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-                sudo apt-get update -qq && sudo apt-get install -y gh
-            elif cmd_exists dnf; then
-                sudo dnf install -y gh
-            elif cmd_exists pacman; then
-                sudo pacman -S --noconfirm github-cli
-            else
-                warn "Cannot install gh automatically. Install manually: https://cli.github.com"
-            fi
-            ;;
-        Darwin)
-            if cmd_exists brew; then
-                brew install gh
-            else
-                warn "Homebrew not found. Install gh manually: https://cli.github.com"
-            fi
-            ;;
-    esac
-    cmd_exists gh && ok "GitHub CLI installed." || warn "gh not installed — private repo cloning may fail."
-fi
+  echo ""
+  info "Downloading plugin bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+  local tar_filename="plugin-bundle.tar.gz"
+  local tar_path="${TMP_DIR}/${tar_filename}"
 
-# ─── 4. Clone or update repo ──────────────────────────────────────────────────
-step "Setting up OpenCode config repo..."
+  echo ""
+  info "Downloading ${tar_filename}..."
+  download_plugin_bundle "${token}" "${tar_path}"
 
-REPO_URL="https://github.com/andyvandaric/opencode-config-suites.git"
-DEFAULT_REPO_DIR="${HOME}/Dev/personal/opencode-config-suites"
+  echo ""
+  info "Extracting to ${PLUGIN_DIR}..."
+  mkdir -p "${PLUGIN_DIR}"
+  local extract_tmp="${TMP_DIR}/extract"
+  mkdir -p "${extract_tmp}"
+  tar -xzf "${tar_path}" -C "${extract_tmp}" --strip-components=1
+  local plugin_source_dir="${extract_tmp}"
+  [[ -f "${plugin_source_dir}/package.json" ]] || error "Invalid plugin bundle: package.json not found"
+  cp -R "${plugin_source_dir}/"* "${PLUGIN_DIR}/"
 
-# Auto-detect: if running from inside the repo already, use that directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "${SCRIPT_DIR}/scripts/setup.js" ] && [ -d "${SCRIPT_DIR}/.git" ]; then
-    REPO_DIR="${SCRIPT_DIR}"
-    info "Detected local repo at ${REPO_DIR} — using it directly (skipping clone)."
-    ok "Using local repo: ${REPO_DIR}"
-else
-    REPO_DIR="${DEFAULT_REPO_DIR}"
+  local version
+  version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
+  [[ -n "${version}" ]] || version="${GITHUB_SOURCE_BRANCH}"
 
-    if [ -d "${REPO_DIR}/.git" ]; then
-        info "Repo already exists at ${REPO_DIR} — pulling latest..."
-        cd "${REPO_DIR}"
-        git fetch origin
-        git pull --ff-only origin main && ok "Repo updated." || warn "Pull failed (possibly diverged). Please resolve manually."
+  echo ""
+  info "Installing dependencies..."
+  local root_dir="${PWD}"
+  if [[ "${is_local_source}" == "true" ]]; then
+    PLUGIN_DIR="${root_dir}/plugins/opencode-multi-auth"
+  else
+    PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
+  fi
+
+  cd "${PLUGIN_DIR}"
+  install_dependencies_with_retry "${PLUGIN_DIR}" || error "Dependency installation failed after retries."
+
+  echo ""
+  success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR}"
+  echo ""
+  info "Running setup script..."
+  local setup_script
+  if [[ "${is_local_source}" == "true" ]]; then
+    setup_script="${root_dir}/scripts/setup.js"
+  else
+    setup_script="${PLUGIN_DIR}/scripts/setup.js"
+  fi
+
+  if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
+    warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
+  else
+    if bun "${setup_script}" --headless --profile codex-5.3-all --mode balanced; then
+      success "Setup completed automatically (headless)."
     else
-        mkdir -p "$(dirname "${REPO_DIR}")"
-        if cmd_exists gh; then
-            info "Cloning via GitHub CLI (supports private repos)..."
-            gh repo clone andyvandaric/opencode-config-suites "${REPO_DIR}"
-        else
-            info "Cloning via git..."
-            git clone "${REPO_URL}" "${REPO_DIR}"
-        fi
-        ok "Repo cloned to ${REPO_DIR}"
+      warn "Headless setup failed. Falling back to interactive setup..."
+      if ! bun "${setup_script}"; then
+        error "Setup script failed."
+      fi
     fi
-fi
+  fi
 
-cd "${REPO_DIR}"
+  echo ""
+  success "opencode-multi-auth ${version} (${GITHUB_SOURCE_BRANCH}) installed and configured!"
+  echo ""
+  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
+    warn "ocs command still unavailable after auto-install attempts."
+    warn "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+    warn "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
+  fi
+  echo ""
+  echo "   Next steps:"
+  echo "   1. Configure profile: ocs setup profile"
+  echo "   2. Configure preferences: ocs prefs"
+  echo "   3. Verify runtime: opencode auth login"
+  echo "   4. Start coding!"
+  echo ""
+}
 
-# ─── 5. Install dependencies ──────────────────────────────────────────────────
-step "Installing project dependencies (bun install)..."
-bun install
-ok "Dependencies installed."
-
-# ─── 6. Run setup profile ─────────────────────────────────────────────────────
-step "Running setup profile (deploys config to ~/.config/opencode)..."
-bun run setup:profile
-ok "Profile deployed."
-
-# ─── 7. Install OpenCode CLI ──────────────────────────────────────────────────
-step "Checking OpenCode CLI..."
-if cmd_exists opencode; then
-    ok "OpenCode already installed: $(opencode --version 2>&1 || true)"
-else
-    info "Installing OpenCode CLI via bun..."
-    bun install -g opencode-ai && ok "OpenCode CLI installed." \
-        || warn "Could not install OpenCode CLI. Install manually: https://opencode.ai"
-fi
-
-# ─── 8. Ensure OCS global command ─────────────────────────────────────────────
-step "Checking OCS command..."
-if cmd_exists ocs; then
-    ok "OCS already available: $(ocs --version 2>/dev/null || echo unknown)"
-else
-    info "Attempting global install for OCS..."
-    if bun install -g @andyvandaric/opencode-config-suites >/dev/null 2>&1; then
-        ok "Installed OCS globally from npm registry."
-    else
-        warn "Global install unavailable right now. Falling back to local shim."
-        ensure_local_ocs_shim
-    fi
-fi
-
-if cmd_exists ocs; then
-    info "Verifying OCS commands..."
-    ocs --version >/dev/null 2>&1 || warn "ocs --version failed"
-    ocs --help >/dev/null 2>&1 || warn "ocs --help failed"
-    ocs setup profile --help >/dev/null 2>&1 || warn "ocs setup profile --help failed"
-    ocs prefs --dry-run </dev/null >/dev/null 2>&1 || warn "ocs prefs --dry-run failed"
-fi
-
-# ─── Done ─────────────────────────────────────────────────────────────────────
-echo ""
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ✅  Installation complete!                        ${NC}"
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "  ${NC}Next steps:"
-echo -e "  1. Configure profile globally:"
-echo -e "     ${YELLOW}ocs setup profile${NC}"
-echo -e "  2. Tune preferences wizard:"
-echo -e "     ${YELLOW}ocs prefs${NC}"
-echo -e "  3. Add your Antigravity/OpenAI account:"
-echo -e "     ${YELLOW}opencode auth login${NC}"
-echo -e "  4. Start OpenCode in any project folder:"
-echo -e "     ${YELLOW}opencode${NC}"
-echo ""
-echo -e "  ${GRAY}To update later:"
-echo -e "    cd ${REPO_DIR}"
-echo -e "    git pull --ff-only origin main"
-echo -e "    ocs setup profile${NC}"
-echo ""
+main "$@"
