@@ -646,16 +646,38 @@ function Install-OcsFromPath {
         return $false
     }
 
-    try {
-        Write-Output "Attempting ocs install from local path..."
-        & bun install -g $SourcePath
-        if ($LASTEXITCODE -ne 0) {
-            return $false
+    $resolvedSource = (Resolve-Path $SourcePath).Path
+    $maxAttempts = 5
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $lastOutput = ""
+        try {
+            Write-Output "Attempting ocs install from local path (attempt $attempt/$maxAttempts)..."
+            $bunOutput = & bun install -g $resolvedSource 2>&1
+            if ($bunOutput) {
+                $lastOutput = ($bunOutput | Out-String).Trim()
+            }
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        } catch {
+            $lastOutput = $_.Exception.Message
         }
-        return $true
-    } catch {
-        return $false
+
+        if ($attempt -lt $maxAttempts) {
+            if (Test-LockRelatedError -Message $lastOutput) {
+                Stop-WindowsLockHolders -PathHint $resolvedSource
+            }
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        if ($lastOutput) {
+            Write-Warning "bun global install failed: $lastOutput"
+        }
     }
+
+    return $false
 }
 
 function Resolve-AbsolutePathSafe {
@@ -718,6 +740,30 @@ function Install-OcsShimFromBundle {
     return $true
 }
 
+function Install-OcsShimFromOpencode {
+    $opencodeCmd = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $opencodeCmd) {
+        return $false
+    }
+
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
+
+    $cmdPath = Join-Path $bunBin "ocs.cmd"
+    $ps1Path = Join-Path $bunBin "ocs.ps1"
+
+    $cmdContent = "@echo off`r`nopencode %*`r`n"
+    Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
+
+    $ps1Content = "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& opencode @Args`r`n"
+    Set-Content -Path $ps1Path -Value $ps1Content -Encoding ASCII
+
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
+
+    return (Test-OcsWorks)
+}
+
 function Install-OcsFromPrivateRepo {
     param([string]$Token)
 
@@ -763,6 +809,11 @@ function Ensure-OcsCommand {
 
     if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
         Write-Output "ocs shim install and verification passed."
+        return $true
+    }
+
+    if (Install-OcsShimFromOpencode) {
+        Write-Output "ocs shim via opencode install and verification passed."
         return $true
     }
 
