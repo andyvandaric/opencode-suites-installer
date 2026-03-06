@@ -86,14 +86,25 @@ ensure_shell_dependencies() {
   local required=(curl git tar unzip)
   local missing=()
   local dep
+  local total
+  local idx=0
+
+  total=${#required[@]}
+  info "Checking required dependencies..."
 
   for dep in "${required[@]}"; do
+    idx=$((idx + 1))
+    printf "  [%d/%d] %-5s ... " "$idx" "$total" "$dep"
     if ! command -v "$dep" >/dev/null 2>&1; then
+      printf "MISSING\n"
       missing+=("$dep")
+    else
+      printf "OK\n"
     fi
   done
 
   if [[ ${#missing[@]} -eq 0 ]]; then
+    success "All required dependencies already available."
     return 0
   fi
 
@@ -106,14 +117,23 @@ ensure_shell_dependencies() {
   fi
 
   info "Attempting to auto-install dependencies via ${pm}..."
+  info "Installing: ${missing[*]}"
   if ! install_packages_auto "$pm" "${missing[@]}"; then
     error "Auto-install failed for dependencies (${missing[*]}). Please install them manually and rerun."
   fi
 
+  local verify_total
+  local verify_idx=0
+  verify_total=${#missing[@]}
+  info "Verifying installed dependencies..."
   for dep in "${missing[@]}"; do
+    verify_idx=$((verify_idx + 1))
+    printf "  [%d/%d] %-5s ... " "$verify_idx" "$verify_total" "$dep"
     if ! command -v "$dep" >/dev/null 2>&1; then
+      printf "MISSING\n"
       error "Dependency '${dep}' still missing after auto-install"
     fi
+    printf "OK\n"
   done
 
   success "Dependencies installed: ${missing[*]}"
