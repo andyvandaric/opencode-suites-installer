@@ -69,7 +69,7 @@ function Invoke-PwshRelaunch {
             return $true
         }
 
-        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install-plugin.ps1"
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1"
         $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
         & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
@@ -430,7 +430,7 @@ function Test-RepoAccess {
     }
 }
 
-function Get-SourceArchive {
+function Get-PluginBundleFromAssets {
     param(
         [string]$Token,
         [string]$OutPath
@@ -441,8 +441,20 @@ function Get-SourceArchive {
         Accept        = "application/vnd.github+json"
     }
 
-    $archiveUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/tarball/$GITHUB_SOURCE_BRANCH"
-    Invoke-WebRequest -Uri $archiveUri -Headers $headers -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+    $assetsUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets?ref=$GITHUB_SOURCE_BRANCH"
+    $assets = Invoke-RestMethod -Uri $assetsUri -Headers $headers -ErrorAction Stop
+    $bundle = $assets | Where-Object { $_.name -like "opencode-multi-auth-*.tar.gz" } | Sort-Object name -Descending | Select-Object -First 1
+    if (-not $bundle) {
+        throw "No plugin bundle found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+    }
+
+    $downloadHeaders = @{
+        Authorization = "token $Token"
+        Accept        = "application/vnd.github.raw"
+    }
+    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/$($bundle.name)?ref=$GITHUB_SOURCE_BRANCH"
+    Invoke-WebRequest -Uri $downloadUri -Headers $downloadHeaders -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+    return $bundle.name
 }
 
 function Get-Asset {
@@ -1121,17 +1133,20 @@ if ($isLocalSource) {
     }
 
     Write-Output ""
-    Write-Output "Downloading source bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+    Write-Output "Downloading plugin bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
 
     if (-not (Test-Path $TMP_DIR)) {
         New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
     }
-    $tarName = "$GITHUB_SOURCE_BRANCH.tar.gz"
+    $tarName = "plugin-bundle.tar.gz"
     $tarPath = Join-Path $TMP_DIR $tarName
 
     Write-Output ""
     Write-Output "Downloading $tarName..."
-    Get-SourceArchive -Token $token -OutPath $tarPath
+    $resolvedBundleName = Get-PluginBundleFromAssets -Token $token -OutPath $tarPath
+    if ($resolvedBundleName) {
+        Write-Output "Resolved bundle: $resolvedBundleName"
+    }
 
     Write-Output ""
     Write-Output "Extracting to $PLUGIN_DIR..."
@@ -1148,9 +1163,9 @@ if ($isLocalSource) {
         Pop-Location
     }
 
-    $pluginSource = Join-Path $extractTmp "plugins\opencode-multi-auth"
+    $pluginSource = $extractTmp
     if (-not (Test-Path (Join-Path $pluginSource "package.json"))) {
-        Write-Error "Extraction failed: plugins/opencode-multi-auth/package.json not found in source archive."
+        Write-Error "Extraction failed: package.json not found in plugin bundle."
         exit 1
     }
 
