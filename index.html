@@ -284,12 +284,17 @@
     <script>
       (async () => {
         const buyerRepo = "andyvandaric/andyvand-opencode-config";
-        const sourceRepo = "andyvandaric/opencode-config-suites-releases";
+        const fallbackTag = "v2.0.8";
+        const fallbackBody = "Beta release v2.0.8. Please use for testing and validation before stable rollout.";
+
+        document.getElementById("sourceTag").textContent = fallbackTag;
+        document.getElementById("whatsTitle").textContent = `🆕 What's New (${fallbackTag} Beta)`;
+        document.getElementById("whatsBody").textContent = fallbackBody;
 
         try {
-          const [buyerRes, sourceRes] = await Promise.all([
+          const [buyerRes, metaRes] = await Promise.all([
             fetch(`https://api.github.com/repos/${buyerRepo}/releases?per_page=30`),
-            fetch(`https://api.github.com/repos/${sourceRepo}/releases/latest`),
+            fetch("./beta-release.json", { cache: "no-store" }),
           ]);
 
           if (buyerRes.ok) {
@@ -305,18 +310,16 @@
             }
           }
 
-          if (sourceRes.ok) {
-            const source = await sourceRes.json();
-            const sourceTag = source.tag_name || "v2.0.8";
+          if (metaRes.ok) {
+            const meta = await metaRes.json();
+            const sourceTag = meta.tag_name || fallbackTag;
+            const notes = (meta.body || "").trim();
             document.getElementById("sourceTag").textContent = sourceTag;
             document.getElementById("whatsTitle").textContent = `🆕 What's New (${sourceTag} Beta)`;
-            const notes = (source.body || "").trim();
-            document.getElementById("whatsBody").textContent = notes || "Release notes belum tersedia untuk versi ini.";
-          } else {
-            document.getElementById("whatsBody").textContent = "Gagal memuat release notes. Coba refresh halaman sebentar lagi.";
+            document.getElementById("whatsBody").textContent = notes || fallbackBody;
           }
         } catch (_) {
-          document.getElementById("whatsBody").textContent = "Jaringan sedang bermasalah, release notes belum bisa dimuat.";
+          // Keep fallback text already rendered above.
         }
       })();
     </script>

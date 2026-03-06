@@ -1,0 +1,9 @@
+{
+  "tag_name": "v2.0.8",
+  "name": "v2.0.8 (Beta)",
+  "body": "Beta release v2.0.8. Please use for testing and validation before stable rollout.",
+  "source_release_repo": "andyvandaric/opencode-config-suites-releases",
+  "buyer_channel_repo": "andyvandaric/andyvand-opencode-config",
+  "buyer_channel_branch": "beta",
+  "updated_at": "2026-03-05T14:40:48Z"
+}
