@@ -1086,14 +1086,52 @@ function Invoke-AutoSetup {
     Write-Output "Running auto setup (headless, installer defaults)..."
 
     $headlessSucceeded = $true
+    $headlessExitCode = 1
+    $headlessLog = Join-Path $TMP_DIR "setup-headless.log"
+
     try {
-        & bun $setupScript "--headless" "--profile" "codex-5.3-hybrid" "--mode" "performance" *> $null
+        if (-not (Test-Path $TMP_DIR)) {
+            New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
+        }
+
+        $argList = @(
+            "`"$setupScript`"",
+            "--headless",
+            "--profile",
+            "codex-5.3-hybrid",
+            "--mode",
+            "performance"
+        )
+
+        $proc = Start-Process -FilePath "bun" -ArgumentList $argList -PassThru -NoNewWindow -RedirectStandardOutput $headlessLog -RedirectStandardError $headlessLog
+        $spinner = @("|", "/", "-", "\\")
+        $spinIndex = 0
+        $startedAt = Get-Date
+
+        while (-not $proc.HasExited) {
+            $elapsed = [int]((Get-Date) - $startedAt).TotalSeconds
+            $frame = $spinner[$spinIndex % $spinner.Count]
+            $statusText = "${frame} Auto setup in progress (${elapsed}s elapsed)"
+            Write-Progress -Activity "Running auto setup" -Status $statusText -PercentComplete -1
+            Start-Sleep -Milliseconds 300
+            $spinIndex++
+        }
+
+        $headlessExitCode = $proc.ExitCode
+        Write-Progress -Activity "Running auto setup" -Completed
+        if ($headlessExitCode -ne 0) {
+            $headlessSucceeded = $false
+        }
     } catch {
         $headlessSucceeded = $false
+        Write-Progress -Activity "Running auto setup" -Completed
     }
 
-    if (($LASTEXITCODE -ne 0) -or (-not $headlessSucceeded)) {
+    if (($headlessExitCode -ne 0) -or (-not $headlessSucceeded)) {
         Write-Warning "Headless setup failed. Falling back to interactive setup..."
+        if (Test-Path $headlessLog) {
+            Write-Warning "Headless setup log: $headlessLog"
+        }
         try {
             & bun $setupScript
         } catch {
