@@ -440,7 +440,7 @@ download_plugin_bundle() {
     "${assets_api}")"
 
   local bundle_name
-  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-multi-auth-[^"]*\.tar\.gz"' | head -1 | cut -d '"' -f4)"
+  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-multi-auth-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
   [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
 
   local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"

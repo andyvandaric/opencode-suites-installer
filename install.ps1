@@ -443,18 +443,29 @@ function Get-PluginBundleFromAssets {
 
     $assetsUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets?ref=$GITHUB_SOURCE_BRANCH"
     $assets = Invoke-RestMethod -Uri $assetsUri -Headers $headers -ErrorAction Stop
-    $bundle = $assets | Where-Object { $_.name -like "opencode-multi-auth-*.tar.gz" } | Sort-Object name -Descending | Select-Object -First 1
+    $bundle = $assets |
+        Where-Object { $_.name -match '^opencode-multi-auth-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
+        ForEach-Object {
+            [PSCustomObject]@{
+                Asset   = $_
+                Version = [version]$Matches.version
+            }
+        } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
     if (-not $bundle) {
         throw "No plugin bundle found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
     }
+
+    $bundleName = $bundle.Asset.name
 
     $downloadHeaders = @{
         Authorization = "token $Token"
         Accept        = "application/vnd.github.raw"
     }
-    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/$($bundle.name)?ref=$GITHUB_SOURCE_BRANCH"
+    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/$bundleName?ref=$GITHUB_SOURCE_BRANCH"
     Invoke-WebRequest -Uri $downloadUri -Headers $downloadHeaders -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
-    return $bundle.name
+    return $bundleName
 }
 
 function Get-Asset {
