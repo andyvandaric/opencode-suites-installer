@@ -180,6 +180,19 @@ function Refresh-SessionPath {
             $env:PATH = "$ghBin;$env:PATH"
         }
     }
+
+    $opencodeBinCandidates = @(
+        (Join-Path $env:USERPROFILE ".opencode\bin"),
+        (Join-Path $env:USERPROFILE ".bun\bin")
+    )
+
+    foreach ($opencodeBin in $opencodeBinCandidates) {
+        if (-not $opencodeBin) { continue }
+        $hasOpencodeBinary = (Test-Path (Join-Path $opencodeBin "opencode.exe")) -or (Test-Path (Join-Path $opencodeBin "opencode.cmd")) -or (Test-Path (Join-Path $opencodeBin "opencode.ps1"))
+        if ($hasOpencodeBinary -and ($env:PATH -notlike "*$opencodeBin*")) {
+            $env:PATH = "$opencodeBin;$env:PATH"
+        }
+    }
 }
 
 function Add-PathEntryToUserPath {
@@ -211,6 +224,20 @@ function Add-PathEntryToUserPath {
     if (($env:PATH -split ";") -notcontains $PathEntry) {
         $env:PATH = "$PathEntry;$env:PATH"
     }
+}
+
+function Ensure-OpencodePathEntries {
+    $pathCandidates = @(
+        (Join-Path $env:USERPROFILE ".opencode\bin"),
+        (Join-Path $env:USERPROFILE ".bun\bin"),
+        (Join-Path $env:USERPROFILE ".local\bin")
+    )
+
+    foreach ($candidate in $pathCandidates) {
+        Add-PathEntryToUserPath -PathEntry $candidate
+    }
+
+    Refresh-SessionPath
 }
 
 function Ensure-WindowsShellEnv {
@@ -1364,6 +1391,7 @@ Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
+Ensure-OpencodePathEntries
 
 if (Test-Path $TMP_DIR) {
     Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue
@@ -1380,6 +1408,7 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
     Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
 }
 Write-Output ""
+Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
 $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
 if (-not $opencodeCommand) {
