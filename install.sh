@@ -764,7 +764,7 @@ verify_access() {
   status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
     --connect-timeout 10 \
     --max-time 30 \
-    -H "Authorization: Bearer ${token}" \
+    -H "Authorization: token ${token}" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
 
@@ -777,6 +777,25 @@ verify_access() {
   if [[ ("${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404") && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
     if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
       status_code="200"
+    elif [[ "${status_code}" == "401" ]] && has_interactive_tty; then
+      info "gh token may be missing repo scope. Running: gh auth refresh -h github.com -s repo"
+      if gh auth refresh -h github.com -s repo; then
+        local refreshed_token
+        refreshed_token="$(gh auth token 2>/dev/null || true)"
+        refreshed_token="$(printf '%s' "$refreshed_token" | tr -d '\r\n')"
+        if [[ -n "$refreshed_token" ]]; then
+          token="$refreshed_token"
+          status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            -H "Authorization: token ${token}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
+          if [[ "${status_code}" != "200" ]] && GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+            status_code="200"
+          fi
+        fi
+      fi
     fi
   fi
 
