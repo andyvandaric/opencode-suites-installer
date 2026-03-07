@@ -344,9 +344,10 @@ function Resolve-Token {
         gh auth status 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "GitHub CLI not authenticated. Opening browser login..."
-            & gh auth login --hostname github.com --web --scopes repo
+            & gh auth login
             if ($LASTEXITCODE -eq 0) {
                 & gh config set -h github.com git_protocol https | Out-Null
+                & gh auth refresh -h github.com --scopes repo | Out-Null
             }
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "GitHub CLI login failed."
@@ -368,8 +369,10 @@ function Resolve-Token {
     }
 
     Write-Host "Run this command in terminal, then rerun installer:"
-    Write-Host "gh auth login --hostname github.com --web --scopes repo"
-    Write-Host "gh config set -h github.com git_protocol https"
+    Write-Host "gh auth login"
+    Write-Host "Then choose: GitHub.com -> HTTPS -> Yes -> Login with a web browser"
+    Write-Host "If browser auto-open fails (WSL), open the shown URL manually and finish login"
+    Write-Host "Optional hardening: gh auth refresh -h github.com --scopes repo"
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         Write-Host "Install GitHub CLI first: https://cli.github.com/"
     }

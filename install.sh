@@ -673,8 +673,10 @@ ensure_gh_cli_for_oauth() {
 
 print_gh_auth_terminal_guide() {
   warn "Run this command in terminal, then rerun installer:"
-  warn "gh auth login --hostname github.com --web -s repo"
-  warn "gh config set -h github.com git_protocol https"
+  warn "gh auth login"
+  warn "Then choose: GitHub.com -> HTTPS -> Yes -> Login with a web browser"
+  warn "If browser auto-open fails (WSL), open shown URL manually and finish login"
+  warn "Optional hardening: gh auth refresh -h github.com -s repo"
   if ! command -v gh >/dev/null 2>&1; then
     warn "Install GitHub CLI first: https://cli.github.com/"
   fi
@@ -689,13 +691,20 @@ gh_token_has_repo_access() {
 refresh_gh_repo_scope() {
   has_interactive_tty || return 1
 
+  if gh auth login >/dev/null 2>&1; then
+    gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+    gh auth refresh -h github.com -s repo >/dev/null 2>&1 || true
+    return 0
+  fi
+
   if gh auth refresh -h github.com -s repo >/dev/null 2>&1; then
     gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
     return 0
   fi
 
-  gh auth login --hostname github.com --web -s repo >/dev/null 2>&1 || return 1
+  gh auth login >/dev/null 2>&1 || return 1
   gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+  gh auth refresh -h github.com -s repo >/dev/null 2>&1 || true
   return 0
 }
 
@@ -739,8 +748,9 @@ resolve_token() {
     elif has_interactive_tty; then
       warn "GitHub CLI (gh) is installed but not authenticated."
       info "Opening OAuth login in browser..."
-      if gh auth login --hostname github.com --web -s repo; then
+      if gh auth login; then
         gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+        gh auth refresh -h github.com -s repo >/dev/null 2>&1 || true
         GH_TOKEN="$(gh auth token 2>/dev/null)"
         if [[ -n "${GH_TOKEN}" ]]; then
           echo "  Auth: using gh CLI token" >&2
