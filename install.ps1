@@ -792,6 +792,34 @@ function Install-OcsShimFromOpencode {
     return (Test-OcsWorks)
 }
 
+function Install-OpencodeShimFromBun {
+    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
+
+    $bunxExe = Join-Path $bunBin "bunx.exe"
+    $cmdPath = Join-Path $bunBin "opencode.cmd"
+    $ps1Path = Join-Path $bunBin "opencode.ps1"
+
+    $cmdLine = if (Test-Path $bunxExe) {
+        "@echo off`r`n`"$bunxExe`" --bun opencode-ai %*`r`n"
+    } else {
+        "@echo off`r`nbunx --bun opencode-ai %*`r`n"
+    }
+    Set-Content -Path $cmdPath -Value $cmdLine -Encoding ASCII
+
+    $psLine = if (Test-Path $bunxExe) {
+        "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& `"$bunxExe`" --bun opencode-ai @Args`r`n"
+    } else {
+        "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& bunx --bun opencode-ai @Args`r`n"
+    }
+    Set-Content -Path $ps1Path -Value $psLine -Encoding ASCII
+
+    Add-PathEntryToUserPath -PathEntry $bunBin
+    Refresh-SessionPath
+
+    return (Test-Path $cmdPath)
+}
+
 function Install-OcsFromPrivateRepo {
     param([string]$Token)
 
@@ -1354,6 +1382,12 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
 Write-Output ""
 Write-Output "Checking opencode command..."
 $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+if (-not $opencodeCommand) {
+    if (Install-OpencodeShimFromBun) {
+        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+    }
+}
+
 if ($opencodeCommand) {
     Write-Output "opencode verification passed."
 } else {
