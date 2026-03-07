@@ -607,11 +607,17 @@ main() {
     error "Bun >= 1.0.0 required (found ${bun_version}). Install at https://bun.sh"
   fi
   info "Bun ${bun_version} detected"
-# Check if we are running in the repo locally
-is_local_source=false
-if [[ -f "./plugins/opencode-multi-auth/package.json" && -f "./scripts/setup.js" && -f "./scripts/constants/profile-catalog.json" && -d "./configs" ]]; then
-  is_local_source=true
-fi
+  local root_dir="${PWD}"
+  local force_local_source="${OCS_FORCE_LOCAL_SOURCE:-0}"
+  is_local_source=false
+  if [[ "${force_local_source}" == "1" ]]; then
+    if [[ -f "${root_dir}/plugins/opencode-multi-auth/package.json" && -f "${root_dir}/scripts/setup.js" && -f "${root_dir}/scripts/constants/profile-catalog.json" && -d "${root_dir}/configs" ]]; then
+      is_local_source=true
+      warn "OCS_FORCE_LOCAL_SOURCE=1 enabled. Using local workspace plugin source."
+    else
+      error "OCS_FORCE_LOCAL_SOURCE=1 set, but local source markers are missing in ${root_dir}."
+    fi
+  fi
 
   echo ""
   info "Resolving GitHub auth..."
@@ -654,11 +660,8 @@ fi
 
   echo ""
   info "Installing dependencies..."
-  local root_dir="${PWD}"
   if [[ "${is_local_source}" == "true" ]]; then
     PLUGIN_DIR="${root_dir}/plugins/opencode-multi-auth"
-  else
-    PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
   fi
 
   cd "${PLUGIN_DIR}"
@@ -704,12 +707,10 @@ fi
   fi
   echo ""
   echo "   Next steps:"
-  echo "   1. Copy API template: cp \"${HOME}/.config/opencode/.env.example\" \"${HOME}/.config/opencode/.env\""
-  echo "   2. Add your keys (for Exa MCP, set EXA_API_KEY in ~/.config/opencode/.env)"
-  echo "   3. Configure profile: ocs setup profile"
-  echo "   4. Configure preferences: ocs prefs"
-  echo "   5. Verify runtime: opencode auth login"
-  echo "   6. Start coding!"
+  echo "   1. Configure profile: ocs setup profile"
+  echo "   2. Configure preferences: ocs prefs"
+  echo "   3. Verify runtime: opencode auth login"
+  echo "   4. Start coding!"
   echo ""
 }
 

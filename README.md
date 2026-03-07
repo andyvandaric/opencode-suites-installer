@@ -20,7 +20,7 @@ irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/mai
 
 - Buyer beta source repo: `andyvandaric/andyvand-opencode-config`
 - Default source branch: `beta`
-- Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
+- Bundle source path: `assets/opencode-multi-auth-*.tar.gz`
 
 ## Access Behavior
 
