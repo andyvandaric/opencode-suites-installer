@@ -1352,6 +1352,15 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
     Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
 }
 Write-Output ""
+Write-Output "Checking opencode command..."
+$opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+if ($opencodeCommand) {
+    Write-Output "opencode verification passed."
+} else {
+    Write-Warning "opencode command not found. Skipping heavy auto-recovery to avoid long waits."
+    Write-Output "Manual check: opencode --version"
+}
+Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
 Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
