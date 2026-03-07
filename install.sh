@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-plugin.sh — Install opencode-multi-auth plugin for OpenCode Config Suites
+# install.sh — Install opencode-multi-auth plugin for OpenCode Config Suites
 # Supports 3 auth paths: gh CLI → GITHUB_TOKEN env → interactive prompt
 set -euo pipefail
 
@@ -87,6 +87,34 @@ run_with_retries() {
   done
 
   return 1
+}
+
+resolve_absolute_path_safe() {
+  local candidate="$1"
+  if [[ -z "$candidate" ]]; then
+    return 1
+  fi
+
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$candidate"
+    return $?
+  fi
+
+  if command -v readlink >/dev/null 2>&1; then
+    local linked
+    linked="$(readlink -f "$candidate" 2>/dev/null || true)"
+    if [[ -n "$linked" ]]; then
+      printf '%s\n' "$linked"
+      return 0
+    fi
+  fi
+
+  if [[ "$candidate" = /* ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  printf '%s/%s\n' "$(pwd)" "$candidate"
 }
 
 detect_package_manager() {
@@ -204,6 +232,149 @@ ocs_works() {
   return 0
 }
 
+opencode_works() {
+  command -v opencode >/dev/null 2>&1 || return 1
+  opencode --help >/dev/null 2>&1
+}
+
+install_opencode_shim() {
+  local bun_bin="${HOME}/.bun/bin"
+  local local_bin="${HOME}/.local/bin"
+  local bunx_exec="${HOME}/.bun/bin/bunx"
+  mkdir -p "$bun_bin" "$local_bin"
+
+cat > "${bun_bin}/opencode" <<EOF
+#!/usr/bin/env bash
+if [[ -x "$bunx_exec" ]]; then
+  exec "$bunx_exec" --bun opencode-ai "\$@"
+fi
+exec bunx --bun opencode-ai "\$@"
+EOF
+  chmod +x "${bun_bin}/opencode"
+
+cat > "${local_bin}/opencode" <<EOF
+#!/usr/bin/env bash
+if [[ -x "$bunx_exec" ]]; then
+  exec "$bunx_exec" --bun opencode-ai "\$@"
+fi
+exec bunx --bun opencode-ai "\$@"
+EOF
+  chmod +x "${local_bin}/opencode"
+
+  export PATH="${local_bin}:${bun_bin}:${PATH}"
+  hash -r 2>/dev/null || true
+  opencode_works
+}
+
+install_opencode_official() {
+  command -v curl >/dev/null 2>&1 || return 1
+
+  info "Installing opencode via official installer..."
+  if ! curl -fsSL https://opencode.ai/install | bash >/tmp/ocs-opencode-official.log 2>&1; then
+    warn "$(cat /tmp/ocs-opencode-official.log 2>/dev/null || true)"
+    return 1
+  fi
+
+  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  hash -r 2>/dev/null || true
+  opencode_works
+}
+
+install_opencode_bun_global() {
+  command -v bun >/dev/null 2>&1 || return 1
+
+  info "Installing opencode-ai via bun global package..."
+  if ! bun add -g opencode-ai@latest >/tmp/ocs-opencode-bun-global.log 2>&1; then
+    warn "$(cat /tmp/ocs-opencode-bun-global.log 2>/dev/null || true)"
+    return 1
+  fi
+
+  export PATH="${HOME}/.bun/bin:${HOME}/.local/bin:${PATH}"
+  hash -r 2>/dev/null || true
+  opencode_works
+}
+
+ensure_opencode_command() {
+  if opencode_works; then
+    return 0
+  fi
+
+  warn "opencode command not healthy. Trying official installer..."
+  if install_opencode_official && opencode_works; then
+    return 0
+  fi
+
+  warn "official installer did not recover opencode. Trying bun global install..."
+  if install_opencode_bun_global && opencode_works; then
+    return 0
+  fi
+
+  warn "opencode command not healthy. Installing bunx shim..."
+  if install_opencode_shim && opencode_works; then
+    return 0
+  fi
+
+  if [[ "${OCS_ENABLE_NODE_AUTO_INSTALL:-0}" == "1" ]]; then
+    warn "bunx shim did not recover opencode. Trying Node.js + npm global install..."
+    if ensure_nodejs_runtime && install_opencode_npm_global && opencode_works; then
+      return 0
+    fi
+  else
+    warn "Skipping Node.js auto-install fallback (set OCS_ENABLE_NODE_AUTO_INSTALL=1 to enable)."
+  fi
+
+  return 1
+}
+
+ensure_nodejs_runtime() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local pm
+  pm="$(detect_package_manager)"
+  [[ -n "$pm" ]] || return 1
+
+  info "Attempting to auto-install Node.js runtime via ${pm}..."
+  case "$pm" in
+    apt)
+      install_packages_auto "$pm" nodejs npm || return 1
+      ;;
+    dnf|yum|zypper|apk)
+      install_packages_auto "$pm" nodejs npm || return 1
+      ;;
+    pacman)
+      install_packages_auto "$pm" nodejs npm || return 1
+      ;;
+    brew)
+      install_packages_auto "$pm" node || return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1
+}
+
+install_opencode_npm_global() {
+  command -v npm >/dev/null 2>&1 || return 1
+
+  info "Installing opencode-ai globally via npm..."
+  if ! npm install -g opencode-ai@latest >/tmp/ocs-opencode-npm.err 2>&1; then
+    warn "$(cat /tmp/ocs-opencode-npm.err 2>/dev/null || true)"
+    return 1
+  fi
+
+  local npm_prefix
+  npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+  if [[ -n "$npm_prefix" && -d "$npm_prefix/bin" ]]; then
+    export PATH="$npm_prefix/bin:${PATH}"
+  fi
+  hash -r 2>/dev/null || true
+  opencode_works
+}
+
 install_bun_global_with_retry() {
   local source_path="$1"
   local attempts=5
@@ -237,11 +408,39 @@ install_ocs_from_path() {
   local source_path="$1"
   [[ -n "$source_path" && -d "$source_path" ]] || return 1
   info "Attempting ocs install from local path..."
-  install_bun_global_with_retry "$source_path" || return 1
-  if [[ -d "${HOME}/.bun/bin" ]]; then
-    export PATH="${HOME}/.bun/bin:${PATH}"
+
+  if install_bun_global_with_retry "$source_path"; then
+    if [[ -d "${HOME}/.bun/bin" ]]; then
+      export PATH="${HOME}/.bun/bin:${PATH}"
+    fi
+    ocs_works && return 0
   fi
-  ocs_works
+
+  if command -v npm >/dev/null 2>&1; then
+    warn "bun global install failed, trying npm global install..."
+    if npm install -g "$source_path" >/tmp/ocs-npm-global.err 2>&1; then
+      if [[ -d "${HOME}/.bun/bin" ]]; then
+        export PATH="${HOME}/.bun/bin:${PATH}"
+      fi
+      ocs_works && return 0
+    else
+      warn "$(cat /tmp/ocs-npm-global.err 2>/dev/null || true)"
+    fi
+  fi
+
+  if command -v pnpm >/dev/null 2>&1; then
+    warn "npm fallback unavailable/failed, trying pnpm global install..."
+    if pnpm add -g "$source_path" >/tmp/ocs-pnpm-global.err 2>&1; then
+      if [[ -d "${HOME}/.bun/bin" ]]; then
+        export PATH="${HOME}/.bun/bin:${PATH}"
+      fi
+      ocs_works && return 0
+    else
+      warn "$(cat /tmp/ocs-pnpm-global.err 2>/dev/null || true)"
+    fi
+  fi
+
+  return 1
 }
 
 install_ocs_from_private_repo() {
@@ -277,28 +476,47 @@ install_ocs_shim_from_bundle() {
   [[ -f "$ocs_js" ]] || return 1
 
   local bun_bin="${HOME}/.bun/bin"
-  mkdir -p "$bun_bin"
+  local local_bin="${HOME}/.local/bin"
+  local bun_exec="${HOME}/.bun/bin/bun"
+  mkdir -p "$bun_bin" "$local_bin"
 
 cat > "${bun_bin}/ocs" <<EOF
 #!/usr/bin/env bash
-bun "$ocs_js" "\$@"
+if [[ -x "$bun_exec" ]]; then
+  exec "$bun_exec" "$ocs_js" "\$@"
+fi
+exec bun "$ocs_js" "\$@"
 EOF
   chmod +x "${bun_bin}/ocs"
 
-  export PATH="${bun_bin}:${PATH}"
+cat > "${local_bin}/ocs" <<EOF
+#!/usr/bin/env bash
+if [[ -x "$bun_exec" ]]; then
+  exec "$bun_exec" "$ocs_js" "\$@"
+fi
+exec bun "$ocs_js" "\$@"
+EOF
+  chmod +x "${local_bin}/ocs"
+
+  export PATH="${bun_bin}:${local_bin}:${PATH}"
   hash -r 2>/dev/null || true
 
   ocs_works
 }
 
 install_ocs_shim_from_opencode() {
-  local shim_cmd='bunx opencode-ai "\$@"'
+  local shim_cmd='bunx --bun opencode-ai "\$@"'
+  local bunx_exec="${HOME}/.bun/bin/bunx"
+  if [[ -x "$bunx_exec" ]]; then
+    shim_cmd="\"$bunx_exec\" --bun opencode-ai \"\$@\""
+  fi
   if command -v opencode >/dev/null 2>&1; then
     shim_cmd='opencode "\$@"'
   fi
 
   local bun_bin="${HOME}/.bun/bin"
-  mkdir -p "$bun_bin"
+  local local_bin="${HOME}/.local/bin"
+  mkdir -p "$bun_bin" "$local_bin"
 
 cat > "${bun_bin}/ocs" <<EOF
 #!/usr/bin/env bash
@@ -306,7 +524,13 @@ ${shim_cmd}
 EOF
   chmod +x "${bun_bin}/ocs"
 
-  export PATH="${bun_bin}:${PATH}"
+cat > "${local_bin}/ocs" <<EOF
+#!/usr/bin/env bash
+${shim_cmd}
+EOF
+  chmod +x "${local_bin}/ocs"
+
+  export PATH="${bun_bin}:${local_bin}:${PATH}"
   hash -r 2>/dev/null || true
   ocs_works
 }
@@ -349,6 +573,26 @@ ensure_ocs_command() {
   fi
 
   return 1
+}
+
+ensure_shell_path_priority() {
+  local export_line='export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
+  local profile
+
+  for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.zshrc"; do
+    [[ -f "$profile" ]] || touch "$profile"
+    if ! grep -Fq "$export_line" "$profile"; then
+      printf '\n# OCS installer path\n%s\n' "$export_line" >> "$profile"
+    fi
+  done
+
+  local fish_cfg="${HOME}/.config/fish/config.fish"
+  local fish_line='fish_add_path -m $HOME/.local/bin $HOME/.bun/bin'
+  mkdir -p "$(dirname "$fish_cfg")"
+  [[ -f "$fish_cfg" ]] || touch "$fish_cfg"
+  if ! grep -Fq "$fish_line" "$fish_cfg"; then
+    printf '\n# OCS installer path\n%s\n' "$fish_line" >> "$fish_cfg"
+  fi
 }
 
 is_lock_error() {
@@ -427,6 +671,14 @@ ensure_gh_cli_for_oauth() {
   return 1
 }
 
+print_gh_auth_terminal_guide() {
+  warn "Run this command in terminal, then rerun installer:"
+  warn "gh auth login --hostname github.com --git-protocol https --web"
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "Install GitHub CLI first: https://cli.github.com/"
+  fi
+}
+
 # ─── Auth: resolve GitHub token ───────────────────────────────────────────────
 resolve_token() {
   # Path 1: GITHUB_TOKEN env var
@@ -476,23 +728,8 @@ resolve_token() {
     error "No GitHub token found in non-interactive session. Export GITHUB_TOKEN and rerun."
   fi
 
-  # Path 4: manual PAT prompt
-  warn "No GitHub token found. Generate one at:"
-  warn "https://github.com/settings/tokens/new?scopes=repo"
-  echo ""
-  read -rsp "GitHub Personal Access Token (repo scope): " token </dev/tty
-  echo ""
-
-  if [[ -z "${token}" ]]; then
-    error "No token provided. Cannot continue."
-  fi
-
-  # Save for future use
-  mkdir -p "$(dirname "${TOKEN_FILE}")"
-  echo "${token}" > "${TOKEN_FILE}"
-  chmod 600 "${TOKEN_FILE}"
-  echo "  Token saved to ${TOKEN_FILE}" >&2
-  echo "${token}"
+  print_gh_auth_terminal_guide
+  error "No GitHub auth available. Complete gh login first, then rerun installer."
 }
 
 # ─── Verify repo access ───────────────────────────────────────────────────────
@@ -609,6 +846,8 @@ main() {
   info "Bun ${bun_version} detected"
   local root_dir="${PWD}"
   local force_local_source="${OCS_FORCE_LOCAL_SOURCE:-0}"
+  local local_bundle_path="${OCS_LOCAL_BUNDLE_PATH:-}"
+  local resolved_local_bundle=""
   is_local_source=false
   if [[ "${force_local_source}" == "1" ]]; then
     if [[ -f "${root_dir}/plugins/opencode-multi-auth/package.json" && -f "${root_dir}/scripts/setup.js" && -f "${root_dir}/scripts/constants/profile-catalog.json" && -d "${root_dir}/configs" ]]; then
@@ -619,30 +858,46 @@ main() {
     fi
   fi
 
-  echo ""
-  info "Resolving GitHub auth..."
-  local token
-  token="$(resolve_token)"
+  if [[ -n "${local_bundle_path}" ]]; then
+    resolved_local_bundle="$(resolve_absolute_path_safe "${local_bundle_path}")"
+    [[ -f "${resolved_local_bundle}" ]] || error "OCS_LOCAL_BUNDLE_PATH not found: ${local_bundle_path}"
+  fi
 
-  echo ""
-  info "Verifying repo access..."
-  if ! verify_access "${token}"; then
-    warn "Access check failed with current token. Retrying with fresh authentication..."
-    rm -f "${TOKEN_FILE}" || true
+  local token=""
+  if [[ -n "${resolved_local_bundle}" ]]; then
+    info "OCS_LOCAL_BUNDLE_PATH detected. Skipping GitHub auth and repo access checks."
+  else
+    echo ""
+    info "Resolving GitHub auth..."
     token="$(resolve_token)"
+
+    echo ""
+    info "Verifying repo access..."
     if ! verify_access "${token}"; then
-      error "Installation stopped. Complete purchase/activation first, then rerun installer."
+      warn "Access check failed with current token. Retrying with fresh authentication..."
+      rm -f "${TOKEN_FILE}" || true
+      token="$(resolve_token)"
+      if ! verify_access "${token}"; then
+        error "Installation stopped. Complete purchase/activation first, then rerun installer."
+      fi
     fi
   fi
 
   echo ""
-  info "Downloading plugin bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+  info "Preparing plugin bundle source..."
   local tar_filename="plugin-bundle.tar.gz"
   local tar_path="${TMP_DIR}/${tar_filename}"
 
-  echo ""
-  info "Downloading ${tar_filename}..."
-  download_plugin_bundle "${token}" "${tar_path}"
+  if [[ -n "${resolved_local_bundle}" ]]; then
+    info "Using local bundle: ${resolved_local_bundle}"
+    cp "${resolved_local_bundle}" "${tar_path}"
+  else
+    echo ""
+    info "Downloading plugin bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+    echo ""
+    info "Downloading ${tar_filename}..."
+    download_plugin_bundle "${token}" "${tar_path}"
+  fi
 
   echo ""
   info "Extracting to ${PLUGIN_DIR}..."
@@ -696,15 +951,22 @@ main() {
   echo ""
   success "opencode-multi-auth ${version} (${GITHUB_SOURCE_BRANCH}) installed and configured!"
   echo ""
-  if [[ "${OCS_ENABLE_OCS_AUTO_INSTALL:-0}" == "1" ]]; then
+  if [[ "${OCS_ENABLE_OCS_AUTO_INSTALL:-1}" == "1" ]]; then
     if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
       info "ocs command still unavailable after auto-install attempts."
       info "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
       info "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
     fi
-  else
-    info "Skipping automatic ocs command installation (set OCS_ENABLE_OCS_AUTO_INSTALL=1 to enable)."
-  fi
+else
+  info "Skipping automatic ocs command installation because OCS_ENABLE_OCS_AUTO_INSTALL=0."
+fi
+
+ensure_shell_path_priority
+
+if ! ensure_opencode_command; then
+  warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
+fi
+
   echo ""
   echo "   Next steps:"
   echo "   1. Configure profile: ocs setup profile"
