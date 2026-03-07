@@ -3,6 +3,18 @@
 # Supports 3 auth paths: gh CLI → GITHUB_TOKEN env → interactive prompt
 set -euo pipefail
 
+# Recover HOME when missing (can happen in some pipe-to-bash shells).
+if [[ -z "${HOME:-}" ]]; then
+  HOME="$(getent passwd "$(id -u)" | cut -d: -f6 2>/dev/null || true)"
+  if [[ -z "${HOME:-}" ]]; then
+    HOME="$(cd ~ 2>/dev/null && pwd || true)"
+  fi
+  if [[ -z "${HOME:-}" ]]; then
+    HOME="/tmp"
+  fi
+  export HOME
+fi
+
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
@@ -31,11 +43,50 @@ run_with_privilege() {
   fi
 
   if command -v sudo >/dev/null 2>&1; then
-    sudo "$@"
-    return $?
+    if sudo -n true >/dev/null 2>&1; then
+      sudo -n "$@"
+      return $?
+    fi
+
+    if [[ -t 0 && -t 1 ]]; then
+      sudo "$@"
+      return $?
+    fi
+
+    return 1
+  fi
+
+  if command -v su >/dev/null 2>&1; then
+    if [[ -t 0 && -t 1 ]]; then
+      su -c "$(printf '%q ' "$@")"
+      return $?
+    fi
+
+    return 1
   fi
 
   return 127
+}
+
+run_with_retries() {
+  local attempts="$1"
+  shift
+  local try=1
+
+  while (( try <= attempts )); do
+    if "$@"; then
+      return 0
+    fi
+
+    if (( try == attempts )); then
+      return 1
+    fi
+
+    sleep 2
+    try=$((try + 1))
+  done
+
+  return 1
 }
 
 detect_package_manager() {
@@ -53,28 +104,29 @@ install_packages_auto() {
   local pm="$1"
   shift
   local pkgs=("$@")
+  local dep_retries="${OCS_DEP_INSTALL_RETRIES:-2}"
 
   case "$pm" in
     apt)
-      run_with_privilege apt-get update && run_with_privilege apt-get install -y "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update && run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y "${pkgs[@]}"
       ;;
     dnf)
-      run_with_privilege dnf install -y "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege dnf install -y "${pkgs[@]}"
       ;;
     yum)
-      run_with_privilege yum install -y "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege yum install -y "${pkgs[@]}"
       ;;
     pacman)
-      run_with_privilege pacman -Sy --noconfirm --needed "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege pacman -Sy --noconfirm --needed "${pkgs[@]}"
       ;;
     zypper)
-      run_with_privilege zypper --non-interactive install --no-recommends "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege zypper --non-interactive install --no-recommends "${pkgs[@]}"
       ;;
     apk)
-      run_with_privilege apk add --no-cache "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_with_privilege apk add --no-cache "${pkgs[@]}"
       ;;
     brew)
-      brew install "${pkgs[@]}"
+      run_with_retries "$dep_retries" brew install "${pkgs[@]}"
       ;;
     *)
       return 2
@@ -83,11 +135,15 @@ install_packages_auto() {
 }
 
 ensure_shell_dependencies() {
-  local required=(curl git tar unzip)
+  local required=(curl git tar)
   local missing=()
   local dep
   local total
   local idx=0
+
+  if ! command -v bun >/dev/null 2>&1; then
+    required+=(unzip)
+  fi
 
   total=${#required[@]}
   info "Checking required dependencies..."
@@ -341,43 +397,46 @@ install_dependencies_with_retry() {
   return 1
 }
 
+has_interactive_tty() {
+  [[ -r /dev/tty && -w /dev/tty ]]
+}
+
+ensure_gh_cli_for_oauth() {
+  if command -v gh >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! has_interactive_tty; then
+    return 1
+  fi
+
+  local pm
+  pm="$(detect_package_manager)"
+  if [[ -z "$pm" ]]; then
+    warn "Cannot auto-install gh: no supported package manager detected."
+    return 1
+  fi
+
+  info "GitHub CLI (gh) not found. Attempting auto-install via ${pm} for OAuth login..."
+  if install_packages_auto "$pm" gh; then
+    success "GitHub CLI installed."
+    return 0
+  fi
+
+  warn "Failed to auto-install gh."
+  return 1
+}
+
 # ─── Auth: resolve GitHub token ───────────────────────────────────────────────
 resolve_token() {
-  # Path 1: gh CLI
-  if command -v gh &>/dev/null; then
-    if ! gh auth status &>/dev/null; then
-      warn "GitHub CLI (gh) is installed but not authenticated."
-      info "Logging in via GitHub CLI (browser flow)..."
-      gh auth login --git-protocol https -w
-    fi
-
-    GH_TOKEN="$(gh auth token 2>/dev/null)"
-    if [[ -n "${GH_TOKEN}" ]]; then
-      echo "  Auth: using gh CLI token" >&2
-      echo "${GH_TOKEN}"
-      return 0
-    fi
-  else
-    warn "GitHub CLI (gh) is not installed. It is highly recommended for managing access."
-    warn "Please install it from https://cli.github.com/ or provide a token manually."
-  fi
-  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    GH_TOKEN="$(gh auth token 2>/dev/null)"
-    if [[ -n "${GH_TOKEN}" ]]; then
-      echo "  Auth: using gh CLI token" >&2
-      echo "${GH_TOKEN}"
-      return 0
-    fi
-  fi
-
-  # Path 2: GITHUB_TOKEN env var
+  # Path 1: GITHUB_TOKEN env var
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     echo "  Auth: using GITHUB_TOKEN environment variable" >&2
     echo "${GITHUB_TOKEN}"
     return 0
   fi
 
-  # Path 3: stored token file
+  # Path 2: stored token file
   if [[ -f "${TOKEN_FILE}" ]]; then
     local stored_token
     stored_token="$(cat "${TOKEN_FILE}")"
@@ -388,7 +447,36 @@ resolve_token() {
     fi
   fi
 
-  # Path 3b: interactive prompt
+  # Path 3: OAuth via gh CLI
+  if command -v gh >/dev/null 2>&1 || ensure_gh_cli_for_oauth; then
+    if gh auth status >/dev/null 2>&1; then
+      GH_TOKEN="$(gh auth token 2>/dev/null)"
+      if [[ -n "${GH_TOKEN}" ]]; then
+        echo "  Auth: using gh CLI token" >&2
+        echo "${GH_TOKEN}"
+        return 0
+      fi
+    elif has_interactive_tty; then
+      warn "GitHub CLI (gh) is installed but not authenticated."
+      info "Opening OAuth login in browser..."
+      if gh auth login --hostname github.com --git-protocol https --web; then
+        GH_TOKEN="$(gh auth token 2>/dev/null)"
+        if [[ -n "${GH_TOKEN}" ]]; then
+          echo "  Auth: using gh CLI token" >&2
+          echo "${GH_TOKEN}"
+          return 0
+        fi
+      else
+        warn "gh OAuth login failed."
+      fi
+    fi
+  fi
+
+  if ! has_interactive_tty; then
+    error "No GitHub token found in non-interactive session. Export GITHUB_TOKEN and rerun."
+  fi
+
+  # Path 4: manual PAT prompt
   warn "No GitHub token found. Generate one at:"
   warn "https://github.com/settings/tokens/new?scopes=repo"
   echo ""
@@ -440,7 +528,7 @@ download_plugin_bundle() {
     "${assets_api}")"
 
   local bundle_name
-  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-multi-auth-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
+  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-config-suites-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
   [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
 
   local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
@@ -478,6 +566,7 @@ install_bun() {
   if ! command -v curl &>/dev/null; then
     error "curl is required to install Bun. Please install curl first."
   fi
+  export BUN_INSTALL="${HOME}/.bun"
   curl -fsSL https://bun.sh/install | bash
   
   # Source bun environment for current session
@@ -520,7 +609,7 @@ main() {
   info "Bun ${bun_version} detected"
 # Check if we are running in the repo locally
 is_local_source=false
-if [[ -f "./plugins/opencode-multi-auth/package.json" || -f "./package.json" ]]; then
+if [[ -f "./plugins/opencode-multi-auth/package.json" && -f "./scripts/setup.js" && -f "./scripts/constants/profile-catalog.json" && -d "./configs" ]]; then
   is_local_source=true
 fi
 
@@ -589,6 +678,7 @@ fi
   if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
   else
+    export OCS_SETUP_INSTALLER_MODE=1
     if bun "${setup_script}" --headless --profile codex-5.3-all --mode balanced; then
       success "Setup completed automatically (headless)."
     else
@@ -597,22 +687,29 @@ fi
         error "Setup script failed."
       fi
     fi
+    unset OCS_SETUP_INSTALLER_MODE
   fi
 
   echo ""
   success "opencode-multi-auth ${version} (${GITHUB_SOURCE_BRANCH}) installed and configured!"
   echo ""
-  if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
-    warn "ocs command still unavailable after auto-install attempts."
-    warn "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
-    warn "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
+  if [[ "${OCS_ENABLE_OCS_AUTO_INSTALL:-0}" == "1" ]]; then
+    if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
+      info "ocs command still unavailable after auto-install attempts."
+      info "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+      info "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
+    fi
+  else
+    info "Skipping automatic ocs command installation (set OCS_ENABLE_OCS_AUTO_INSTALL=1 to enable)."
   fi
   echo ""
   echo "   Next steps:"
-  echo "   1. Configure profile: ocs setup profile"
-  echo "   2. Configure preferences: ocs prefs"
-  echo "   3. Verify runtime: opencode auth login"
-  echo "   4. Start coding!"
+  echo "   1. Copy API template: cp \"${HOME}/.config/opencode/.env.example\" \"${HOME}/.config/opencode/.env\""
+  echo "   2. Add your keys (for Exa MCP, set EXA_API_KEY in ~/.config/opencode/.env)"
+  echo "   3. Configure profile: ocs setup profile"
+  echo "   4. Configure preferences: ocs prefs"
+  echo "   5. Verify runtime: opencode auth login"
+  echo "   6. Start coding!"
   echo ""
 }
 
