@@ -579,7 +579,7 @@ ensure_shell_path_priority() {
   local export_line='export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
   local profile
 
-  for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.zshrc"; do
+  for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.zshrc" "${HOME}/.zprofile"; do
     [[ -f "$profile" ]] || touch "$profile"
     if ! grep -Fq "$export_line" "$profile"; then
       printf '\n# OCS installer path\n%s\n' "$export_line" >> "$profile"
@@ -831,18 +831,31 @@ download_plugin_bundle() {
   local token="$1"
   local output="$2"
   local assets_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}"
+  token="$(printf '%s' "$token" | tr -d '\r\n')"
 
   local assets_json
-  assets_json="$(curl -fsSL \
-    -H "Authorization: token ${token}" \
-    -H "Accept: application/vnd.github+json" \
-    "${assets_api}")"
+  if command -v gh >/dev/null 2>&1 && [[ -n "$token" ]]; then
+    assets_json="$(GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$assets_json" ]]; then
+    assets_json="$(curl -fsSL \
+      -H "Authorization: token ${token}" \
+      -H "Accept: application/vnd.github+json" \
+      "${assets_api}")"
+  fi
 
   local bundle_name
   bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-config-suites-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
   [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
 
   local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
+  if command -v gh >/dev/null 2>&1 && [[ -n "$token" ]]; then
+    if GH_TOKEN="$token" gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
+      return 0
+    fi
+  fi
+
   curl -fsSL \
     -H "Authorization: token ${token}" \
     -H "Accept: application/vnd.github.raw" \
