@@ -673,11 +673,30 @@ ensure_gh_cli_for_oauth() {
 
 print_gh_auth_terminal_guide() {
   warn "Run this command in terminal, then rerun installer:"
-  warn "gh auth login --hostname github.com --web"
+  warn "gh auth login --hostname github.com --web -s repo"
   warn "gh config set -h github.com git_protocol https"
   if ! command -v gh >/dev/null 2>&1; then
     warn "Install GitHub CLI first: https://cli.github.com/"
   fi
+}
+
+gh_token_has_repo_access() {
+  local token="$1"
+  [[ -n "$token" ]] || return 1
+  GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1
+}
+
+refresh_gh_repo_scope() {
+  has_interactive_tty || return 1
+
+  if gh auth refresh -h github.com -s repo >/dev/null 2>&1; then
+    gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  gh auth login --hostname github.com --web -s repo >/dev/null 2>&1 || return 1
+  gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+  return 0
 }
 
 # ─── Auth: resolve GitHub token ───────────────────────────────────────────────
@@ -705,6 +724,14 @@ resolve_token() {
     if gh auth status >/dev/null 2>&1; then
       GH_TOKEN="$(gh auth token 2>/dev/null)"
       if [[ -n "${GH_TOKEN}" ]]; then
+        if ! gh_token_has_repo_access "${GH_TOKEN}"; then
+          warn "gh token does not currently have access to ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}."
+          info "Refreshing gh auth scope (repo) ..."
+          if refresh_gh_repo_scope; then
+            GH_TOKEN="$(gh auth token 2>/dev/null)"
+          fi
+        fi
+
         echo "  Auth: using gh CLI token" >&2
         printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
         return 0
@@ -712,7 +739,7 @@ resolve_token() {
     elif has_interactive_tty; then
       warn "GitHub CLI (gh) is installed but not authenticated."
       info "Opening OAuth login in browser..."
-      if gh auth login --hostname github.com --web; then
+      if gh auth login --hostname github.com --web -s repo; then
         gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
         GH_TOKEN="$(gh auth token 2>/dev/null)"
         if [[ -n "${GH_TOKEN}" ]]; then
