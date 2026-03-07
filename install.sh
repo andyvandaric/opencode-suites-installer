@@ -682,12 +682,6 @@ print_gh_auth_terminal_guide() {
   fi
 }
 
-gh_token_has_repo_access() {
-  local token="$1"
-  [[ -n "$token" ]] || return 1
-  GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1
-}
-
 refresh_gh_repo_scope() {
   has_interactive_tty || return 1
 
@@ -733,14 +727,6 @@ resolve_token() {
     if gh auth status >/dev/null 2>&1; then
       GH_TOKEN="$(gh auth token 2>/dev/null)"
       if [[ -n "${GH_TOKEN}" ]]; then
-        if ! gh_token_has_repo_access "${GH_TOKEN}"; then
-          warn "gh token does not currently have access to ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}."
-          info "Refreshing gh auth scope (repo) ..."
-          if refresh_gh_repo_scope; then
-            GH_TOKEN="$(gh auth token 2>/dev/null)"
-          fi
-        fi
-
         echo "  Auth: using gh CLI token" >&2
         printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
         return 0
@@ -786,6 +772,31 @@ verify_access() {
   if [[ "${status_code}" == "000" && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
     if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
       status_code="200"
+    fi
+  fi
+
+  if [[ ("${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404") && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
+    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+      status_code="200"
+    elif has_interactive_tty; then
+      info "Refreshing gh auth scope (repo) and retrying access check..."
+      if refresh_gh_repo_scope; then
+        local refreshed_token
+        refreshed_token="$(gh auth token 2>/dev/null || true)"
+        refreshed_token="$(printf '%s' "$refreshed_token" | tr -d '\r\n')"
+        if [[ -n "$refreshed_token" ]]; then
+          token="$refreshed_token"
+          status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
+          if [[ "${status_code}" != "200" ]] && GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+            status_code="200"
+          fi
+        fi
+      fi
     fi
   fi
 
