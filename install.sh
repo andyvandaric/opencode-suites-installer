@@ -1067,6 +1067,8 @@ ensure_shell_path_priority
 
 if opencode_works; then
   info "opencode verification passed."
+elif install_opencode_shim && opencode_works; then
+  info "opencode shim installed and verification passed."
 elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
