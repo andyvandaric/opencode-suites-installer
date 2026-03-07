@@ -43,6 +43,25 @@ Notes:
 - These two setups are now selectable from `ocs setup profile`.
 - Model availability still follows your runtime account entitlements (`opencode models openai`).
 
+## Troubleshooting Commands
+
+- Diagnose PATH/shim issues:
+  ```bash
+  ocs doctor
+  ```
+- If `ocs` or `opencode` is not detected on macOS/Linux:
+  ```bash
+  export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+  hash -r
+  ocs doctor
+  ```
+- If `ocs` or `opencode` is not detected on Windows PowerShell:
+  ```powershell
+  Get-Command ocs
+  Get-Command opencode
+  ocs doctor
+  ```
+
 ## Buat yang Nggak Ada Waktu Ngoprek
 
 Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau baru mulai dan belum kebayang harus start dari mana, OCS disiapkan buat jalur cepat.
