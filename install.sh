@@ -834,8 +834,11 @@ download_plugin_bundle() {
   token="$(printf '%s' "$token" | tr -d '\r\n')"
 
   local assets_json
-  if command -v gh >/dev/null 2>&1 && [[ -n "$token" ]]; then
-    assets_json="$(GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
+  if command -v gh >/dev/null 2>&1; then
+    assets_json="$(gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
+    if [[ -z "$assets_json" && -n "$token" ]]; then
+      assets_json="$(GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
+    fi
   fi
 
   if [[ -z "$assets_json" ]]; then
@@ -850,8 +853,11 @@ download_plugin_bundle() {
   [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
 
   local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
-  if command -v gh >/dev/null 2>&1 && [[ -n "$token" ]]; then
-    if GH_TOKEN="$token" gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
+  if command -v gh >/dev/null 2>&1; then
+    if gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
+      return 0
+    fi
+    if [[ -n "$token" ]] && GH_TOKEN="$token" gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
       return 0
     fi
   fi
