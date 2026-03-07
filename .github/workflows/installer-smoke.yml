@@ -21,10 +21,10 @@ jobs:
 
           grep -qE 'sort -V \| tail -1' install.sh
 
-          sample_names=$'opencode-multi-auth-v2.0.9.tar.gz\nopencode-multi-auth-v2.0.10.tar.gz\nopencode-multi-auth-v2.0.11.tar.gz\nopencode-multi-auth-v2.0.12.tar.gz'
-          selected="$(printf '%s\n' "$sample_names" | grep -E '^opencode-multi-auth-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz$' | sort -V | tail -1)"
+          sample_names=$'opencode-config-suites-v2.0.9.tar.gz\nopencode-config-suites-v2.0.10.tar.gz\nopencode-config-suites-v2.0.11.tar.gz\nopencode-config-suites-v2.0.12.tar.gz'
+          selected="$(printf '%s\n' "$sample_names" | grep -E '^opencode-config-suites-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz$' | sort -V | tail -1)"
 
-          if [[ "$selected" != "opencode-multi-auth-v2.0.12.tar.gz" ]]; then
+          if [[ "$selected" != "opencode-config-suites-v2.0.12.tar.gz" ]]; then
             echo "Semantic bundle selection failed on shell path. Selected: $selected"
             exit 1
           fi
@@ -49,14 +49,14 @@ jobs:
           }
 
           $sample = @(
-            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.9.tar.gz' },
-            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.10.tar.gz' },
-            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.11.tar.gz' },
-            [PSCustomObject]@{ name = 'opencode-multi-auth-v2.0.12.tar.gz' }
+            [PSCustomObject]@{ name = 'opencode-config-suites-v2.0.9.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-config-suites-v2.0.10.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-config-suites-v2.0.11.tar.gz' },
+            [PSCustomObject]@{ name = 'opencode-config-suites-v2.0.12.tar.gz' }
           )
 
           $selected = $sample |
-            Where-Object { $_.name -match '^opencode-multi-auth-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
+            Where-Object { $_.name -match '^opencode-config-suites-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
             ForEach-Object {
               [PSCustomObject]@{
                 Name = $_.name
@@ -66,6 +66,6 @@ jobs:
             Sort-Object Version -Descending |
             Select-Object -First 1
 
-          if ($selected.Name -ne 'opencode-multi-auth-v2.0.12.tar.gz') {
+          if ($selected.Name -ne 'opencode-config-suites-v2.0.12.tar.gz') {
             throw "Semantic bundle selection failed on PowerShell path. Selected: $($selected.Name)"
           }
