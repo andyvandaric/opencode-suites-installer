@@ -1,9 +1,9 @@
 {
-  "tag_name": "v2.0.14",
-  "name": "v2.0.14 (Beta)",
-  "body": "## 🆕 What's New (v2.0.14 Beta)\n\n### Sejak Public Beta v2.0.8, apa yang baru?\n- **Dynamic Gemini routing**: CLI-first + fallback berbasis capability sudah matang untuk jalur eksekusi harian.\n- **Retry/cooldown hardening**: handling 401/404/429/5xx lebih stabil dengan jalur recovery yang lebih terkontrol.\n- **Strict prefs validation**: `ocs prefs` tidak lagi boleh partial write.\n- **Cross-OS installer hardening**: alur Linux/WSL/Windows dirapikan, termasuk stabilisasi `ocs` shim dan deteksi `opencode` command.\n- **Auth UX reliability**: jalur login Antigravity OAuth dipulihkan dan dipastikan muncul kembali di flow `opencode auth login`.\n- **Release governance**: sinkronisasi release/changelog/dev-buyer-installer diperketat agar metadata tidak drift.\n\n### Yang sudah solid untuk workflow harian\n- Multi-agent teamwork (14 agent dengan role spesifik: debug, riset docs, code review, security audit, dll).\n- 8 profile siap pilih (Codex/Sonnet/hybrid quota-safe).\n- LSP default + MCP docs/GitHub search untuk produktivitas coding real-time.\n\n### Catatan Channel\n- Public installer tetap mengarah ke buyer channel `andyvand-opencode-config@beta`.\n- Bundle source menggunakan naming `opencode-config-suites-v*.tar.gz`.",
+  "tag_name": "v2.0.15",
+  "name": "v2.0.15 (Beta)",
+  "body": "## 🆕 What's New (v2.0.15 Beta)\n\n### Fokus update kali ini\n- **GPT-5.4 setup profiles added**: `codex-5.4-best-perform` (quality-first) dan `codex-5.4-token-saver` (token-efficient).\n- **Installer copywriting restored**: CTA dan value messaging tetap utuh sambil menambahkan info profile baru di bawah Quick Install.\n- **Release sync hardening**: dev, buyer beta, dan installer public sekarang dipublish sinkron pada versi 2.0.15.\n\n### Yang sudah solid untuk workflow harian\n- Multi-agent teamwork (14 agent dengan role spesifik: debug, riset docs, code review, security audit, dll).\n- 10 profile siap pilih termasuk 2 setup GPT-5.4 terbaru.\n- LSP default + MCP docs/GitHub search untuk produktivitas coding real-time.\n\n### Catatan Channel\n- Public installer tetap mengarah ke buyer channel `andyvand-opencode-config@beta`.\n- Bundle source menggunakan naming `opencode-config-suites-v*.tar.gz`.",
   "source_release_repo": "andyvandaric/opencode-config-suites-releases",
   "buyer_channel_repo": "andyvandaric/andyvand-opencode-config",
   "buyer_channel_branch": "beta",
-  "updated_at": "2026-03-07T09:14:00Z"
+  "updated_at": "2026-03-07T12:33:00Z"
 }
