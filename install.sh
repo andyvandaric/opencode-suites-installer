@@ -760,6 +760,17 @@ resolve_token() {
 verify_access() {
   local token="$1"
   token="$(printf '%s' "$token" | tr -d '\r\n')"
+
+  if command -v gh >/dev/null 2>&1; then
+    if GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
   local status_code
   status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
     --connect-timeout 10 \
