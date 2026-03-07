@@ -10,6 +10,12 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash
 ```
 
+Install specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.0.15
+```
+
 ### Windows (PowerShell)
 
 ```powershell

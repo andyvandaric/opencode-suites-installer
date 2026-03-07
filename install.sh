@@ -22,6 +22,7 @@ WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
+REQUESTED_VERSION="${OCS_VERSION:-}"
 
 # ─── Cleanup on exit ─────────────────────────────────────────────────────────
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -115,6 +116,45 @@ resolve_absolute_path_safe() {
   fi
 
   printf '%s/%s\n' "$(pwd)" "$candidate"
+}
+
+show_usage() {
+  cat <<'EOF'
+Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
+
+Options:
+  --version, -v   Install specific bundle version (example: 2.0.15)
+  --branch        Override source branch (default: beta)
+  --help, -h      Show this help
+
+Env alternatives:
+  OCS_VERSION         Same as --version
+  OCS_RELEASE_BRANCH  Same as --branch
+EOF
+}
+
+parse_cli_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --version|-v)
+        [[ $# -ge 2 ]] || error "Missing value for $1"
+        REQUESTED_VERSION="${2#v}"
+        shift 2
+        ;;
+      --branch)
+        [[ $# -ge 2 ]] || error "Missing value for --branch"
+        GITHUB_SOURCE_BRANCH="$2"
+        shift 2
+        ;;
+      --help|-h)
+        show_usage
+        exit 0
+        ;;
+      *)
+        error "Unknown option: $1 (use --help for usage)"
+        ;;
+    esac
+  done
 }
 
 detect_package_manager() {
@@ -604,6 +644,44 @@ ensure_shell_path_priority() {
   fi
 }
 
+ensure_system_command_links() {
+  local target_dir="/usr/local/bin"
+  local cmd source_path target_path current_target
+
+  for cmd in ocs opencode; do
+    source_path=""
+    if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
+      source_path="${HOME}/.local/bin/${cmd}"
+    elif [[ -x "${HOME}/.bun/bin/${cmd}" ]]; then
+      source_path="${HOME}/.bun/bin/${cmd}"
+    fi
+
+    [[ -n "${source_path}" ]] || continue
+    target_path="${target_dir}/${cmd}"
+
+    if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
+      continue
+    fi
+
+    if [[ -L "${target_path}" ]]; then
+      current_target="$(readlink "${target_path}" 2>/dev/null || true)"
+      if [[ "${current_target}" == "${source_path}" ]]; then
+        continue
+      fi
+    fi
+
+    if [[ -w "${target_dir}" ]]; then
+      ln -sfn "${source_path}" "${target_path}" || true
+    elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
+      :
+    else
+      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
+    fi
+  done
+
+  hash -r 2>/dev/null || true
+}
+
 is_lock_error() {
   local msg="$1"
   [[ "$msg" =~ EBUSY|EFAULT|EPERM|ENOENT|resource\ busy|being\ used\ by\ another\ process|Access\ is\ denied ]]
@@ -858,7 +936,14 @@ download_plugin_bundle() {
   fi
 
   local bundle_name
-  bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-config-suites-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
+  if [[ -n "${REQUESTED_VERSION}" ]]; then
+    bundle_name="opencode-config-suites-v${REQUESTED_VERSION}.tar.gz"
+    if ! printf '%s' "${assets_json}" | grep -Fq "\"name\": \"${bundle_name}\""; then
+      error "Requested version ${REQUESTED_VERSION} not found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
+    fi
+  else
+    bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-config-suites-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
+  fi
   [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
 
   local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
@@ -927,6 +1012,8 @@ install_bun() {
 }
 
 main() {
+  parse_cli_args "$@"
+
   echo ""
   echo "🔌 opencode-multi-auth — Plugin Installer"
   echo "────────────────────────────────────────"
@@ -995,7 +1082,11 @@ main() {
     cp "${resolved_local_bundle}" "${tar_path}"
   else
     echo ""
-    info "Downloading plugin bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+    if [[ -n "${REQUESTED_VERSION}" ]]; then
+      info "Downloading plugin bundle v${REQUESTED_VERSION} from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+    else
+      info "Downloading plugin bundle from ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}..."
+    fi
     echo ""
     info "Downloading ${tar_filename}..."
     download_plugin_bundle "${token}" "${tar_path}"
@@ -1064,6 +1155,7 @@ else
 fi
 
 ensure_shell_path_priority
+ensure_system_command_links
 
 if opencode_works; then
   info "opencode verification passed."
