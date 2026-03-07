@@ -1,6 +1,6 @@
 # opencode-suites-installer
 
-Public installer entrypoints for OpenCode Config Suites.
+OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI coding profile setup, and cross-platform OpenCode onboarding (Windows, Linux, macOS).
 
 ## Quick Install
 
