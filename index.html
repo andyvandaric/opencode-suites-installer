@@ -165,11 +165,11 @@
         </article>
         <article class="card meta">
           <p class="label">Beta Metadata</p>
-          <p>Tag: <b id="betaTag">beta-v2.0.8</b></p>
-          <p>Release: <b id="betaName">Beta v2.0.8</b></p>
-          <p>Source: <b id="sourceTag">v2.0.8</b> -> buyer branch <b>beta</b></p>
+          <p>Tag: <b id="betaTag">beta-v2.0.14</b></p>
+          <p>Release: <b id="betaName">Beta v2.0.14</b></p>
+          <p>Source: <b id="sourceTag">v2.0.14</b> -> buyer branch <b>beta</b></p>
           <p>Updated: <b id="betaDate">-</b></p>
-          <p>Release URL: <b><a id="betaUrl" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.8" target="_blank" rel="noreferrer noopener" style="color:#d9e8ff">Open</a></b></p>
+          <p>Release URL: <b><a id="betaUrl" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.14" target="_blank" rel="noreferrer noopener" style="color:#d9e8ff">Open</a></b></p>
         </article>
       </section>
 
@@ -226,6 +226,29 @@
       </section>
 
       <section class="row" style="margin-top:30px">
+        <h2>Yang sudah solid di v2.0.14 (sejak public beta v2.0.8)</h2>
+        <div class="row cols-2">
+          <article class="card">
+            <h3>Teamwork Agent + Provider Coverage</h3>
+            <ul>
+              <li>14 AI agent dengan peran spesifik: debug, riset docs, code review, security audit, dan eksekusi implementasi.</li>
+              <li>8 profil siap pakai (Codex 5.3, Sonnet 4.6, dan hybrid quota-safe).</li>
+              <li>Multi-account support lintas jalur penggunaan harian.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Reliability + Productivity Upgrades</h3>
+            <ul>
+              <li>LSP default aktif (Python, TypeScript, Rust, Docker, SQL, dll).</li>
+              <li>MCP tools aktif untuk docs lookup dan GitHub code search real-time.</li>
+              <li>Perbaikan jalur login Antigravity OAuth, retry/cooldown hardening, dan validasi prefs ketat.</li>
+              <li>Stabilisasi installer Linux/WSL/Windows termasuk `ocs` shim dan detection `opencode` command.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="row" style="margin-top:30px">
         <h2>Harga sederhana dan transparan</h2>
         <div class="row cols-2 pricing">
           <article class="card">
@@ -243,7 +266,7 @@
       </section>
 
       <section class="row" style="margin-top:30px">
-        <h2 id="whatsTitle">🆕 What's New (v2.0.8 Beta)</h2>
+        <h2 id="whatsTitle">🆕 What's New (v2.0.14 Beta)</h2>
         <article class="card">
           <pre id="whatsBody">Loading latest beta release notes...</pre>
         </article>
@@ -274,7 +297,7 @@
           <div class="cta">
             <a class="btn wa" href="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya" target="_blank" rel="noreferrer noopener">Order via WhatsApp</a>
             <a class="btn alt" href="https://github.com/andyvandaric/andyvand-opencode-config/tree/beta" target="_blank" rel="noreferrer noopener">Lihat Branch Beta</a>
-            <a class="btn alt" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.8" target="_blank" rel="noreferrer noopener">Lihat Beta Release</a>
+            <a class="btn alt" href="https://github.com/andyvandaric/andyvand-opencode-config/releases/tag/beta-v2.0.14" target="_blank" rel="noreferrer noopener">Lihat Beta Release</a>
           </div>
           <p class="foot">Non-buyer access flow di installer juga mengarah ke CTA WhatsApp yang sama.</p>
         </article>
@@ -284,8 +307,8 @@
     <script>
       (async () => {
         const buyerRepo = "andyvandaric/andyvand-opencode-config";
-        const fallbackTag = "v2.0.8";
-        const fallbackBody = "Beta release v2.0.8. Please use for testing and validation before stable rollout.";
+        const fallbackTag = "v2.0.14";
+        const fallbackBody = "OCS v2.0.14 Beta: hardening installer cross-OS, OAuth path stabilization, and release sync governance updates.";
 
         document.getElementById("sourceTag").textContent = fallbackTag;
         document.getElementById("whatsTitle").textContent = `🆕 What's New (${fallbackTag} Beta)`;
@@ -301,8 +324,8 @@
             const releases = await buyerRes.json();
             const beta = releases.find((r) => typeof r.tag_name === "string" && r.tag_name.startsWith("beta-"));
             if (beta) {
-              document.getElementById("betaTag").textContent = beta.tag_name || "beta-v2.0.8";
-              document.getElementById("betaName").textContent = beta.name || "Beta v2.0.8";
+              document.getElementById("betaTag").textContent = beta.tag_name || "beta-v2.0.14";
+              document.getElementById("betaName").textContent = beta.name || "Beta v2.0.14";
               document.getElementById("betaDate").textContent = new Date(beta.published_at || beta.created_at).toLocaleString();
               const betaUrl = document.getElementById("betaUrl");
               betaUrl.href = beta.html_url || betaUrl.href;
