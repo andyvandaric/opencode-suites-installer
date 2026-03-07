@@ -1157,11 +1157,23 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 
-$isLocalSource =
-    (Test-Path ".\plugins\opencode-multi-auth\package.json") -and
-    (Test-Path ".\scripts\setup.js") -and
-    (Test-Path ".\configs")
 $rootDir = (Resolve-Path ".").Path
+$forceLocalSource = (($env:OCS_FORCE_LOCAL_SOURCE ?? "0") -eq "1")
+$isLocalSource = $false
+$hasLocalSourceMarkers =
+    (Test-Path (Join-Path $rootDir "plugins\opencode-multi-auth\package.json")) -and
+    (Test-Path (Join-Path $rootDir "scripts\setup.js")) -and
+    (Test-Path (Join-Path $rootDir "configs"))
+
+if ($forceLocalSource) {
+    if (-not $hasLocalSourceMarkers) {
+        Write-Error "OCS_FORCE_LOCAL_SOURCE=1 set, but local source markers are missing in $rootDir."
+        exit 1
+    }
+    $isLocalSource = $true
+    Write-Warning "OCS_FORCE_LOCAL_SOURCE=1 enabled. Using local workspace plugin source."
+}
+
 $version = "local-source"
 
 if ($isLocalSource) {
@@ -1287,17 +1299,15 @@ Write-Output ""
 Write-Output "Checking global ocs command..."
 if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir)) {
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
-    Write-Output "ℹ️  ocs command still unavailable after auto-install attempts."
-    Write-Output "ℹ️  Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
-    Write-Output "ℹ️  If needed, add to PATH: $bunBin (and open a new terminal)"
+    Write-Warning "ocs command still unavailable after auto-install attempts."
+    Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+    Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
 }
 Write-Output ""
 Write-Output "   Next steps:"
-Write-Output "   1. Copy API template: Copy-Item \"$env:USERPROFILE\.config\opencode\.env.example\" \"$env:USERPROFILE\.config\opencode\.env\""
-Write-Output "   2. Add your keys (for Exa MCP, set EXA_API_KEY in .env)"
-Write-Output "   3. Configure profile globally: ocs setup:profile"
-Write-Output "   4. Configure preferences: ocs prefs (optional, if needed for advanced users)"
-Write-Output "   5. Add account via: opencode auth login"
-Write-Output "   6. Running Opencode via web UI:"
+Write-Output "   1. Configure profile globally: ocs setup:profile"
+Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
+Write-Output "   3. Add account via: opencode auth login"
+Write-Output "   4. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
