@@ -736,7 +736,6 @@ resolve_token() {
       info "Opening OAuth login in browser..."
       if gh auth login; then
         gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
-        gh auth refresh -h github.com -s repo >/dev/null 2>&1 || true
         GH_TOKEN="$(gh auth token 2>/dev/null)"
         if [[ -n "${GH_TOKEN}" ]]; then
           echo "  Auth: using gh CLI token" >&2
@@ -778,30 +777,14 @@ verify_access() {
   if [[ ("${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404") && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
     if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
       status_code="200"
-    elif has_interactive_tty; then
-      info "Refreshing gh auth scope (repo) and retrying access check..."
-      if refresh_gh_repo_scope; then
-        local refreshed_token
-        refreshed_token="$(gh auth token 2>/dev/null || true)"
-        refreshed_token="$(printf '%s' "$refreshed_token" | tr -d '\r\n')"
-        if [[ -n "$refreshed_token" ]]; then
-          token="$refreshed_token"
-          status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 \
-            --max-time 30 \
-            -H "Authorization: Bearer ${token}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
-          if [[ "${status_code}" != "200" ]] && GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
-            status_code="200"
-          fi
-        fi
-      fi
     fi
   fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
     warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    if command -v gh >/dev/null 2>&1; then
+      warn "If you already have repo access, run: gh auth refresh -h github.com -s repo"
+    fi
     warn "If you haven't purchased OCS yet, contact support at: ${WHATSAPP_ORDER_URL}"
     open_purchase_page
     return 1
