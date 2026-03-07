@@ -444,7 +444,7 @@ function Get-PluginBundleFromAssets {
     $assetsUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets?ref=$GITHUB_SOURCE_BRANCH"
     $assets = Invoke-RestMethod -Uri $assetsUri -Headers $headers -ErrorAction Stop
     $bundle = $assets |
-        Where-Object { $_.name -match '^opencode-multi-auth-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
+        Where-Object { $_.name -match '^opencode-config-suites-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
         ForEach-Object {
             [PSCustomObject]@{
                 Asset   = $_
@@ -1082,8 +1082,16 @@ function Invoke-BunInstallWithRetry {
 function Invoke-AutoSetup {
     param([bool]$IsLocalSource)
 
+    $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
+    $env:OCS_SETUP_INSTALLER_MODE = "1"
+
     if ($env:OCS_SKIP_AUTO_SETUP -eq "1") {
         Write-Warning "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
+        if ($null -eq $previousInstallerMode) {
+            Remove-Item Env:OCS_SETUP_INSTALLER_MODE -ErrorAction SilentlyContinue
+        } else {
+            $env:OCS_SETUP_INSTALLER_MODE = $previousInstallerMode
+        }
         return
     }
 
@@ -1098,51 +1106,19 @@ function Invoke-AutoSetup {
 
     $headlessSucceeded = $true
     $headlessExitCode = 1
-    $headlessLog = Join-Path $TMP_DIR "setup-headless.log"
 
     try {
-        if (-not (Test-Path $TMP_DIR)) {
-            New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
-        }
-
-        $argList = @(
-            "`"$setupScript`"",
-            "--headless",
-            "--profile",
-            "codex-5.3-hybrid",
-            "--mode",
-            "performance"
-        )
-
-        $proc = Start-Process -FilePath "bun" -ArgumentList $argList -PassThru -NoNewWindow -RedirectStandardOutput $headlessLog -RedirectStandardError $headlessLog
-        $spinner = @("|", "/", "-", "\\")
-        $spinIndex = 0
-        $startedAt = Get-Date
-
-        while (-not $proc.HasExited) {
-            $elapsed = [int]((Get-Date) - $startedAt).TotalSeconds
-            $frame = $spinner[$spinIndex % $spinner.Count]
-            $statusText = "${frame} Auto setup in progress (${elapsed}s elapsed)"
-            Write-Progress -Activity "Running auto setup" -Status $statusText -PercentComplete -1
-            Start-Sleep -Milliseconds 300
-            $spinIndex++
-        }
-
-        $headlessExitCode = $proc.ExitCode
-        Write-Progress -Activity "Running auto setup" -Completed
+        & bun $setupScript --headless --profile codex-5.3-all --mode balanced
+        $headlessExitCode = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } else { 0 }
         if ($headlessExitCode -ne 0) {
             $headlessSucceeded = $false
         }
     } catch {
         $headlessSucceeded = $false
-        Write-Progress -Activity "Running auto setup" -Completed
     }
 
     if (($headlessExitCode -ne 0) -or (-not $headlessSucceeded)) {
         Write-Warning "Headless setup failed. Falling back to interactive setup..."
-        if (Test-Path $headlessLog) {
-            Write-Warning "Headless setup log: $headlessLog"
-        }
         try {
             & bun $setupScript
         } catch {
@@ -1153,11 +1129,21 @@ function Invoke-AutoSetup {
 
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Interactive setup failed. Run manually: bun $setupScript"
+            if ($null -eq $previousInstallerMode) {
+                Remove-Item Env:OCS_SETUP_INSTALLER_MODE -ErrorAction SilentlyContinue
+            } else {
+                $env:OCS_SETUP_INSTALLER_MODE = $previousInstallerMode
+            }
             exit 1
         }
     }
 
     Write-Output "Auto setup completed."
+    if ($null -eq $previousInstallerMode) {
+        Remove-Item Env:OCS_SETUP_INSTALLER_MODE -ErrorAction SilentlyContinue
+    } else {
+        $env:OCS_SETUP_INSTALLER_MODE = $previousInstallerMode
+    }
 }
 
 Write-Output ""
@@ -1301,15 +1287,17 @@ Write-Output ""
 Write-Output "Checking global ocs command..."
 if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir)) {
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
-    Write-Warning "ocs command still unavailable after auto-install attempts."
-    Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
-    Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
+    Write-Output "ℹ️  ocs command still unavailable after auto-install attempts."
+    Write-Output "ℹ️  Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+    Write-Output "ℹ️  If needed, add to PATH: $bunBin (and open a new terminal)"
 }
 Write-Output ""
 Write-Output "   Next steps:"
-Write-Output "   1. Configure profile globally: ocs setup:profile"
-Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
-Write-Output "   3. Add account via: opencode auth login"
-Write-Output "   4. Running Opencode via web UI:"
+Write-Output "   1. Copy API template: Copy-Item \"$env:USERPROFILE\.config\opencode\.env.example\" \"$env:USERPROFILE\.config\opencode\.env\""
+Write-Output "   2. Add your keys (for Exa MCP, set EXA_API_KEY in .env)"
+Write-Output "   3. Configure profile globally: ocs setup:profile"
+Write-Output "   4. Configure preferences: ocs prefs (optional, if needed for advanced users)"
+Write-Output "   5. Add account via: opencode auth login"
+Write-Output "   6. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
