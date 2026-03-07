@@ -22,6 +22,12 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex
 ```
 
+Install specific version:
+
+```powershell
+$env:OCS_VERSION = "2.0.15"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex
+```
+
 ## What's New in GPT-5.4 Setup Profiles
 
 - `codex-5.4-best-perform`

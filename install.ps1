@@ -2,12 +2,19 @@
 # Auth path: env token -> cached token -> gh CLI -> secure prompt
 
 #Requires -Version 5.1
+param(
+    [string]$Version,
+    [string]$SourceBranch,
+    [string]$PwshPath
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$GITHUB_SOURCE_BRANCH = if ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
+$REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
@@ -55,6 +62,15 @@ function Invoke-PwshRelaunch {
 
     $scriptPath = $PSCommandPath
     $exitCode = 0
+    $previousVersion = $env:OCS_VERSION
+    $previousBranch = $env:OCS_RELEASE_BRANCH
+
+    if ($REQUESTED_VERSION) {
+        $env:OCS_VERSION = $REQUESTED_VERSION
+    }
+    if ($GITHUB_SOURCE_BRANCH) {
+        $env:OCS_RELEASE_BRANCH = $GITHUB_SOURCE_BRANCH
+    }
 
     try {
         if ($scriptPath -and (Test-Path $scriptPath)) {
@@ -81,6 +97,16 @@ function Invoke-PwshRelaunch {
         }
         return $true
     } finally {
+        if ($previousVersion) {
+            $env:OCS_VERSION = $previousVersion
+        } else {
+            Remove-Item Env:OCS_VERSION -ErrorAction SilentlyContinue
+        }
+        if ($previousBranch) {
+            $env:OCS_RELEASE_BRANCH = $previousBranch
+        } else {
+            Remove-Item Env:OCS_RELEASE_BRANCH -ErrorAction SilentlyContinue
+        }
         if ($previousRelaunchFlag) {
             $env:OCS_PWSH_RELAUNCHED = $previousRelaunchFlag
         } else {
@@ -472,8 +498,17 @@ function Get-PluginBundleFromAssets {
                 Version = [version]$Matches.version
             }
         } |
-        Sort-Object Version -Descending |
-        Select-Object -First 1
+        Sort-Object Version -Descending
+
+    if ($REQUESTED_VERSION) {
+        $bundle = $bundle | Where-Object { $_.Version -eq ([version]$REQUESTED_VERSION) } | Select-Object -First 1
+        if (-not $bundle) {
+            throw "Requested version $REQUESTED_VERSION not found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+        }
+    } else {
+        $bundle = $bundle | Select-Object -First 1
+    }
+
     if (-not $bundle) {
         throw "No plugin bundle found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
     }
@@ -1339,7 +1374,11 @@ if ($isLocalSource) {
         Write-Output "Resolved bundle: $resolvedBundleName"
     } else {
         Write-Output ""
-        Write-Output "Downloading plugin bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+        if ($REQUESTED_VERSION) {
+            Write-Output "Downloading plugin bundle v$REQUESTED_VERSION from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+        } else {
+            Write-Output "Downloading plugin bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+        }
         Write-Output ""
         Write-Output "Downloading $tarName..."
         $resolvedBundleName = Get-PluginBundleFromAssets -Token $token -OutPath $tarPath
