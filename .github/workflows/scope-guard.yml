@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          allowed_regex='^(README\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml)$'
+          allowed_regex='^(README\.md|CHANGELOG\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml|\.github/workflows/release-notes-guard\.yml)$'
 
           mapfile -t tracked < <(git ls-files)
           disallowed=()
@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          allowed_regex='^(README\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml)$'
+          allowed_regex='^(README\.md|CHANGELOG\.md|install\.ps1|install\.sh|\.github/workflows/scope-guard\.yml|\.github/workflows/installer-smoke\.yml|\.github/workflows/release-notes-guard\.yml)$'
 
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             base_sha="${{ github.event.pull_request.base.sha }}"
