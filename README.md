@@ -35,7 +35,7 @@ Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cep
 - Hardening installer Linux/WSL/Windows, termasuk stabilisasi `ocs` shim dan deteksi command `opencode`.
 - Jalur login Antigravity OAuth dipulihkan dan tervalidasi di `opencode auth login`.
 
-## Gal pake lama!
+## Nggak pake lama!
 
 Install OCS sekarang:
 
