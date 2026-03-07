@@ -1,4 +1,4 @@
-# install-plugin.ps1 - Install opencode-multi-auth plugin for OpenCode Config Suites
+# install.ps1 - Install opencode-multi-auth plugin for OpenCode Config Suites
 # Auth path: env token -> cached token -> gh CLI -> secure prompt
 
 #Requires -Version 5.1
@@ -336,7 +336,7 @@ function Resolve-Token {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         $ghInstalled = Ensure-GitHubCli
         if (-not $ghInstalled) {
-            Write-Warning "GitHub CLI auto-install failed. Falling back to manual token input."
+            Write-Warning "GitHub CLI auto-install failed. Please install gh and authenticate via browser login."
         }
     }
 
@@ -346,7 +346,7 @@ function Resolve-Token {
             Write-Host "GitHub CLI not authenticated. Opening browser login..."
             & gh auth login --hostname github.com --git-protocol https --web
             if ($LASTEXITCODE -ne 0) {
-                Write-Warning "GitHub CLI login failed. Falling back to manual token input."
+                Write-Warning "GitHub CLI login failed."
             }
         }
 
@@ -364,25 +364,12 @@ function Resolve-Token {
         exit 1
     }
 
-    Write-Host "GitHub token required for release download."
-    Write-Host "Create a token at: https://github.com/settings/tokens"
-    try {
-        $secureToken = Read-Host "Enter GitHub PAT (input hidden)" -AsSecureString
-        $cred = New-Object System.Management.Automation.PSCredential("token", $secureToken)
-        $manualToken = $cred.GetNetworkCredential().Password
-        if ($manualToken) {
-            $manualToken = $manualToken.Trim()
-            if ($manualToken) {
-                Write-Host "Auth: using manually provided token"
-                Save-TokenFile -Token $manualToken
-                return $manualToken
-            }
-        }
-    } catch {
-        Write-Warning "Manual token prompt failed: $($_.Exception.Message)"
+    Write-Host "Run this command in terminal, then rerun installer:"
+    Write-Host "gh auth login --hostname github.com --git-protocol https --web"
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Host "Install GitHub CLI first: https://cli.github.com/"
     }
-
-    Write-Error "Unable to obtain GitHub token. Provide GH_TOKEN/GITHUB_TOKEN, authenticate gh, or rerun and enter a PAT."
+    Write-Error "Unable to obtain GitHub token. Complete gh login first, then rerun installer."
     exit 1
 }
 
@@ -688,6 +675,30 @@ function Install-OcsFromPath {
         }
     }
 
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        try {
+            Write-Warning "bun global install failed, trying npm global install..."
+            & npm install -g $resolvedSource *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        } catch {
+            Write-Warning "npm global install fallback failed: $($_.Exception.Message)"
+        }
+    }
+
+    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        try {
+            Write-Warning "npm fallback unavailable/failed, trying pnpm global install..."
+            & pnpm add -g $resolvedSource *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        } catch {
+            Write-Warning "pnpm global install fallback failed: $($_.Exception.Message)"
+        }
+    }
+
     return $false
 }
 
@@ -805,7 +816,8 @@ function Install-OcsFromPrivateRepo {
 function Ensure-OcsCommand {
     param(
         [string]$PluginPath,
-        [string]$BasePath
+        [string]$BasePath,
+        [bool]$IsLocalSource = $false
     )
 
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
@@ -827,7 +839,13 @@ function Ensure-OcsCommand {
         return $true
     }
 
-    if ($isLocalSource) {
+    $enableGlobalOcsInstall = (($env:OCS_ENABLE_OCS_GLOBAL_INSTALL ?? "1") -eq "1")
+    if (-not $enableGlobalOcsInstall) {
+        Write-Warning "Skipping global ocs installation fallback (set OCS_ENABLE_OCS_GLOBAL_INSTALL=1 to enable)."
+        return $false
+    }
+
+    if ($IsLocalSource) {
         $workspaceRoot = (Resolve-Path ".").Path
         if (Install-OcsFromPath -SourcePath $workspaceRoot) {
             Add-PathEntryToUserPath -PathEntry $bunBin
@@ -1199,38 +1217,52 @@ if ($isLocalSource) {
         }
     }
 } else {
-    Write-Output ""
-    Write-Output "Resolving GitHub auth..."
-    $token = [string](Resolve-Token)
-    $script:ResolvedReleaseToken = $token
-
-    Write-Output ""
-    Write-Output "Verifying repo access..."
-    $hasRepoAccess = [bool](Test-RepoAccess -Token $token -SuppressLandingPage)
-    if (-not $hasRepoAccess) {
-        Write-Warning "Access check failed with current token. Retrying with fresh authentication..."
-
-        if (Test-Path $TOKEN_FILE) {
-            try {
-                Remove-Item -Path $TOKEN_FILE -Force -ErrorAction Stop
-                Write-Host "Cleared cached token at $TOKEN_FILE"
-            } catch {
-                Write-Warning "Could not clear cached token: $($_.Exception.Message)"
-            }
+    $localBundlePath = $env:OCS_LOCAL_BUNDLE_PATH
+    $resolvedLocalBundle = $null
+    if ($localBundlePath) {
+        $resolvedLocalBundle = Resolve-AbsolutePathSafe -BasePath $rootDir -Candidate $localBundlePath
+        if (-not (Test-Path $resolvedLocalBundle)) {
+            Write-Error "OCS_LOCAL_BUNDLE_PATH not found: $localBundlePath"
+            exit 1
         }
 
-        $token = [string](Resolve-Token -SkipTokenCache)
-        $script:ResolvedReleaseToken = $token
-        $hasRepoAccess = [bool](Test-RepoAccess -Token $token)
-    }
-
-    if (-not $hasRepoAccess) {
-        Write-Output "Installation stopped. Complete access purchase/activation, then rerun installer."
-        return
+        Write-Output "OCS_LOCAL_BUNDLE_PATH detected. Skipping GitHub auth and repo access checks."
     }
 
     Write-Output ""
-    Write-Output "Downloading plugin bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+    if (-not $resolvedLocalBundle) {
+        Write-Output "Resolving GitHub auth..."
+        $token = [string](Resolve-Token)
+        $script:ResolvedReleaseToken = $token
+
+        Write-Output ""
+        Write-Output "Verifying repo access..."
+        $hasRepoAccess = [bool](Test-RepoAccess -Token $token -SuppressLandingPage)
+        if (-not $hasRepoAccess) {
+            Write-Warning "Access check failed with current token. Retrying with fresh authentication..."
+
+            if (Test-Path $TOKEN_FILE) {
+                try {
+                    Remove-Item -Path $TOKEN_FILE -Force -ErrorAction Stop
+                    Write-Host "Cleared cached token at $TOKEN_FILE"
+                } catch {
+                    Write-Warning "Could not clear cached token: $($_.Exception.Message)"
+                }
+            }
+
+            $token = [string](Resolve-Token -SkipTokenCache)
+            $script:ResolvedReleaseToken = $token
+            $hasRepoAccess = [bool](Test-RepoAccess -Token $token)
+        }
+
+        if (-not $hasRepoAccess) {
+            Write-Output "Installation stopped. Complete access purchase/activation, then rerun installer."
+            return
+        }
+    }
+
+    Write-Output ""
+    Write-Output "Preparing plugin bundle source..."
 
     if (-not (Test-Path $TMP_DIR)) {
         New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
@@ -1238,11 +1270,20 @@ if ($isLocalSource) {
     $tarName = "plugin-bundle.tar.gz"
     $tarPath = Join-Path $TMP_DIR $tarName
 
-    Write-Output ""
-    Write-Output "Downloading $tarName..."
-    $resolvedBundleName = Get-PluginBundleFromAssets -Token $token -OutPath $tarPath
-    if ($resolvedBundleName) {
+    if ($resolvedLocalBundle) {
+        Write-Output "Using local bundle: $resolvedLocalBundle"
+        Copy-Item -Path $resolvedLocalBundle -Destination $tarPath -Force
+        $resolvedBundleName = [System.IO.Path]::GetFileName($resolvedLocalBundle)
         Write-Output "Resolved bundle: $resolvedBundleName"
+    } else {
+        Write-Output ""
+        Write-Output "Downloading plugin bundle from $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH..."
+        Write-Output ""
+        Write-Output "Downloading $tarName..."
+        $resolvedBundleName = Get-PluginBundleFromAssets -Token $token -OutPath $tarPath
+        if ($resolvedBundleName) {
+            Write-Output "Resolved bundle: $resolvedBundleName"
+        }
     }
 
     Write-Output ""
@@ -1297,7 +1338,7 @@ Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output ""
 Write-Output "Checking global ocs command..."
-if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir)) {
+if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalSource:$isLocalSource)) {
     $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
     Write-Warning "ocs command still unavailable after auto-install attempts."
     Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
