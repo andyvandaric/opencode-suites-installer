@@ -234,7 +234,13 @@ ocs_works() {
 
 opencode_works() {
   command -v opencode >/dev/null 2>&1 || return 1
-  opencode --help >/dev/null 2>&1
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 8 opencode --version >/dev/null 2>&1 || timeout 8 opencode --help >/dev/null 2>&1 || return 1
+    return 0
+  fi
+
+  return 0
 }
 
 install_opencode_shim() {
@@ -578,6 +584,9 @@ ensure_ocs_command() {
 ensure_shell_path_priority() {
   local export_line='export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
   local profile
+
+  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  hash -r 2>/dev/null || true
 
   for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.zshrc" "${HOME}/.zprofile"; do
     [[ -f "$profile" ]] || touch "$profile"
@@ -1056,8 +1065,17 @@ fi
 
 ensure_shell_path_priority
 
-if ! ensure_opencode_command; then
-  warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
+if opencode_works; then
+  info "opencode verification passed."
+elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
+  warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
+  if ! ensure_opencode_command; then
+    warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
+  fi
+else
+  warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
+  info "Manual check: opencode --version"
+  info "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
 fi
 
   echo ""
