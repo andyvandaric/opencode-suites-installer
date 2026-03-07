@@ -673,7 +673,8 @@ ensure_gh_cli_for_oauth() {
 
 print_gh_auth_terminal_guide() {
   warn "Run this command in terminal, then rerun installer:"
-  warn "gh auth login --hostname github.com --git-protocol https --web"
+  warn "gh auth login --hostname github.com --web"
+  warn "gh config set -h github.com git_protocol https"
   if ! command -v gh >/dev/null 2>&1; then
     warn "Install GitHub CLI first: https://cli.github.com/"
   fi
@@ -684,7 +685,7 @@ resolve_token() {
   # Path 1: GITHUB_TOKEN env var
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     echo "  Auth: using GITHUB_TOKEN environment variable" >&2
-    echo "${GITHUB_TOKEN}"
+    printf '%s' "${GITHUB_TOKEN}" | tr -d '\r\n'
     return 0
   fi
 
@@ -694,7 +695,7 @@ resolve_token() {
     stored_token="$(cat "${TOKEN_FILE}")"
     if [[ -n "${stored_token}" ]]; then
       echo "  Auth: using stored token from ${TOKEN_FILE}" >&2
-      echo "${stored_token}"
+      printf '%s' "${stored_token}" | tr -d '\r\n'
       return 0
     fi
   fi
@@ -705,17 +706,18 @@ resolve_token() {
       GH_TOKEN="$(gh auth token 2>/dev/null)"
       if [[ -n "${GH_TOKEN}" ]]; then
         echo "  Auth: using gh CLI token" >&2
-        echo "${GH_TOKEN}"
+        printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
         return 0
       fi
     elif has_interactive_tty; then
       warn "GitHub CLI (gh) is installed but not authenticated."
       info "Opening OAuth login in browser..."
-      if gh auth login --hostname github.com --git-protocol https --web; then
+      if gh auth login --hostname github.com --web; then
+        gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
         GH_TOKEN="$(gh auth token 2>/dev/null)"
         if [[ -n "${GH_TOKEN}" ]]; then
           echo "  Auth: using gh CLI token" >&2
-          echo "${GH_TOKEN}"
+          printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
           return 0
         fi
       else
@@ -735,17 +737,28 @@ resolve_token() {
 # ─── Verify repo access ───────────────────────────────────────────────────────
 verify_access() {
   local token="$1"
+  token="$(printf '%s' "$token" | tr -d '\r\n')"
   local status_code
-  status_code="$(curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: token ${token}" \
+  status_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+    --connect-timeout 10 \
+    --max-time 30 \
+    -H "Authorization: Bearer ${token}" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
+
+  if [[ "${status_code}" == "000" && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
+    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+      status_code="200"
+    fi
+  fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
     warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
     warn "If you haven't purchased OCS yet, contact support at: ${WHATSAPP_ORDER_URL}"
     open_purchase_page
     return 1
+  elif [[ "${status_code}" == "000" ]]; then
+    error "Cannot reach GitHub API from this environment (HTTP 000). Check network/proxy/firewall, then rerun installer."
   elif [[ "${status_code}" != "200" ]]; then
     error "Unexpected response from GitHub API (HTTP ${status_code})."
   fi
