@@ -582,10 +582,10 @@ ensure_ocs_command() {
 }
 
 ensure_shell_path_priority() {
-  local export_line='export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
+  local export_line='export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
   local profile
 
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  export PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
   hash -r 2>/dev/null || true
 
   for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.zshrc" "${HOME}/.zprofile"; do
@@ -596,7 +596,7 @@ ensure_shell_path_priority() {
   done
 
   local fish_cfg="${HOME}/.config/fish/config.fish"
-  local fish_line='fish_add_path -m $HOME/.local/bin $HOME/.bun/bin'
+  local fish_line='fish_add_path -m $HOME/.opencode/bin $HOME/.local/bin $HOME/.bun/bin'
   mkdir -p "$(dirname "$fish_cfg")"
   [[ -f "$fish_cfg" ]] || touch "$fish_cfg"
   if ! grep -Fq "$fish_line" "$fish_cfg"; then
