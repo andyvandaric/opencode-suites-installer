@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.15 - 2026-03-07
+
+- Restored high-conversion installer copywriting and CTA blocks while keeping GPT-5.4 profile announcements in README.
+- Added highlights for two flagship setup profiles: `codex-5.4-best-perform` and `codex-5.4-token-saver` under Quick Install docs.
+- Synced installer messaging with suite release v2.0.15 so buyer/dev/public channels show aligned profile guidance.
+
 ## 2.0.14 - 2026-03-07
 
 - Enforced cross-OS PATH persistence for `opencode` (`~/.opencode/bin`, `~/.local/bin`, `~/.bun/bin` and Windows user-path equivalents).
