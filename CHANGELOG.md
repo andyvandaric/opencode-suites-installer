@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 - 2026-03-08
+
+- Synced installer README version-pin examples from `2.1.0` to `2.1.1` for Bash and PowerShell flows.
+- Promoted installer release line to `2.1.1` so the public installer channel matches the OAuth hotfix release from the main suite.
+- Kept prior `2.1.0` release available as the previous semver-correction milestone.
+
 ## 2.1.0 - 2026-03-07
 
 - Corrected installer semver to `2.1.0` so the public installer channel matches the suite's semver-correct minor release.

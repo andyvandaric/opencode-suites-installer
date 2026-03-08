@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.1.0
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.1.1
 ```
 
 ### Windows (PowerShell)
@@ -25,7 +25,7 @@ irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/mai
 Install specific version:
 
 ```powershell
-$env:OCS_VERSION = "2.1.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex
+$env:OCS_VERSION = "2.1.1"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex
 ```
 
 ## What's New in GPT-5.4 Setup Profiles
@@ -70,7 +70,7 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.0 Beta - Yang Sudah Solid
+## OCS v2.1.1 Beta - Yang Sudah Solid
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
