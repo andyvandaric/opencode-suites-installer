@@ -16,6 +16,8 @@ $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
 $GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
 $DEFAULT_RELEASE_BRANCH = "beta"
+$INSTALLER_DEFAULT_PROFILE = "codex-5.3-hybrid"
+$INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
@@ -1032,7 +1034,7 @@ function Apply-InstallerDefaults {
         if (Test-Path $runtimePath) {
             $runtime = Get-Content -Raw -Path $runtimePath | ConvertFrom-Json
             if ($runtime.resourceModes) {
-                $runtime.resourceModes.default = "performance"
+                $runtime.resourceModes.default = $INSTALLER_DEFAULT_MODE
                 foreach ($option in $runtime.resourceModes.options) {
                     if ($option.id -eq "balanced") {
                         $option.label = "Balanced"
@@ -1048,7 +1050,7 @@ function Apply-InstallerDefaults {
         if (Test-Path $fallbacksPath) {
             $fallbacks = Get-Content -Raw -Path $fallbacksPath | ConvertFrom-Json
             if ($fallbacks.setupRuntime -and $fallbacks.setupRuntime.resourceModes) {
-                $fallbacks.setupRuntime.resourceModes.default = "performance"
+                $fallbacks.setupRuntime.resourceModes.default = $INSTALLER_DEFAULT_MODE
                 foreach ($option in $fallbacks.setupRuntime.resourceModes.options) {
                     if ($option.id -eq "balanced") {
                         $option.label = "Balanced"
@@ -1064,13 +1066,13 @@ function Apply-InstallerDefaults {
         if (Test-Path $catalogPath) {
             $catalog = Get-Content -Raw -Path $catalogPath | ConvertFrom-Json
             if ($catalog.profileDisplayOrder) {
-                $profiles = @($catalog.profileDisplayOrder | Where-Object { $_ -ne "codex-5.3-hybrid" })
-                $catalog.profileDisplayOrder = @("codex-5.3-hybrid") + $profiles
+                $profiles = @($catalog.profileDisplayOrder | Where-Object { $_ -ne $INSTALLER_DEFAULT_PROFILE })
+                $catalog.profileDisplayOrder = @($INSTALLER_DEFAULT_PROFILE) + $profiles
             }
             ($catalog | ConvertTo-Json -Depth 50) | Set-Content -Path $catalogPath -Encoding UTF8
         }
 
-        Write-Output "Applied installer defaults: codex-5.3-hybrid + performance mode."
+        Write-Output "Applied installer defaults: $INSTALLER_DEFAULT_PROFILE + $INSTALLER_DEFAULT_MODE mode."
     } catch {
         Write-Warning "Could not apply installer defaults: $($_.Exception.Message)"
     }
@@ -1255,7 +1257,7 @@ function Invoke-AutoSetup {
     $headlessExitCode = 1
 
     try {
-        & bun $setupScript --headless --profile codex-5.3-all --mode balanced
+        & bun $setupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
         $headlessExitCode = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } else { 0 }
         if ($headlessExitCode -ne 0) {
             $headlessSucceeded = $false
