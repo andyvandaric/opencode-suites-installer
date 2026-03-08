@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.3 - 2026-03-08
+
+- Synced installer release notes, headings, and version-pin examples to `2.1.3` so the public installer lane stays aligned with source and buyer beta release metadata.
+- Documented the setup fallback fix that avoids raw `file:///.../dist/index.js` plugin specs, restoring Antigravity OAuth visibility on Linux, macOS, and WSL installs.
+
 ## 2.1.2 - 2026-03-08
 
 - Synced installer release notes and version-pin examples to `2.1.2` so the public installer lane matches the source dev repo and latest buyer beta bundle asset again.

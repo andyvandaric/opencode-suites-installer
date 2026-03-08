@@ -8,6 +8,7 @@ This repo is the public installer entrypoint. Keep installer behavior stable acr
 - Default source branch is `beta`.
 - If a pinned version is missing on the active branch, probe `beta` before failing.
 - Keep shell and PowerShell behavior aligned for branch and version resolution.
+- Installer default banner values and actual headless auto-setup args must stay aligned (profile and resource mode).
 - Public installer release/version examples must never advance past the latest published buyer beta bundle asset version.
 - Source dev version, buyer beta asset version, and public installer version examples must move together in the same release wave.
 
@@ -16,7 +17,7 @@ This repo is the public installer entrypoint. Keep installer behavior stable acr
 
 ## Smoke Test Baseline
 
-- Run WSL smoke test with `--branch main --version 2.1.2`.
+- Run WSL smoke test with `--branch main --version 2.1.3`.
 - Expected result: installer falls back to `beta` and completes.
 
 ## Troubleshooting Fast Path
