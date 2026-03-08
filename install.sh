@@ -18,11 +18,13 @@ fi
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
+DEFAULT_RELEASE_BRANCH="beta"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 REQUESTED_VERSION="${OCS_VERSION:-}"
+RESOLVED_SOURCE_BRANCH="${GITHUB_SOURCE_BRANCH}"
 
 # ─── Cleanup on exit ─────────────────────────────────────────────────────────
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -917,41 +919,81 @@ verify_access() {
 download_plugin_bundle() {
   local token="$1"
   local output="$2"
-  local assets_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}"
   token="$(printf '%s' "$token" | tr -d '\r\n')"
 
-  local assets_json
-  if command -v gh >/dev/null 2>&1; then
-    assets_json="$(gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
-    if [[ -z "$assets_json" && -n "$token" ]]; then
-      assets_json="$(GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${GITHUB_SOURCE_BRANCH}" 2>/dev/null || true)"
-    fi
-  fi
+  fetch_assets_json_for_branch() {
+    local token="$1"
+    local branch="$2"
+    local assets_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${branch}"
+    local branch_assets_json=""
 
-  if [[ -z "$assets_json" ]]; then
-    assets_json="$(curl -fsSL \
-      -H "Authorization: token ${token}" \
-      -H "Accept: application/vnd.github+json" \
-      "${assets_api}")"
-  fi
+    if command -v gh >/dev/null 2>&1; then
+      branch_assets_json="$(gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${branch}" 2>/dev/null || true)"
+      if [[ -z "$branch_assets_json" && -n "$token" ]]; then
+        branch_assets_json="$(GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/contents/assets?ref=${branch}" 2>/dev/null || true)"
+      fi
+    fi
+
+    if [[ -z "$branch_assets_json" ]]; then
+      branch_assets_json="$(curl -fsSL \
+        -H "Authorization: token ${token}" \
+        -H "Accept: application/vnd.github+json" \
+        "${assets_api}" 2>/dev/null || true)"
+    fi
+
+    printf '%s' "$branch_assets_json"
+  }
+
+  assets_json_has_bundle() {
+    local assets_json="$1"
+    local bundle_name="$2"
+    printf '%s' "$assets_json" | grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${bundle_name}\""
+  }
+
+  local resolved_branch="${GITHUB_SOURCE_BRANCH}"
+  local assets_json
+  assets_json="$(fetch_assets_json_for_branch "$token" "$resolved_branch")"
+
+  [[ -n "$assets_json" ]] || error "Unable to read assets/ listing for ${GITHUB_SOURCE_REPO}@${resolved_branch}"
 
   local bundle_name
   if [[ -n "${REQUESTED_VERSION}" ]]; then
     bundle_name="opencode-config-suites-v${REQUESTED_VERSION}.tar.gz"
-    if ! printf '%s' "${assets_json}" | grep -Fq "\"name\": \"${bundle_name}\""; then
-      error "Requested version ${REQUESTED_VERSION} not found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
+    info "Requested bundle asset: ${bundle_name}"
+    info "Checking branch ${resolved_branch} for requested version..."
+    if ! assets_json_has_bundle "$assets_json" "$bundle_name"; then
+      info "Requested version v${REQUESTED_VERSION} not found on branch ${resolved_branch}."
+      info "Checking fallback branch ${DEFAULT_RELEASE_BRANCH}..."
+      local fallback_assets_json
+      if [[ "$resolved_branch" == "$DEFAULT_RELEASE_BRANCH" ]]; then
+        fallback_assets_json="$assets_json"
+      else
+        fallback_assets_json="$(fetch_assets_json_for_branch "$token" "$DEFAULT_RELEASE_BRANCH")"
+      fi
+
+      if [[ -n "$fallback_assets_json" ]] && assets_json_has_bundle "$fallback_assets_json" "$bundle_name"; then
+        warn "Requested version ${REQUESTED_VERSION} not found in assets/ for ${GITHUB_SOURCE_REPO}@${resolved_branch}. Falling back to ${DEFAULT_RELEASE_BRANCH}."
+        assets_json="$fallback_assets_json"
+        resolved_branch="$DEFAULT_RELEASE_BRANCH"
+      else
+        error "Requested version ${REQUESTED_VERSION} not found in assets/ for ${GITHUB_SOURCE_REPO}@${resolved_branch}. Checked branches ${resolved_branch} and ${DEFAULT_RELEASE_BRANCH}, and the asset is missing on both."
+      fi
     fi
   else
-    bundle_name="$(printf '%s' "${assets_json}" | grep -o '"name": *"opencode-config-suites-v[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
+    bundle_name="$(printf '%s' "$assets_json" | grep -oE '"name"[[:space:]]*:[[:space:]]*"opencode-config-suites-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz"' | cut -d '"' -f4 | sort -V | tail -1)"
   fi
-  [[ -n "${bundle_name}" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}"
+  [[ -n "$bundle_name" ]] || error "No plugin bundle found in assets/ for ${GITHUB_SOURCE_REPO}@${resolved_branch}"
 
-  local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}"
+  RESOLVED_SOURCE_BRANCH="$resolved_branch"
+  info "Resolved bundle source branch: ${RESOLVED_SOURCE_BRANCH}"
+  info "Resolved bundle asset: ${bundle_name}"
+
+  local file_api="https://api.github.com/repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${RESOLVED_SOURCE_BRANCH}"
   if command -v gh >/dev/null 2>&1; then
-    if gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
+    if gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${RESOLVED_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
       return 0
     fi
-    if [[ -n "$token" ]] && GH_TOKEN="$token" gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${GITHUB_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
+    if [[ -n "$token" ]] && GH_TOKEN="$token" gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_SOURCE_REPO}/contents/assets/${bundle_name}?ref=${RESOLVED_SOURCE_BRANCH}" >"${output}" 2>/dev/null; then
       return 0
     fi
   fi
@@ -962,7 +1004,6 @@ download_plugin_bundle() {
     -L "${file_api}" \
     -o "${output}"
 }
-
 # ─── Verify SHA256 ────────────────────────────────────────────────────────────
 verify_sha256() {
   local sums_file="$1"
@@ -1033,6 +1074,10 @@ main() {
     error "Bun >= 1.0.0 required (found ${bun_version}). Install at https://bun.sh"
   fi
   info "Bun ${bun_version} detected"
+  info "Installer source branch: ${GITHUB_SOURCE_BRANCH}"
+  if [[ -n "${REQUESTED_VERSION}" ]]; then
+    info "Requested version pin: v${REQUESTED_VERSION}"
+  fi
   local root_dir="${PWD}"
   local force_local_source="${OCS_FORCE_LOCAL_SOURCE:-0}"
   local local_bundle_path="${OCS_LOCAL_BUNDLE_PATH:-}"
@@ -1116,7 +1161,7 @@ main() {
   install_dependencies_with_retry "${PLUGIN_DIR}" || error "Dependency installation failed after retries."
 
   echo ""
-  success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR}"
+  success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR} from ${RESOLVED_SOURCE_BRANCH}"
   echo ""
   info "Running setup script..."
   local setup_script
@@ -1142,7 +1187,7 @@ main() {
   fi
 
   echo ""
-  success "opencode-multi-auth ${version} (${GITHUB_SOURCE_BRANCH}) installed and configured!"
+  success "opencode-multi-auth ${version} (${RESOLVED_SOURCE_BRANCH}) installed and configured!"
   echo ""
   if [[ "${OCS_ENABLE_OCS_AUTO_INSTALL:-1}" == "1" ]]; then
     if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then

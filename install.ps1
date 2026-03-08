@@ -15,10 +15,12 @@ $ErrorActionPreference = "Stop"
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
 $GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
+$DEFAULT_RELEASE_BRANCH = "beta"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $script:ResolvedReleaseToken = ""
+$script:ResolvedSourceBranch = $GITHUB_SOURCE_BRANCH
 $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
@@ -488,42 +490,72 @@ function Get-PluginBundleFromAssets {
         Accept        = "application/vnd.github+json"
     }
 
-    $assetsUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets?ref=$GITHUB_SOURCE_BRANCH"
-    $assets = Invoke-RestMethod -Uri $assetsUri -Headers $headers -ErrorAction Stop
-    $bundle = $assets |
-        Where-Object { $_.name -match '^opencode-config-suites-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
-        ForEach-Object {
-            [PSCustomObject]@{
-                Asset   = $_
-                Version = [version]$Matches.version
-            }
-        } |
-        Sort-Object Version -Descending
+    function Get-BranchAssets([string]$Branch) {
+        $assetsUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets?ref=$Branch"
+        return Invoke-RestMethod -Uri $assetsUri -Headers $headers -ErrorAction Stop
+    }
+
+    function Resolve-BundleFromAssets($Assets) {
+        $Assets |
+            Where-Object { $_.name -match '^opencode-config-suites-v(?<version>\d+\.\d+\.\d+)\.tar\.gz$' } |
+            ForEach-Object {
+                [PSCustomObject]@{
+                    Asset   = $_
+                    Version = [version]$Matches.version
+                }
+            } |
+            Sort-Object Version -Descending
+    }
+
+    $resolvedBranch = $GITHUB_SOURCE_BRANCH
+    $assets = Get-BranchAssets $resolvedBranch
+    $bundle = Resolve-BundleFromAssets $assets
 
     if ($REQUESTED_VERSION) {
-        $bundle = $bundle | Where-Object { $_.Version -eq ([version]$REQUESTED_VERSION) } | Select-Object -First 1
-        if (-not $bundle) {
-            throw "Requested version $REQUESTED_VERSION not found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+        $bundleName = "opencode-config-suites-v$REQUESTED_VERSION.tar.gz"
+        Write-Output "Requested bundle asset: $bundleName"
+        Write-Output "Checking branch $resolvedBranch for requested version..."
+        $selectedBundle = $bundle | Where-Object { $_.Asset.name -eq $bundleName } | Select-Object -First 1
+        if (-not $selectedBundle) {
+            Write-Output "Requested version v$REQUESTED_VERSION not found on branch $resolvedBranch."
+            Write-Output "Checking fallback branch $DEFAULT_RELEASE_BRANCH..."
+            if ($resolvedBranch -eq $DEFAULT_RELEASE_BRANCH) {
+                $fallbackAssets = $assets
+            } else {
+                $fallbackAssets = Get-BranchAssets $DEFAULT_RELEASE_BRANCH
+            }
+
+            $fallbackBundle = (Resolve-BundleFromAssets $fallbackAssets | Where-Object { $_.Asset.name -eq $bundleName } | Select-Object -First 1)
+            if ($fallbackBundle) {
+                Write-Warning "Requested version $REQUESTED_VERSION not found in assets/ for $GITHUB_SOURCE_REPO@$resolvedBranch. Falling back to $DEFAULT_RELEASE_BRANCH."
+                $selectedBundle = $fallbackBundle
+                $resolvedBranch = $DEFAULT_RELEASE_BRANCH
+            } else {
+                throw "Requested version $REQUESTED_VERSION not found in assets/ for $GITHUB_SOURCE_REPO@$resolvedBranch. Checked branches $resolvedBranch and $DEFAULT_RELEASE_BRANCH, and the asset is missing on both."
+            }
         }
+        $bundle = $selectedBundle
     } else {
         $bundle = $bundle | Select-Object -First 1
     }
 
     if (-not $bundle) {
-        throw "No plugin bundle found in assets/ for $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+        throw "No plugin bundle found in assets/ for $GITHUB_SOURCE_REPO@$resolvedBranch"
     }
 
     $bundleName = $bundle.Asset.name
+    $script:ResolvedSourceBranch = $resolvedBranch
+    Write-Output "Resolved bundle source branch: $($script:ResolvedSourceBranch)"
+    Write-Output "Resolved bundle asset: $bundleName"
 
     $downloadHeaders = @{
         Authorization = "token $Token"
         Accept        = "application/vnd.github.raw"
     }
-    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/${bundleName}?ref=$GITHUB_SOURCE_BRANCH"
+    $downloadUri = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/${bundleName}?ref=$($script:ResolvedSourceBranch)"
     Invoke-WebRequest -Uri $downloadUri -Headers $downloadHeaders -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
     return $bundleName
 }
-
 function Get-Asset {
     param(
         [string]$Token,
@@ -1271,6 +1303,10 @@ if ($relaunchHandled) {
 }
 Ensure-Bun
 Ensure-WindowsShellEnv
+Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
+if ($REQUESTED_VERSION) {
+    Write-Output "Requested version pin: v$REQUESTED_VERSION"
+}
 
 $rootDir = (Resolve-Path ".").Path
 $forceLocalSource = (($env:OCS_FORCE_LOCAL_SOURCE ?? "0") -eq "1")
@@ -1410,9 +1446,9 @@ if ($isLocalSource) {
 
     try {
         $sourcePkg = Get-Content (Join-Path $pluginSource "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($sourcePkg.version) { $version = "$($sourcePkg.version)-$GITHUB_SOURCE_BRANCH" }
+        if ($sourcePkg.version) { $version = "$($sourcePkg.version)-$($script:ResolvedSourceBranch)" }
     } catch {
-        $version = "$GITHUB_SOURCE_BRANCH"
+        $version = "$($script:ResolvedSourceBranch)"
     }
 
     Copy-Item -Path "$pluginSource\*" -Destination $PLUGIN_DIR -Recurse -Force
@@ -1438,6 +1474,7 @@ if (Test-Path $TMP_DIR) {
 
 Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
+Write-Output "Bundle source branch used: $($script:ResolvedSourceBranch)"
 Write-Output ""
 Write-Output "Checking global ocs command..."
 if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalSource:$isLocalSource)) {
