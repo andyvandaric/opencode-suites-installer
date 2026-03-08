@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0 - 2026-03-07
+
+- Corrected installer semver to `2.1.0` so the public installer channel matches the suite's semver-correct minor release.
+- Synced installer README version-pin examples from `2.0.15` to `2.1.0` for Bash and PowerShell flows.
+- Kept `2.0.15` available as the earlier beta release while promoting `2.1.0` as the current installer release line.
+
 ## 2.0.15 - 2026-03-07
 
 - Restored high-conversion installer copywriting and CTA blocks while keeping GPT-5.4 profile announcements in README.
