@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 - 2026-03-08
+
+- Synced installer release notes and version-pin examples to `2.1.2` so the public installer lane matches the source dev repo and latest buyer beta bundle asset again.
+- Captured the Linux/WSL fallback and command-bootstrap hardening in the installer changelog template so public release notes still describe the active install behavior.
+- Added version-sync guardrails so source, buyer beta, and public installer release examples must move together in future releases.
+
 ## 2.1.1 - 2026-03-08
 
 - Synced installer README version-pin examples from `2.1.0` to `2.1.1` for Bash and PowerShell flows.
