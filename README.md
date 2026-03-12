@@ -91,6 +91,54 @@ Notes:
   ocs doctor
   ```
 
+### macOS: `opencode auth login` fallback ke API key
+
+Kalau di macOS login malah minta API key (padahal harusnya keluar OAuth Antigravity), jalankan langkah ini dari Terminal biasa:
+
+1) Pastikan binary yang kepanggil urutannya benar:
+
+```bash
+which -a opencode
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode --version
+```
+
+2) Pastikan plugin OAuth Antigravity terpasang:
+
+```bash
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+grep -n "opencode-multi-auth" ~/.config/opencode/opencode.json
+```
+
+Jika file `dist/src/plugin.js` belum ada (kasus "No such file or directory"), jalankan repair cepat ini:
+
+```bash
+cd ~/.config/opencode/plugins/opencode-multi-auth || exit 1
+bun install --frozen-lockfile || bun install
+OCS_SETUP_INSTALLER_MODE=1 bun scripts/setup.js --headless --profile codex-5.3-token-saver --mode low
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+```
+
+Kalau folder plugin belum ada sama sekali, rerun installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4
+```
+
+3) Paksa login via provider Antigravity dengan PATH prioritas:
+
+```bash
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
+```
+
+4) Kalau masih fallback ke API key, jalankan debug:
+
+```bash
+OPENCODE_LOG_LEVEL=debug PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
+```
+
+Catatan: jalankan perintah di shell Terminal normal (bukan embedded TUI) supaya picker OAuth tidak bentrok.
+
 ### Windows: PowerShell 7 requirement
 
 - Verify PowerShell 7:
