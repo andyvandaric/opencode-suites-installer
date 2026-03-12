@@ -11,7 +11,7 @@ Use this branch for cross-platform validation before main release.
 This branch currently includes installer hardening for WSL/macOS/Windows edge cases:
 
 - automatic dependency install/retry when runtime prerequisites are missing
-- clearer progress output for long-running install/build steps
+- clearer staged runtime messages, retries, and health checks for long-running install/build steps
 - stronger `opencode auth login` stability via plugin integrity checks + rebuild fallback
 - safer command resolution for `ocs` and `opencode` without semantic alias regressions
 - helper scripts for environment reset (`uninstall.sh`) and state safety (`backup.sh` / `restore.sh`)
@@ -129,8 +129,7 @@ Notes:
 Kalau mau reset total environment sebelum retest, jalankan script `uninstall.sh` dari root repo:
 
 ```bash
-chmod +x ./uninstall.sh
-./uninstall.sh --yes
+bash ./uninstall.sh --yes
 ```
 
 Catatan penting:
@@ -144,14 +143,14 @@ Catatan penting:
 Kalau mau simpan lalu pulihkan state sebelum/selesai retest:
 
 ```bash
-./backup.sh --yes
-./restore.sh --yes
+bash ./backup.sh --yes
+bash ./restore.sh --yes
 ```
 
 Opsional aman:
-- Preview backup tanpa menulis apa pun: `./backup.sh --dry-run`
-- Preview restore tanpa ekstrak: `./restore.sh --dry-run`
-- Pilih archive tertentu saat restore: `./restore.sh --archive /path/file.tar.gz --yes`
+- Preview backup tanpa menulis apa pun: `bash ./backup.sh --dry-run`
+- Preview restore tanpa ekstrak: `bash ./restore.sh --dry-run`
+- Pilih archive tertentu saat restore: `bash ./restore.sh --archive /path/file.tar.gz --yes`
 
 ### macOS: `opencode auth login` fallback ke API key
 
