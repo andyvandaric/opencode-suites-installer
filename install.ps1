@@ -1595,6 +1595,12 @@ function Assert-AntigravityOauthIntegrity {
     $runtimeOpencode = Join-Path $configDir "opencode.json"
     $runtimeAntigravity = Join-Path $configDir "antigravity.json"
     $templateAntigravity = Join-Path $PLUGIN_DIR "backups\antigravity.json.template"
+    $pluginManifest = Join-Path $PLUGIN_DIR "package.json"
+    $pluginSetupScript = Join-Path $PLUGIN_DIR "scripts\setup.js"
+    $pluginDistDir = Join-Path $PLUGIN_DIR "dist"
+    $pluginEntryPrimary = Join-Path $PLUGIN_DIR "dist\src\plugin.js"
+    $pluginEntryFallback = Join-Path $PLUGIN_DIR "dist\index.js"
+    $runtimeReferencesPlugin = $false
     $needsRepair = $false
 
     if (-not (Test-Path $configDir)) {
@@ -1611,14 +1617,32 @@ function Assert-AntigravityOauthIntegrity {
         if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
             $needsRepair = $true
         }
+
+        if ($runtimeContent -match 'opencode-multi-auth') {
+            $runtimeReferencesPlugin = $true
+            if ((-not (Test-Path $pluginManifest)) -or (-not (Test-Path $pluginSetupScript)) -or (-not (Test-Path $pluginDistDir)) -or ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback)))) {
+                $needsRepair = $true
+            }
+        }
     }
 
     if ($needsRepair) {
         Write-Output "Repairing final Antigravity OAuth visibility before installer exit..."
+        if (Test-Path $pluginManifest) {
+            Write-Output "Rebuilding plugin artifacts to restore OAuth methods..."
+            try {
+                Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 3
+            } catch {
+                # best effort rebuild
+            }
+        }
+
         $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
         $env:OCS_SETUP_INSTALLER_MODE = "1"
         try {
-            & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
+            if (Test-Path $pluginSetupScript) {
+                & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
+            }
         } catch {
             # best effort repair
         } finally {
@@ -1642,6 +1666,21 @@ function Assert-AntigravityOauthIntegrity {
         $runtimeContent = Get-Content -Raw -Path $runtimeOpencode -Encoding UTF8
         if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
             throw "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
+        }
+    }
+
+    if ($runtimeReferencesPlugin) {
+        if (-not (Test-Path $pluginManifest)) {
+            throw "Final Antigravity OAuth integrity check failed: plugin package is missing at $pluginManifest."
+        }
+        if (-not (Test-Path $pluginSetupScript)) {
+            throw "Final Antigravity OAuth integrity check failed: plugin setup script is missing at $pluginSetupScript."
+        }
+        if (-not (Test-Path $pluginDistDir)) {
+            throw "Final Antigravity OAuth integrity check failed: plugin build directory is missing at $pluginDistDir."
+        }
+        if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
+            throw "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under $pluginDistDir."
         }
     }
 

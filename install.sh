@@ -366,6 +366,12 @@ ensure_antigravity_oauth_integrity() {
   local runtime_opencode="${config_dir}/opencode.json"
   local runtime_antigravity="${config_dir}/antigravity.json"
   local template_antigravity="${PLUGIN_DIR}/backups/antigravity.json.template"
+  local plugin_manifest="${PLUGIN_DIR}/package.json"
+  local plugin_setup_script="${PLUGIN_DIR}/scripts/setup.js"
+  local plugin_dist_dir="${PLUGIN_DIR}/dist"
+  local plugin_entry_primary="${PLUGIN_DIR}/dist/src/plugin.js"
+  local plugin_entry_fallback="${PLUGIN_DIR}/dist/index.js"
+  local runtime_references_plugin=0
   local needs_repair=0
 
   mkdir -p "${config_dir}" 2>/dev/null || true
@@ -375,15 +381,35 @@ ensure_antigravity_oauth_integrity() {
     needs_repair=1
   fi
 
-  if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
-    needs_repair=1
+  if [[ -f "${runtime_opencode}" ]]; then
+    if grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
+      needs_repair=1
+    fi
+
+    if grep -Fq "opencode-multi-auth" "${runtime_opencode}"; then
+      runtime_references_plugin=1
+      if [[ ! -f "${plugin_manifest}" || ! -f "${plugin_setup_script}" || ! -d "${plugin_dist_dir}" || ( ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ) ]]; then
+        needs_repair=1
+      fi
+    fi
   fi
 
   if (( needs_repair )); then
     info "Repairing final Antigravity OAuth visibility before installer exit..."
-    export OCS_SETUP_INSTALLER_MODE=1
-    bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
-    unset OCS_SETUP_INSTALLER_MODE
+    if [[ -f "${plugin_manifest}" ]]; then
+      info "Rebuilding plugin artifacts to restore OAuth methods..."
+      (
+        cd "${PLUGIN_DIR}" || exit 1
+        install_dependencies_with_retry "${PLUGIN_DIR}"
+      ) >/dev/null 2>&1 || true
+    fi
+
+    if [[ -f "${plugin_setup_script}" ]]; then
+      export OCS_SETUP_INSTALLER_MODE=1
+      bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
+      unset OCS_SETUP_INSTALLER_MODE
+    fi
+
     if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
       cp "${template_antigravity}" "${runtime_antigravity}"
     fi
@@ -393,6 +419,15 @@ ensure_antigravity_oauth_integrity() {
 
   if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
     error "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
+  fi
+
+  if (( runtime_references_plugin )); then
+    [[ -f "${plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: plugin package is missing at ${plugin_manifest}."
+    [[ -f "${plugin_setup_script}" ]] || error "Final Antigravity OAuth integrity check failed: plugin setup script is missing at ${plugin_setup_script}."
+    [[ -d "${plugin_dist_dir}" ]] || error "Final Antigravity OAuth integrity check failed: plugin build directory is missing at ${plugin_dist_dir}."
+    if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
+      error "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under ${plugin_dist_dir}."
+    fi
   fi
 
   success "Antigravity OAuth integrity check passed."
