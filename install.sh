@@ -401,6 +401,9 @@ ensure_antigravity_oauth_integrity() {
       (
         cd "${PLUGIN_DIR}" || exit 1
         install_dependencies_with_retry "${PLUGIN_DIR}"
+        if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
+          bun run build >/dev/null 2>&1 || npm run build >/dev/null 2>&1 || true
+        fi
       ) >/dev/null 2>&1 || true
     fi
 
@@ -1416,7 +1419,7 @@ ensure_antigravity_oauth_integrity "${setup_script}"
   echo "   Next steps:"
   echo "   1. Configure profile: ocs setup:profile"
   echo "   2. Configure preferences: ocs prefs"
-  echo "   3. Add account (browser OAuth; first run can take 30-60s): opencode auth login --provider antigravity"
+  echo "   3. Verify runtime: opencode auth login"
   echo "   4. Start coding!"
   echo ""
 }

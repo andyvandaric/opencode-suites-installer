@@ -1632,6 +1632,17 @@ function Assert-AntigravityOauthIntegrity {
             Write-Output "Rebuilding plugin artifacts to restore OAuth methods..."
             try {
                 Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 3
+                if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
+                    Push-Location $PLUGIN_DIR
+                    try {
+                        & bun run build *> $null
+                        if ($LASTEXITCODE -ne 0) {
+                            & npm run build *> $null
+                        }
+                    } finally {
+                        Pop-Location
+                    }
+                }
             } catch {
                 # best effort rebuild
             }
@@ -1896,7 +1907,7 @@ Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
 Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
-Write-Output "   3. Add account (browser OAuth; first run can take 30-60s): opencode auth login --provider antigravity"
+Write-Output "   3. Add account via: opencode auth login"
 Write-Output "   4. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
