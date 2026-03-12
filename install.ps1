@@ -313,6 +313,183 @@ function Ensure-WindowsShellEnv {
     }
 }
 
+function Should-RenderInstallerProgress {
+    if ($env:CI -eq "1" -or $env:CI -eq "true") {
+        return $false
+    }
+
+    return [bool]([Environment]::UserInteractive)
+}
+
+function Invoke-ExternalWithProgress {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Activity,
+        [Parameter(Mandatory = $true)]
+        [string]$Executable,
+        [string[]]$Arguments = @(),
+        [string]$WorkingDirectory = "",
+        [string]$LogPath = ""
+    )
+
+    if (-not $LogPath) {
+        $safeName = ($Activity -replace "[^a-zA-Z0-9]+", "-").Trim("-").ToLowerInvariant()
+        if (-not $safeName) {
+            $safeName = "installer-step"
+        }
+
+        if ($TMP_DIR -and -not (Test-Path $TMP_DIR)) {
+            New-Item -ItemType Directory -Force -Path $TMP_DIR | Out-Null
+        }
+
+        $LogPath = Join-Path $TMP_DIR ("$safeName.log")
+    }
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    if (Test-Path $LogPath) {
+        Remove-Item -Path $LogPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $runSync = {
+        param(
+            [string]$SyncActivity,
+            [string]$SyncExecutable,
+            [string[]]$SyncArguments,
+            [string]$SyncWorkingDirectory,
+            [string]$SyncLogPath
+        )
+
+        $exitCode = 0
+        Write-Host "[...] $SyncActivity"
+
+        try {
+            if ($SyncWorkingDirectory) {
+                Push-Location $SyncWorkingDirectory
+            }
+
+            & $SyncExecutable @SyncArguments *> $SyncLogPath
+            if ($LASTEXITCODE -is [int]) {
+                $exitCode = $LASTEXITCODE
+            }
+        } catch {
+            $exitCode = 1
+            "ERROR: $($_.Exception.Message)" | Out-File -FilePath $SyncLogPath -Encoding UTF8 -Append
+        } finally {
+            if ($SyncWorkingDirectory) {
+                Pop-Location
+            }
+        }
+
+        $ok = ($exitCode -eq 0)
+        if ($ok) {
+            Write-Host "[OK] $SyncActivity"
+        } else {
+            Write-Warning "$SyncActivity failed (exit $exitCode). Log: $SyncLogPath"
+        }
+
+        return [PSCustomObject]@{
+            Success  = $ok
+            ExitCode = $exitCode
+            LogPath  = $SyncLogPath
+        }
+    }
+
+    if (-not (Get-Command Start-Job -ErrorAction SilentlyContinue)) {
+        return & $runSync $Activity $Executable $Arguments $WorkingDirectory $LogPath
+    }
+
+    try {
+        $job = Start-Job -ScriptBlock {
+        param(
+            [string]$Exe,
+            [string[]]$ArgList,
+            [string]$WorkDir,
+            [string]$OutLog
+        )
+
+        $exitCode = 0
+        try {
+            if ($WorkDir) {
+                Set-Location -Path $WorkDir
+            }
+
+            & $Exe @ArgList *> $OutLog
+            if ($LASTEXITCODE -is [int]) {
+                $exitCode = $LASTEXITCODE
+            }
+        } catch {
+            $exitCode = 1
+            "ERROR: $($_.Exception.Message)" | Out-File -FilePath $OutLog -Encoding UTF8 -Append
+        }
+
+        [PSCustomObject]@{
+            ExitCode = $exitCode
+            LogPath  = $OutLog
+        }
+    } -ArgumentList $Executable, $Arguments, $WorkingDirectory, $LogPath
+    } catch {
+        Write-Warning "Could not start background job for '$Activity'. Falling back to synchronous execution."
+        return & $runSync $Activity $Executable $Arguments $WorkingDirectory $LogPath
+    }
+
+    $renderProgress = Should-RenderInstallerProgress
+    $spinnerFrames = @("|", "/", "-", "\\")
+    $frameIndex = 0
+    $startTime = Get-Date
+    $dotTicks = 0
+
+    while (($job.State -eq "Running") -or ($job.State -eq "NotStarted")) {
+        $elapsedSeconds = [Math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
+
+        if ($renderProgress) {
+            $status = "{0} {1}s" -f $spinnerFrames[$frameIndex], $elapsedSeconds
+            Write-Progress -Activity $Activity -Status $status
+            $frameIndex = ($frameIndex + 1) % $spinnerFrames.Count
+        } else {
+            if (($dotTicks % 20) -eq 0) {
+                Write-Host "[...] $Activity"
+            }
+            $dotTicks++
+        }
+
+        Start-Sleep -Milliseconds 200
+        $job = Get-Job -Id $job.Id
+    }
+
+    if ($renderProgress) {
+        Write-Progress -Activity $Activity -Completed
+    }
+
+    $result = Receive-Job -Job $job -ErrorAction SilentlyContinue | Select-Object -Last 1
+    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+
+    if (-not $result) {
+        Write-Warning "$Activity failed: no process result was returned."
+        return [PSCustomObject]@{
+            Success  = $false
+            ExitCode = 1
+            LogPath  = $LogPath
+        }
+    }
+
+    $success = ([int]$result.ExitCode -eq 0)
+    if ($success) {
+        Write-Host "[OK] $Activity"
+    } else {
+        Write-Warning "$Activity failed (exit $($result.ExitCode)). Log: $($result.LogPath)"
+    }
+
+    return [PSCustomObject]@{
+        Success  = $success
+        ExitCode = [int]$result.ExitCode
+        LogPath  = [string]$result.LogPath
+    }
+}
+
 function Ensure-GitHubCli {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         return $true
@@ -691,14 +868,16 @@ function Ensure-Bun {
         $bunInstallerPath = Join-Path $TMP_DIR "bun-install.ps1"
         Invoke-WebRequest -Uri "https://bun.sh/install.ps1" -UseBasicParsing -OutFile $bunInstallerPath -ErrorAction Stop
 
-        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-            & pwsh -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
-        } else {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
-        }
+        $runner = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
+        $bunInstallRun = Invoke-ExternalWithProgress `
+            -Activity "Installing Bun runtime" `
+            -Executable $runner `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bunInstallerPath) `
+            -WorkingDirectory $TMP_DIR `
+            -LogPath (Join-Path $TMP_DIR "bun-runtime-install.log")
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Bun installer exited with code $LASTEXITCODE"
+        if (-not $bunInstallRun.Success) {
+            throw "Bun installer exited with code $($bunInstallRun.ExitCode). See log: $($bunInstallRun.LogPath)"
         }
     } catch {
         Write-Error "Failed to auto-install Bun: $($_.Exception.Message)"
@@ -809,12 +988,18 @@ function Install-OcsFromPath {
         $lastOutput = ""
         try {
             Write-Output "Attempting ocs install from local path (attempt $attempt/$maxAttempts)..."
-            $bunOutput = & bun install -g $resolvedSource 2>&1
-            if ($bunOutput) {
-                $lastOutput = ($bunOutput | Out-String).Trim()
-            }
-            if ($LASTEXITCODE -eq 0) {
+            $bunInstall = Invoke-ExternalWithProgress `
+                -Activity "Installing ocs globally via bun (attempt $attempt/$maxAttempts)" `
+                -Executable "bun" `
+                -Arguments @("install", "-g", $resolvedSource) `
+                -WorkingDirectory $resolvedSource `
+                -LogPath (Join-Path $TMP_DIR ("ocs-bun-global-attempt-$attempt.log"))
+            if ($bunInstall.Success) {
                 return $true
+            }
+
+            if (Test-Path $bunInstall.LogPath) {
+                $lastOutput = (Get-Content -Raw -Path $bunInstall.LogPath -ErrorAction SilentlyContinue).Trim()
             }
         } catch {
             $lastOutput = $_.Exception.Message
@@ -836,8 +1021,13 @@ function Install-OcsFromPath {
     if (Get-Command npm -ErrorAction SilentlyContinue) {
         try {
             Write-Warning "bun global install failed, trying npm global install..."
-            & npm install -g $resolvedSource *> $null
-            if ($LASTEXITCODE -eq 0) {
+            $npmInstall = Invoke-ExternalWithProgress `
+                -Activity "Installing ocs globally via npm fallback" `
+                -Executable "npm" `
+                -Arguments @("install", "-g", $resolvedSource) `
+                -WorkingDirectory $resolvedSource `
+                -LogPath (Join-Path $TMP_DIR "ocs-npm-global-fallback.log")
+            if ($npmInstall.Success) {
                 return $true
             }
         } catch {
@@ -848,8 +1038,13 @@ function Install-OcsFromPath {
     if (Get-Command pnpm -ErrorAction SilentlyContinue) {
         try {
             Write-Warning "npm fallback unavailable/failed, trying pnpm global install..."
-            & pnpm add -g $resolvedSource *> $null
-            if ($LASTEXITCODE -eq 0) {
+            $pnpmInstall = Invoke-ExternalWithProgress `
+                -Activity "Installing ocs globally via pnpm fallback" `
+                -Executable "pnpm" `
+                -Arguments @("add", "-g", $resolvedSource) `
+                -WorkingDirectory $resolvedSource `
+                -LogPath (Join-Path $TMP_DIR "ocs-pnpm-global-fallback.log")
+            if ($pnpmInstall.Success) {
                 return $true
             }
         } catch {
@@ -985,8 +1180,12 @@ function Install-OpencodeBunGlobal {
 
     try {
         Write-Output "Installing opencode-ai via bun global package..."
-        & bun add -g opencode-ai@latest *> $null
-        if ($LASTEXITCODE -ne 0) {
+        $opencodeInstall = Invoke-ExternalWithProgress `
+            -Activity "Installing opencode-ai globally via bun" `
+            -Executable "bun" `
+            -Arguments @("add", "-g", "opencode-ai@latest") `
+            -LogPath (Join-Path $TMP_DIR "opencode-bun-global.log")
+        if (-not $opencodeInstall.Success) {
             return $false
         }
     } catch {
@@ -1017,6 +1216,10 @@ function Install-OcsFromPrivateRepo {
     }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         return $false
+    }
+
+    if (-not (Test-Path $TMP_DIR)) {
+        New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
     }
 
     $suitePath = Join-Path $TMP_DIR "opencode-config-suites"
@@ -1216,16 +1419,15 @@ function Invoke-BunInstallWithRetry {
 
     $resolvedDirectory = (Resolve-Path $Directory).Path
 
-    Push-Location $resolvedDirectory
-    try {
-        $finalMessage = "unknown error"
+    $finalMessage = "unknown error"
 
-        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            $lastOutput = ""
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $lastOutput = ""
 
             if ($attempt -eq 3) {
                 Write-Warning "Attempt $attempt/${MaxAttempts}: cleaning local node_modules before retry..."
-                Remove-Item -Path ".\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
+                $nodeModulesPath = Join-Path $resolvedDirectory "node_modules"
+                Remove-Item -Path $nodeModulesPath -Recurse -Force -ErrorAction SilentlyContinue
             }
 
             if ($attempt -eq 4) {
@@ -1243,17 +1445,23 @@ function Invoke-BunInstallWithRetry {
                 $env:BUN_CONFIG_REGISTRY = "https://registry.npmjs.org/"
             }
 
-            try {
-                $bunOutput = & bun @args 2>&1
-                if ($bunOutput) {
-                    $lastOutput = ($bunOutput | Out-String).Trim()
-                }
-                if ($LASTEXITCODE -eq 0) {
-                    return
-                }
-            } catch {
-                $lastOutput = $_.Exception.Message
+        try {
+            $bunInstall = Invoke-ExternalWithProgress `
+                -Activity "Installing plugin dependencies (attempt $attempt/$MaxAttempts)" `
+                -Executable "bun" `
+                -Arguments $args `
+                -WorkingDirectory $resolvedDirectory `
+                -LogPath (Join-Path $TMP_DIR ("bun-install-attempt-$attempt.log"))
+            if ($bunInstall.Success) {
+                return
             }
+
+            if (Test-Path $bunInstall.LogPath) {
+                $lastOutput = (Get-Content -Raw -Path $bunInstall.LogPath -ErrorAction SilentlyContinue).Trim()
+            }
+        } catch {
+            $lastOutput = $_.Exception.Message
+        }
 
             $message = ""
             if ($lastOutput) {
@@ -1271,49 +1479,46 @@ function Invoke-BunInstallWithRetry {
                 Write-Warning "bun install attempt $attempt/${MaxAttempts} failed with unknown error."
             }
 
-            if ($message) {
-                $finalMessage = $message
-            }
-
-            if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
-                Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
-                Ensure-WindowsShellEnv
-                Start-Sleep -Milliseconds (700 * $attempt)
-                continue
-            }
-
-            if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
-                Write-Warning "Detected likely file-lock issue. Applying lock handler..."
-                Stop-WindowsLockHolders -PathHint $resolvedDirectory
-                Start-Sleep -Milliseconds (700 * $attempt)
-                continue
-            }
-
-            if (($attempt -lt $MaxAttempts) -and (Test-TransientInstallError -Message $message)) {
-                Write-Warning "Detected likely network/registry issue. Retrying with stronger network settings..."
-                if ($attempt -ge 3) {
-                    Invoke-BunCachePurge
-                }
-                if (-not (Test-BunRegistryReachable)) {
-                    Write-Warning "Registry check failed for https://registry.npmjs.org/@types%2Fnode (network/proxy/DNS/TLS issue likely)."
-                }
-                Ensure-WindowsShellEnv
-                Start-Sleep -Milliseconds (1500 * $attempt)
-                continue
-            }
-
-            if ($attempt -lt $MaxAttempts) {
-                Start-Sleep -Milliseconds (700 * $attempt)
-                continue
-            }
-
-            break
+        if ($message) {
+            $finalMessage = $message
         }
 
-        throw "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
-    } finally {
-        Pop-Location
+        if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
+            Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
+            Ensure-WindowsShellEnv
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
+            Write-Warning "Detected likely file-lock issue. Applying lock handler..."
+            Stop-WindowsLockHolders -PathHint $resolvedDirectory
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        if (($attempt -lt $MaxAttempts) -and (Test-TransientInstallError -Message $message)) {
+            Write-Warning "Detected likely network/registry issue. Retrying with stronger network settings..."
+            if ($attempt -ge 3) {
+                Invoke-BunCachePurge
+            }
+            if (-not (Test-BunRegistryReachable)) {
+                Write-Warning "Registry check failed for https://registry.npmjs.org/@types%2Fnode (network/proxy/DNS/TLS issue likely)."
+            }
+            Ensure-WindowsShellEnv
+            Start-Sleep -Milliseconds (1500 * $attempt)
+            continue
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Milliseconds (700 * $attempt)
+            continue
+        }
+
+        break
     }
+
+    throw "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
 }
 
 function Invoke-AutoSetup {
@@ -1619,10 +1824,6 @@ Invoke-AutoSetup -IsLocalSource:$isLocalSource
 Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
 Ensure-OpencodePathEntries
 
-if (Test-Path $TMP_DIR) {
-    Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue
-}
-
 Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output "Bundle source branch used: $($script:ResolvedSourceBranch)"
@@ -1660,3 +1861,7 @@ Write-Output "   3. Add account via: opencode auth login"
 Write-Output "   4. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
+
+if (Test-Path $TMP_DIR) {
+    Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue
+}
