@@ -17,8 +17,8 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
-DEFAULT_RELEASE_BRANCH="beta"
+DEFAULT_RELEASE_BRANCH="feat/buyer-v2.1.4-setup-smoke"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-${DEFAULT_RELEASE_BRANCH}}"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
@@ -126,7 +126,7 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: beta)
+  --branch        Override source branch (default: feat/buyer-v2.1.4-setup-smoke)
   --help, -h      Show this help
 
 Env alternatives:
@@ -900,7 +900,7 @@ verify_access() {
   fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
-    warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+warn "You do not have access to the selected OCS release branch yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
     if command -v gh >/dev/null 2>&1; then
       warn "If you already have repo access, run: gh auth refresh -h github.com -s repo"
     fi

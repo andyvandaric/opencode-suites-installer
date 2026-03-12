@@ -26,8 +26,8 @@ if (-not $isWindowsHost) {
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
-$DEFAULT_RELEASE_BRANCH = "beta"
+$DEFAULT_RELEASE_BRANCH = "feat/buyer-v2.1.4-setup-smoke"
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { $DEFAULT_RELEASE_BRANCH }
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
@@ -99,7 +99,7 @@ function Invoke-PwshRelaunch {
             return $true
         }
 
-        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1"
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1"
         $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
         & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
@@ -478,7 +478,7 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Warning "You do not have OCS beta access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+            Write-Warning "You do not have access to the selected OCS release branch yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
             Write-Host "GitHub API response: HTTP $code"
             if (-not $SuppressLandingPage) {
                 Open-LandingPage
