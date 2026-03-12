@@ -8,6 +8,14 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 
 Use this branch for cross-platform validation before main release.
 
+This branch currently includes installer hardening for WSL/macOS/Windows edge cases:
+
+- automatic dependency install/retry when runtime prerequisites are missing
+- clearer progress output for long-running install/build steps
+- stronger `opencode auth login` stability via plugin integrity checks + rebuild fallback
+- safer command resolution for `ocs` and `opencode` without semantic alias regressions
+- helper scripts for environment reset (`uninstall.sh`) and state safety (`backup.sh` / `restore.sh`)
+
 #### macOS / Linux / WSL
 
 ```bash
@@ -52,6 +60,31 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 
 Run installer from your normal user shell. Do not wrap installer command in `sudo`, or profile/config writes may target the wrong home directory.
 
+## Quick Start (Latest Feat Stabilization)
+
+If you want deterministic behavior while this branch is still collecting edge-case reports, use pinned version + branch:
+
+### macOS / Linux / WSL
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-v2.1.4-setup-smoke
+```
+
+### Windows (PowerShell 7)
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; $env:OCS_RELEASE_BRANCH = "feat/buyer-v2.1.4-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1 | iex'
+```
+
+Post-install smoke checks:
+
+```bash
+opencode --help
+opencode auth login --help
+opencode web --help
+ocs setup:profile --help
+```
+
 ## Codex Setup Profiles
 
 - `codex-5.3-token-saver`
@@ -91,6 +124,35 @@ Notes:
   ocs doctor
   ```
 
+### Uninstall otomatis (Linux/macOS/WSL)
+
+Kalau mau reset total environment sebelum retest, jalankan script `uninstall.sh` dari root repo:
+
+```bash
+chmod +x ./uninstall.sh
+./uninstall.sh --yes
+```
+
+Catatan penting:
+- Default **auto backup aktif** sebelum data dihapus.
+- Untuk matikan backup: `./uninstall.sh --yes --no-backup`
+- Untuk set lokasi backup: `./uninstall.sh --yes --backup-dir /path/backup`
+- Untuk simulasi aman tanpa perubahan: `./uninstall.sh --dry-run --yes --no-backup`
+
+### Backup / Restore cepat (Linux/macOS/WSL)
+
+Kalau mau simpan lalu pulihkan state sebelum/selesai retest:
+
+```bash
+./backup.sh --yes
+./restore.sh --yes
+```
+
+Opsional aman:
+- Preview backup tanpa menulis apa pun: `./backup.sh --dry-run`
+- Preview restore tanpa ekstrak: `./restore.sh --dry-run`
+- Pilih archive tertentu saat restore: `./restore.sh --archive /path/file.tar.gz --yes`
+
 ### macOS: `opencode auth login` fallback ke API key
 
 Kalau di macOS login malah minta API key (padahal harusnya keluar OAuth Antigravity), jalankan langkah ini dari Terminal biasa:
@@ -102,20 +164,21 @@ which -a opencode
 PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode --version
 ```
 
-2) Pastikan plugin OAuth Antigravity terpasang (cukup salah satu entrypoint ada):
+2) Pastikan plugin OAuth Antigravity terpasang (cek salah satu entry valid):
 
 ```bash
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
-grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js || grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
 grep -n "opencode-multi-auth" ~/.config/opencode/opencode.json
 ```
 
-Jika dua file itu belum ada (kasus "No such file or directory"), jalankan repair cepat ini:
+Jika `dist/src/plugin.js` dan `dist/index.js` sama-sama belum ada, jalankan repair cepat ini:
 
 ```bash
 cd ~/.config/opencode/plugins/opencode-multi-auth || exit 1
 bun install --frozen-lockfile || bun install
-PATH="$HOME/.bun/bin:$PATH" bun run build || npm run build
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" bun run build || npm run build
 OCS_SETUP_INSTALLER_MODE=1 bun scripts/setup.js --headless --profile codex-5.3-token-saver --mode low
 ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
 ```
@@ -126,7 +189,7 @@ Kalau folder plugin belum ada sama sekali, rerun installer:
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
-3) Paksa login via provider Antigravity dengan PATH prioritas (normal kalau pertama kali perlu tunggu sekitar 30-60 detik sebelum browser auth muncul):
+3) Paksa login via provider Antigravity dengan PATH prioritas:
 
 ```bash
 PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
