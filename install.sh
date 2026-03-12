@@ -1416,7 +1416,7 @@ ensure_antigravity_oauth_integrity "${setup_script}"
   echo "   Next steps:"
   echo "   1. Configure profile: ocs setup:profile"
   echo "   2. Configure preferences: ocs prefs"
-  echo "   3. Verify runtime: opencode auth login"
+  echo "   3. Add account (browser OAuth; first run can take 30-60s): opencode auth login --provider antigravity"
   echo "   4. Start coding!"
   echo ""
 }

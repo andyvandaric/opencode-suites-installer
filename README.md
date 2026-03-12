@@ -102,21 +102,22 @@ which -a opencode
 PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode --version
 ```
 
-2) Pastikan plugin OAuth Antigravity terpasang:
+2) Pastikan plugin OAuth Antigravity terpasang (cukup salah satu entrypoint ada):
 
 ```bash
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
-grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
 grep -n "opencode-multi-auth" ~/.config/opencode/opencode.json
 ```
 
-Jika file `dist/src/plugin.js` belum ada (kasus "No such file or directory"), jalankan repair cepat ini:
+Jika dua file itu belum ada (kasus "No such file or directory"), jalankan repair cepat ini:
 
 ```bash
 cd ~/.config/opencode/plugins/opencode-multi-auth || exit 1
 bun install --frozen-lockfile || bun install
+PATH="$HOME/.bun/bin:$PATH" bun run build || npm run build
 OCS_SETUP_INSTALLER_MODE=1 bun scripts/setup.js --headless --profile codex-5.3-token-saver --mode low
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
 ```
 
 Kalau folder plugin belum ada sama sekali, rerun installer:
@@ -125,7 +126,7 @@ Kalau folder plugin belum ada sama sekali, rerun installer:
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
-3) Paksa login via provider Antigravity dengan PATH prioritas:
+3) Paksa login via provider Antigravity dengan PATH prioritas (normal kalau pertama kali perlu tunggu sekitar 30-60 detik sebelum browser auth muncul):
 
 ```bash
 PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
