@@ -105,7 +105,6 @@ run_cmd() {
 }
 
 collect_sources() {
-  local -n _dest="$1"
   local candidate
   for candidate in \
     "${HOME}/.config/opencode" \
@@ -115,7 +114,7 @@ collect_sources() {
     "${HOME}/.local/share/opencode" \
   ; do
     if [[ -e "${candidate}" ]]; then
-      _dest+=("${candidate}")
+      printf '%s\n' "${candidate}"
     fi
   done
 }
@@ -166,7 +165,10 @@ prepare_archive_path() {
 
 main() {
   local sources=()
-  collect_sources sources
+  local src=""
+  while IFS= read -r src; do
+    [[ -n "${src}" ]] && sources+=("${src}")
+  done < <(collect_sources)
 
   if (( ${#sources[@]} == 0 )); then
     info "No OCS/OpenCode config/cache directories found to archive."
