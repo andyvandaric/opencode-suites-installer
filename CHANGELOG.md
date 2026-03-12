@@ -4,7 +4,7 @@
 
 - Hardened cross-platform installer behavior for WSL/macOS/Windows on `feat/buyer-v2.1.4-setup-smoke`, including safer command resolution and reduced false-warning noise in non-interactive shells.
 - Added stronger runtime recovery for `opencode auth login` by validating `opencode-multi-auth` plugin artifacts and auto-rebuilding (`bun run build`/`npm run build`) when OAuth entry files are missing.
-- Improved dependency bootstrap reliability with retry-based auto-install flows and clearer progress feedback for long-running install/build steps in both `install.sh` and `install.ps1`.
+- Improved dependency bootstrap reliability with retry-based auto-install flows, plus clearer staged status/retry visibility for long-running install/build steps (with richer live progress on the PowerShell lane).
 - Improved PowerShell lane stability by keeping parser-safe behavior for mixed environments (Windows PowerShell 5.1 compatibility checks and PowerShell 7 execution guidance).
 - Added operational recovery tooling in repo root: `uninstall.sh` (auto backup + cleanup), `backup.sh` (state snapshot), and `restore.sh` (validated restore with dry-run support).
 - Refreshed README quick-start/troubleshooting guidance to document latest feat stabilization flow, pinned install commands, post-install smoke checks, and reset/recovery commands.
