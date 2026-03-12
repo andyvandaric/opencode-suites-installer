@@ -1505,10 +1505,20 @@ if (-not $opencodeCommand) {
     }
 }
 
+$candidateOpencode = @(
+    (Join-Path $env:USERPROFILE ".opencode\bin\opencode.cmd"),
+    (Join-Path $env:USERPROFILE ".local\bin\opencode.cmd"),
+    (Join-Path $env:USERPROFILE ".bun\bin\opencode.cmd"),
+    (Join-Path $env:USERPROFILE ".bun\bin\opencode")
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
 if ($opencodeCommand) {
     Write-Output "opencode verification passed."
+} elseif ($candidateOpencode) {
+    Write-Output "opencode binary is installed at $candidateOpencode"
+    Write-Output "If command is not yet available in current shell, open a new terminal session."
 } else {
-    Write-Warning "opencode command not found. Skipping heavy auto-recovery to avoid long waits."
+    Write-Output "opencode command not available yet in this shell. Skipping heavy auto-recovery to avoid long waits."
     Write-Output "Manual check: opencode --version"
 }
 Write-Output ""

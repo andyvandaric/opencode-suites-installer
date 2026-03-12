@@ -285,6 +285,20 @@ opencode_works() {
   return 0
 }
 
+find_opencode_candidate_path() {
+  local candidate
+  for candidate in \
+    "${HOME}/.opencode/bin/opencode" \
+    "${HOME}/.local/bin/opencode" \
+    "${HOME}/.bun/bin/opencode"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 install_opencode_shim() {
   local bun_bin="${HOME}/.bun/bin"
   local local_bin="${HOME}/.local/bin"
@@ -647,8 +661,26 @@ ensure_shell_path_priority() {
 }
 
 ensure_system_command_links() {
-  local target_dir="/usr/local/bin"
+  local target_dirs=("/usr/local/bin")
+  local target_dir=""
   local cmd source_path target_path current_target
+
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    target_dirs=("/opt/homebrew/bin" "/usr/local/bin")
+  fi
+
+  for target_dir in "${target_dirs[@]}"; do
+    if [[ -d "${target_dir}" && -w "${target_dir}" ]]; then
+      break
+    fi
+    target_dir=""
+  done
+
+  if [[ -z "${target_dir}" ]]; then
+    info "Skipping system-wide symlink setup (no write access to ${target_dirs[*]}). Using user PATH entries instead."
+    hash -r 2>/dev/null || true
+    return 0
+  fi
 
   for cmd in ocs opencode; do
     source_path=""
@@ -672,12 +704,8 @@ ensure_system_command_links() {
       fi
     fi
 
-    if [[ -w "${target_dir}" ]]; then
-      ln -sfn "${source_path}" "${target_path}" || true
-    elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
-      :
-    else
-      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
+    if ! ln -sfn "${source_path}" "${target_path}"; then
+      warn "Could not update ${target_path}. Continuing with user PATH entries."
     fi
   done
 
@@ -1206,13 +1234,17 @@ if opencode_works; then
   info "opencode verification passed."
 elif install_opencode_shim && opencode_works; then
   info "opencode shim installed and verification passed."
+elif opencode_candidate="$(find_opencode_candidate_path 2>/dev/null || true)" && [[ -n "${opencode_candidate}" ]]; then
+  info "opencode binary is installed at ${opencode_candidate}."
+  info "If command is not yet available in your current shell, start a new terminal or run:"
+  info "export PATH=\"$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH\""
 elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
   fi
 else
-  warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
+  info "opencode command not available yet in this shell. Skipping heavy auto-recovery to avoid long waits."
   info "Manual check: opencode --version"
   info "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
 fi
