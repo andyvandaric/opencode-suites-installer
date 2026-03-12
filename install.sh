@@ -15,10 +15,39 @@ if [[ -z "${HOME:-}" ]]; then
   export HOME
 fi
 
+resolve_target_home_early() {
+  if [[ -n "${OCS_TARGET_HOME:-}" ]]; then
+    printf '%s\n' "${OCS_TARGET_HOME}"
+    return 0
+  fi
+
+  if [[ "${EUID:-$(id -u)}" -eq 0 && -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    local sudo_home=""
+    sudo_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6 2>/dev/null || true)"
+    if [[ -z "${sudo_home}" ]]; then
+      sudo_home="$(eval printf '%s' "~${SUDO_USER}" 2>/dev/null || true)"
+    fi
+    if [[ -n "${sudo_home}" ]]; then
+      printf '%s\n' "${sudo_home}"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "${HOME:-/tmp}"
+}
+
+TARGET_HOME="$(resolve_target_home_early)"
+if [[ -n "${TARGET_HOME}" && "${TARGET_HOME}" != "${HOME}" ]]; then
+  HOME="${TARGET_HOME}"
+  export HOME
+fi
+
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-feat/buyer-v2.1.4-setup-smoke}"
 DEFAULT_RELEASE_BRANCH="feat/buyer-v2.1.4-setup-smoke"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-${DEFAULT_RELEASE_BRANCH}}"
+INSTALLER_DEFAULT_PROFILE="codex-5.3-hybrid"
+INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
@@ -274,6 +303,101 @@ ocs_works() {
   return 0
 }
 
+resolve_primary_shell_profile() {
+  local shell_name="${SHELL##*/}"
+  local candidate
+
+  case "${shell_name}" in
+    zsh)
+      for candidate in "${HOME}/.zprofile" "${HOME}/.zshrc"; do
+        if [[ -f "${candidate}" ]]; then
+          printf '%s\n' "${candidate}"
+          return 0
+        fi
+      done
+      printf '%s\n' "${HOME}/.zprofile"
+      ;;
+    bash)
+      for candidate in "${HOME}/.bash_profile" "${HOME}/.profile" "${HOME}/.bashrc"; do
+        if [[ -f "${candidate}" ]]; then
+          printf '%s\n' "${candidate}"
+          return 0
+        fi
+      done
+      printf '%s\n' "${HOME}/.profile"
+      ;;
+    fish)
+      printf '%s\n' ""
+      ;;
+    *)
+      for candidate in "${HOME}/.profile" "${HOME}/.bash_profile" "${HOME}/.zprofile"; do
+        if [[ -f "${candidate}" ]]; then
+          printf '%s\n' "${candidate}"
+          return 0
+        fi
+      done
+      printf '%s\n' "${HOME}/.profile"
+      ;;
+  esac
+}
+
+ensure_text_file_exists_if_writable() {
+  local file_path="$1"
+  local parent_dir
+  parent_dir="$(dirname "${file_path}")"
+
+  mkdir -p "${parent_dir}" 2>/dev/null || true
+  if [[ -f "${file_path}" ]]; then
+    [[ -w "${file_path}" ]]
+    return $?
+  fi
+
+  if [[ -w "${parent_dir}" ]]; then
+    : > "${file_path}"
+    return 0
+  fi
+
+  return 1
+}
+
+ensure_antigravity_oauth_integrity() {
+  local setup_script="$1"
+  local config_dir="${HOME}/.config/opencode"
+  local runtime_opencode="${config_dir}/opencode.json"
+  local runtime_antigravity="${config_dir}/antigravity.json"
+  local template_antigravity="${PLUGIN_DIR}/backups/antigravity.json.template"
+  local needs_repair=0
+
+  mkdir -p "${config_dir}" 2>/dev/null || true
+
+  if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
+    cp "${template_antigravity}" "${runtime_antigravity}"
+    needs_repair=1
+  fi
+
+  if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
+    needs_repair=1
+  fi
+
+  if (( needs_repair )); then
+    info "Repairing final Antigravity OAuth visibility before installer exit..."
+    export OCS_SETUP_INSTALLER_MODE=1
+    bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
+    unset OCS_SETUP_INSTALLER_MODE
+    if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
+      cp "${template_antigravity}" "${runtime_antigravity}"
+    fi
+  fi
+
+  [[ -f "${runtime_antigravity}" ]] || error "Final Antigravity OAuth integrity check failed: antigravity.json is missing."
+
+  if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
+    error "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
+  fi
+
+  success "Antigravity OAuth integrity check passed."
+}
+
 opencode_works() {
   command -v opencode >/dev/null 2>&1 || return 1
 
@@ -282,21 +406,25 @@ opencode_works() {
     return 0
   fi
 
-  return 0
-}
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY' >/dev/null 2>&1
+import subprocess
+import sys
 
-find_opencode_candidate_path() {
-  local candidate
-  for candidate in \
-    "${HOME}/.opencode/bin/opencode" \
-    "${HOME}/.local/bin/opencode" \
-    "${HOME}/.bun/bin/opencode"; do
-    if [[ -x "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-  return 1
+for args in (["opencode", "--version"], ["opencode", "--help"]):
+    try:
+        result = subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+    except Exception:
+        continue
+    if result.returncode == 0:
+        sys.exit(0)
+
+sys.exit(1)
+PY
+    return $?
+  fi
+
+  opencode --version >/dev/null 2>&1 || opencode --help >/dev/null 2>&1
 }
 
 install_opencode_shim() {
@@ -325,7 +453,15 @@ EOF
 
   export PATH="${local_bin}:${bun_bin}:${PATH}"
   hash -r 2>/dev/null || true
-  opencode_works
+
+  if opencode_works; then
+    return 0
+  fi
+
+  rm -f "${bun_bin}/opencode" "${local_bin}/opencode"
+  hash -r 2>/dev/null || true
+  info "Generated opencode bunx shim failed health check and was removed."
+  return 1
 }
 
 install_opencode_official() {
@@ -617,11 +753,6 @@ ensure_ocs_command() {
     return 0
   fi
 
-  if install_ocs_shim_from_opencode; then
-    success "ocs shim via opencode install and verification passed."
-    return 0
-  fi
-
   if [[ "$is_local_source" == "true" ]]; then
     if install_ocs_from_path "$root_dir"; then
       success "ocs auto-install and verification passed."
@@ -639,48 +770,50 @@ ensure_ocs_command() {
 
 ensure_shell_path_priority() {
   local export_line='export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
+  local source_line='[ -f "$HOME/.config/opencode/shell/ocs-path.sh" ] && . "$HOME/.config/opencode/shell/ocs-path.sh"'
+  local snippet_dir="${HOME}/.config/opencode/shell"
+  local snippet_path="${snippet_dir}/ocs-path.sh"
   local profile
+  local shell_name="${SHELL##*/}"
 
   export PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
   hash -r 2>/dev/null || true
 
-  for profile in "${HOME}/.profile" "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.zshrc" "${HOME}/.zprofile"; do
-    [[ -f "$profile" ]] || touch "$profile"
-    if ! grep -Fq "$export_line" "$profile"; then
-      printf '\n# OCS installer path\n%s\n' "$export_line" >> "$profile"
+  mkdir -p "${snippet_dir}" 2>/dev/null || true
+  if ! ensure_text_file_exists_if_writable "${snippet_path}"; then
+    warn "Cannot persist shell PATH snippet at ${snippet_path}. Keep using current-session PATH export only."
+  else
+    printf '# OCS installer path\n%s\n' "${export_line}" > "${snippet_path}"
+  fi
+
+  profile="$(resolve_primary_shell_profile)"
+  if [[ -n "${profile}" ]]; then
+    if ensure_text_file_exists_if_writable "${profile}"; then
+      if ! grep -Fq "${source_line}" "${profile}"; then
+        printf '\n# OCS installer path\n%s\n' "${source_line}" >> "${profile}"
+      fi
+    else
+      warn "Cannot write to shell profile ${profile}. Current-session PATH is active, but persistence was skipped."
     fi
-  done
+  fi
 
   local fish_cfg="${HOME}/.config/fish/config.fish"
   local fish_line='fish_add_path -m $HOME/.opencode/bin $HOME/.local/bin $HOME/.bun/bin'
-  mkdir -p "$(dirname "$fish_cfg")"
-  [[ -f "$fish_cfg" ]] || touch "$fish_cfg"
-  if ! grep -Fq "$fish_line" "$fish_cfg"; then
-    printf '\n# OCS installer path\n%s\n' "$fish_line" >> "$fish_cfg"
+  if [[ "${shell_name}" == "fish" || -f "$fish_cfg" ]]; then
+    mkdir -p "$(dirname "$fish_cfg")" 2>/dev/null || true
+    if ensure_text_file_exists_if_writable "$fish_cfg"; then
+      if ! grep -Fq "$fish_line" "$fish_cfg"; then
+        printf '\n# OCS installer path\n%s\n' "$fish_line" >> "$fish_cfg"
+      fi
+    else
+      warn "Cannot write to fish config at ${fish_cfg}."
+    fi
   fi
 }
 
 ensure_system_command_links() {
-  local target_dirs=("/usr/local/bin")
-  local target_dir=""
+  local target_dir="/usr/local/bin"
   local cmd source_path target_path current_target
-
-  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
-    target_dirs=("/opt/homebrew/bin" "/usr/local/bin")
-  fi
-
-  for target_dir in "${target_dirs[@]}"; do
-    if [[ -d "${target_dir}" && -w "${target_dir}" ]]; then
-      break
-    fi
-    target_dir=""
-  done
-
-  if [[ -z "${target_dir}" ]]; then
-    info "Skipping system-wide symlink setup (no write access to ${target_dirs[*]}). Using user PATH entries instead."
-    hash -r 2>/dev/null || true
-    return 0
-  fi
 
   for cmd in ocs opencode; do
     source_path=""
@@ -704,8 +837,12 @@ ensure_system_command_links() {
       fi
     fi
 
-    if ! ln -sfn "${source_path}" "${target_path}"; then
-      warn "Could not update ${target_path}. Continuing with user PATH entries."
+    if [[ -w "${target_dir}" ]]; then
+      ln -sfn "${source_path}" "${target_path}" || true
+    elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
+      :
+    else
+      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
     fi
   done
 
@@ -928,7 +1065,7 @@ verify_access() {
   fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
-warn "You do not have access to the selected OCS release branch yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    warn "You do not have OCS access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
     if command -v gh >/dev/null 2>&1; then
       warn "If you already have repo access, run: gh auth refresh -h github.com -s repo"
     fi
@@ -1061,12 +1198,7 @@ install_bun() {
   fi
   export BUN_INSTALL="${HOME}/.bun"
   curl -fsSL https://bun.sh/install | bash
-  
-  # Source bun environment for current session
-  if [[ -f "${HOME}/.bashrc" ]]; then
-    # shellcheck source=/dev/null
-    source "${HOME}/.bashrc" || true
-  fi
+
   if [[ -d "${HOME}/.bun" ]]; then
     export PATH="${HOME}/.bun/bin:${PATH}"
   fi
@@ -1203,7 +1335,7 @@ main() {
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
   else
     export OCS_SETUP_INSTALLER_MODE=1
-    if bun "${setup_script}" --headless --profile codex-5.3-all --mode balanced; then
+    if bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}"; then
       success "Setup completed automatically (headless)."
     else
       warn "Headless setup failed. Falling back to interactive setup..."
@@ -1232,26 +1364,22 @@ ensure_system_command_links
 
 if opencode_works; then
   info "opencode verification passed."
-elif install_opencode_shim && opencode_works; then
-  info "opencode shim installed and verification passed."
-elif opencode_candidate="$(find_opencode_candidate_path 2>/dev/null || true)" && [[ -n "${opencode_candidate}" ]]; then
-  info "opencode binary is installed at ${opencode_candidate}."
-  info "If command is not yet available in your current shell, start a new terminal or run:"
-  info "export PATH=\"$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH\""
-elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
+elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-1}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
   fi
 else
-  info "opencode command not available yet in this shell. Skipping heavy auto-recovery to avoid long waits."
+  warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
   info "Manual check: opencode --version"
   info "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
 fi
 
+ensure_antigravity_oauth_integrity "${setup_script}"
+
   echo ""
   echo "   Next steps:"
-  echo "   1. Configure profile: ocs setup profile"
+  echo "   1. Configure profile: ocs setup:profile"
   echo "   2. Configure preferences: ocs prefs"
   echo "   3. Verify runtime: opencode auth login"
   echo "   4. Start coding!"

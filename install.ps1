@@ -11,23 +11,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$isWindowsHost = $false
-if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) {
-    $isWindowsHost = [bool]$IsWindows
-} elseif ($env:OS -eq "Windows_NT") {
-    $isWindowsHost = $true
-}
-
-if (-not $isWindowsHost) {
-    Write-Error "install.ps1 is for Windows only. For WSL/Linux/macOS use install.sh instead: curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash"
-    exit 1
-}
-
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "feat/buyer-v2.1.4-setup-smoke" }
 $DEFAULT_RELEASE_BRANCH = "feat/buyer-v2.1.4-setup-smoke"
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { $DEFAULT_RELEASE_BRANCH }
+$INSTALLER_DEFAULT_PROFILE = "codex-5.3-hybrid"
+$INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
 $TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
@@ -37,6 +27,20 @@ $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
+
+function Get-EnvOrDefault {
+    param(
+        [string]$Name,
+        [string]$Default
+    )
+
+    $value = [Environment]::GetEnvironmentVariable($Name)
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $Default
+    }
+
+    return $value
+}
 
 function Resolve-PwshPath {
     $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -99,7 +103,7 @@ function Invoke-PwshRelaunch {
             return $true
         }
 
-        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1"
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1"
         $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
         & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
@@ -478,7 +482,7 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Warning "You do not have access to the selected OCS release branch yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+            Write-Warning "You do not have OCS access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
             Write-Host "GitHub API response: HTTP $code"
             if (-not $SuppressLandingPage) {
                 Open-LandingPage
@@ -747,6 +751,47 @@ function Test-OcsWorks {
     return $true
 }
 
+function Test-OpencodeWorks {
+    param([int]$TimeoutSeconds = 8)
+
+    $resolved = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $resolved) {
+        return $false
+    }
+
+    $commandToRun = $resolved.Source
+    $job = Start-Job -ScriptBlock {
+        param([string]$Cmd)
+
+        try {
+            & $Cmd --version *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+
+            & $Cmd --help *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        } catch {
+            return $false
+        }
+
+        return $false
+    } -ArgumentList $commandToRun
+
+    $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
+    if (-not $completed) {
+        Stop-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+        return $false
+    }
+
+    $result = Receive-Job -Job $job -ErrorAction SilentlyContinue
+    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+    return [bool]($result -contains $true)
+}
+
 function Install-OcsFromPath {
     param([string]$SourcePath)
 
@@ -923,7 +968,45 @@ function Install-OpencodeShimFromBun {
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
-    return (Test-Path $cmdPath)
+    if (Test-OpencodeWorks) {
+        return $true
+    }
+
+    Remove-Item -Path $cmdPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $ps1Path -Force -ErrorAction SilentlyContinue
+    Write-Warning "Generated opencode bunx shim failed health check and was removed."
+    return $false
+}
+
+function Install-OpencodeBunGlobal {
+    if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    try {
+        Write-Output "Installing opencode-ai via bun global package..."
+        & bun add -g opencode-ai@latest *> $null
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    } catch {
+        return $false
+    }
+
+    Ensure-OpencodePathEntries
+    return (Test-OpencodeWorks)
+}
+
+function Ensure-OpencodeCommand {
+    if (Test-OpencodeWorks) {
+        return $true
+    }
+
+    if (Install-OpencodeBunGlobal) {
+        return $true
+    }
+
+    return (Install-OpencodeShimFromBun)
 }
 
 function Install-OcsFromPrivateRepo {
@@ -975,12 +1058,7 @@ function Ensure-OcsCommand {
         return $true
     }
 
-    if (Install-OcsShimFromOpencode) {
-        Write-Output "ocs shim via opencode install and verification passed."
-        return $true
-    }
-
-    $enableGlobalOcsInstall = (($env:OCS_ENABLE_OCS_GLOBAL_INSTALL ?? "1") -eq "1")
+    $enableGlobalOcsInstall = ((Get-EnvOrDefault -Name "OCS_ENABLE_OCS_GLOBAL_INSTALL" -Default "1") -eq "1")
     if (-not $enableGlobalOcsInstall) {
         Write-Warning "Skipping global ocs installation fallback (set OCS_ENABLE_OCS_GLOBAL_INSTALL=1 to enable)."
         return $false
@@ -1044,7 +1122,7 @@ function Apply-InstallerDefaults {
         if (Test-Path $runtimePath) {
             $runtime = Get-Content -Raw -Path $runtimePath | ConvertFrom-Json
             if ($runtime.resourceModes) {
-                $runtime.resourceModes.default = "performance"
+                $runtime.resourceModes.default = $INSTALLER_DEFAULT_MODE
                 foreach ($option in $runtime.resourceModes.options) {
                     if ($option.id -eq "balanced") {
                         $option.label = "Balanced"
@@ -1060,7 +1138,7 @@ function Apply-InstallerDefaults {
         if (Test-Path $fallbacksPath) {
             $fallbacks = Get-Content -Raw -Path $fallbacksPath | ConvertFrom-Json
             if ($fallbacks.setupRuntime -and $fallbacks.setupRuntime.resourceModes) {
-                $fallbacks.setupRuntime.resourceModes.default = "performance"
+                $fallbacks.setupRuntime.resourceModes.default = $INSTALLER_DEFAULT_MODE
                 foreach ($option in $fallbacks.setupRuntime.resourceModes.options) {
                     if ($option.id -eq "balanced") {
                         $option.label = "Balanced"
@@ -1076,13 +1154,13 @@ function Apply-InstallerDefaults {
         if (Test-Path $catalogPath) {
             $catalog = Get-Content -Raw -Path $catalogPath | ConvertFrom-Json
             if ($catalog.profileDisplayOrder) {
-                $profiles = @($catalog.profileDisplayOrder | Where-Object { $_ -ne "codex-5.3-hybrid" })
-                $catalog.profileDisplayOrder = @("codex-5.3-hybrid") + $profiles
+                $profiles = @($catalog.profileDisplayOrder | Where-Object { $_ -ne $INSTALLER_DEFAULT_PROFILE })
+                $catalog.profileDisplayOrder = @($INSTALLER_DEFAULT_PROFILE) + $profiles
             }
             ($catalog | ConvertTo-Json -Depth 50) | Set-Content -Path $catalogPath -Encoding UTF8
         }
 
-        Write-Output "Applied installer defaults: codex-5.3-hybrid + performance mode."
+        Write-Output "Applied installer defaults: $INSTALLER_DEFAULT_PROFILE + $INSTALLER_DEFAULT_MODE mode."
     } catch {
         Write-Warning "Could not apply installer defaults: $($_.Exception.Message)"
     }
@@ -1267,7 +1345,7 @@ function Invoke-AutoSetup {
     $headlessExitCode = 1
 
     try {
-        & bun $setupScript --headless --profile codex-5.3-all --mode balanced
+        & bun $setupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
         $headlessExitCode = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } else { 0 }
         if ($headlessExitCode -ne 0) {
             $headlessSucceeded = $false
@@ -1305,6 +1383,66 @@ function Invoke-AutoSetup {
     }
 }
 
+function Assert-AntigravityOauthIntegrity {
+    param([string]$SetupScript)
+
+    $configDir = Join-Path $env:USERPROFILE ".config\opencode"
+    $runtimeOpencode = Join-Path $configDir "opencode.json"
+    $runtimeAntigravity = Join-Path $configDir "antigravity.json"
+    $templateAntigravity = Join-Path $PLUGIN_DIR "backups\antigravity.json.template"
+    $needsRepair = $false
+
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Force $configDir | Out-Null
+    }
+
+    if ((-not (Test-Path $runtimeAntigravity)) -and (Test-Path $templateAntigravity)) {
+        Copy-Item -Path $templateAntigravity -Destination $runtimeAntigravity -Force
+        $needsRepair = $true
+    }
+
+    if (Test-Path $runtimeOpencode) {
+        $runtimeContent = Get-Content -Raw -Path $runtimeOpencode -Encoding UTF8
+        if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
+            $needsRepair = $true
+        }
+    }
+
+    if ($needsRepair) {
+        Write-Output "Repairing final Antigravity OAuth visibility before installer exit..."
+        $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
+        $env:OCS_SETUP_INSTALLER_MODE = "1"
+        try {
+            & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
+        } catch {
+            # best effort repair
+        } finally {
+            if ($null -eq $previousInstallerMode) {
+                Remove-Item Env:OCS_SETUP_INSTALLER_MODE -ErrorAction SilentlyContinue
+            } else {
+                $env:OCS_SETUP_INSTALLER_MODE = $previousInstallerMode
+            }
+        }
+
+        if ((-not (Test-Path $runtimeAntigravity)) -and (Test-Path $templateAntigravity)) {
+            Copy-Item -Path $templateAntigravity -Destination $runtimeAntigravity -Force
+        }
+    }
+
+    if (-not (Test-Path $runtimeAntigravity)) {
+        throw "Final Antigravity OAuth integrity check failed: antigravity.json is missing."
+    }
+
+    if (Test-Path $runtimeOpencode) {
+        $runtimeContent = Get-Content -Raw -Path $runtimeOpencode -Encoding UTF8
+        if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
+            throw "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
+        }
+    }
+
+    Write-Output "Antigravity OAuth integrity check passed."
+}
+
 Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
@@ -1321,7 +1459,7 @@ if ($REQUESTED_VERSION) {
 }
 
 $rootDir = (Resolve-Path ".").Path
-$forceLocalSource = (($env:OCS_FORCE_LOCAL_SOURCE ?? "0") -eq "1")
+$forceLocalSource = ((Get-EnvOrDefault -Name "OCS_FORCE_LOCAL_SOURCE" -Default "0") -eq "1")
 $isLocalSource = $false
 $hasLocalSourceMarkers =
     (Test-Path (Join-Path $rootDir "plugins\opencode-multi-auth\package.json")) -and
@@ -1478,6 +1616,7 @@ Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
+Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
 Ensure-OpencodePathEntries
 
 if (Test-Path $TMP_DIR) {
@@ -1498,28 +1637,20 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
 Write-Output ""
 Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
-$opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-if (-not $opencodeCommand) {
-    if (Install-OpencodeShimFromBun) {
-        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-    }
-}
-
-$candidateOpencode = @(
-    (Join-Path $env:USERPROFILE ".opencode\bin\opencode.cmd"),
-    (Join-Path $env:USERPROFILE ".local\bin\opencode.cmd"),
-    (Join-Path $env:USERPROFILE ".bun\bin\opencode.cmd"),
-    (Join-Path $env:USERPROFILE ".bun\bin\opencode")
-) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-
-if ($opencodeCommand) {
+if (Test-OpencodeWorks) {
     Write-Output "opencode verification passed."
-} elseif ($candidateOpencode) {
-    Write-Output "opencode binary is installed at $candidateOpencode"
-    Write-Output "If command is not yet available in current shell, open a new terminal session."
+} elseif ((Get-EnvOrDefault -Name "OCS_ENABLE_OPENCODE_AUTO_RECOVERY" -Default "1") -eq "1") {
+    Write-Warning "opencode command not healthy. Auto-recovery enabled; attempting repair..."
+    if (Ensure-OpencodeCommand) {
+        Write-Output "opencode verification passed after auto-recovery."
+    } else {
+        Write-Warning "opencode command is still unavailable. Ensure bunx can run opencode-ai."
+        Write-Output "Manual check: opencode --help"
+    }
 } else {
-    Write-Output "opencode command not available yet in this shell. Skipping heavy auto-recovery to avoid long waits."
-    Write-Output "Manual check: opencode --version"
+    Write-Warning "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
+    Write-Output "Manual check: opencode --help"
+    Write-Output "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
 }
 Write-Output ""
 Write-Output "   Next steps:"
