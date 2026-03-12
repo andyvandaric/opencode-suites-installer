@@ -11,6 +11,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$isWindowsHost = $false
+if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) {
+    $isWindowsHost = [bool]$IsWindows
+} elseif ($env:OS -eq "Windows_NT") {
+    $isWindowsHost = $true
+}
+
+if (-not $isWindowsHost) {
+    Write-Error "install.ps1 is for Windows only. For WSL/Linux/macOS use install.sh instead: curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash"
+    exit 1
+}
+
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
