@@ -44,8 +44,8 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-feat/buyer-v2.1.4-setup-smoke}"
-DEFAULT_RELEASE_BRANCH="feat/buyer-v2.1.4-setup-smoke"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-feat/buyer-setup-smoke}"
+DEFAULT_RELEASE_BRANCH="feat/buyer-setup-smoke"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-hybrid"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -155,7 +155,7 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: feat/buyer-v2.1.4-setup-smoke)
+  --branch        Override source branch (default: feat/buyer-setup-smoke)
   --help, -h      Show this help
 
 Env alternatives:
