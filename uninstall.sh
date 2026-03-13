@@ -309,7 +309,7 @@ main() {
 
 Next step (clean-room reinstall test):
   env -i HOME="$(mktemp -d /tmp/ocs-clean-XXXXXX)" USER="$(id -un)" PATH="/usr/bin:/bin" \
-    bash -lc 'curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-v2.1.4-setup-smoke'
+    bash -lc 'curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-setup-smoke'
 EOF
 }
 

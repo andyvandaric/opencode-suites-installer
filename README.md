@@ -4,7 +4,7 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 
 ## Quick Install
 
-### Feat branch (`feat/buyer-v2.1.4-setup-smoke`)
+### Feat branch (`feat/buyer-setup-smoke`)
 
 Use this branch for cross-platform validation before main release.
 
@@ -19,13 +19,13 @@ This branch currently includes installer hardening for WSL/macOS/Windows edge ca
 #### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash
 ```
 
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -33,13 +33,13 @@ WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows P
 #### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1 | iex"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -67,13 +67,13 @@ If you want deterministic behavior while this branch is still collecting edge-ca
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-v2.1.4-setup-smoke
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-setup-smoke
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; $env:OCS_RELEASE_BRANCH = "feat/buyer-v2.1.4-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; $env:OCS_RELEASE_BRANCH = "feat/buyer-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -185,7 +185,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-v2.1.4-setup-smoke/install.sh | bash -s -- --version 2.1.4
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
