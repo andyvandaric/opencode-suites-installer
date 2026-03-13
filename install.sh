@@ -44,9 +44,9 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-feat/buyer-setup-smoke}"
-DEFAULT_RELEASE_BRANCH="feat/buyer-setup-smoke"
-INSTALLER_DEFAULT_PROFILE="codex-5.3-hybrid"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
+DEFAULT_RELEASE_BRANCH="beta"
+INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
