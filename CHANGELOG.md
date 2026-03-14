@@ -1,12 +1,5 @@
 # Changelog
 
-## 2.1.9 - 2026-03-14
-
-- Synchronized installer feat release line to `2.1.9` for buyer branch `feat/buyer-setup-smoke` publication.
-- Updated feat-branch README install pin examples from `2.1.4` to `2.1.9`.
-- Aligned profile naming references to `gpt-5.4-*` so installer docs match buyer profile catalog naming.
-- Kept installer and buyer release cadence synchronized before any beta promotion.
-
 ## 2.1.8 - 2026-03-14
 
 - Synced installer release line with buyer bundle hotfix `beta-v2.1.8` for GLM Coding Plan auth-header compatibility.
