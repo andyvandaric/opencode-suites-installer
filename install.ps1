@@ -14,8 +14,8 @@ $ErrorActionPreference = "Stop"
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
-$DEFAULT_RELEASE_BRANCH = "beta"
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "feat/buyer-setup-smoke" }
+$DEFAULT_RELEASE_BRANCH = "feat/buyer-setup-smoke"
 $INSTALLER_DEFAULT_PROFILE = "codex-5.3-token-saver"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -930,11 +930,50 @@ function Test-OcsWorks {
     return $true
 }
 
+function Test-OcsPowerShellPolicyBlocked {
+    param([ref]$Diagnostic)
+
+    $Diagnostic.Value = ""
+
+    if ($env:OS -ne "Windows_NT") {
+        return $false
+    }
+
+    $ps1Path = Join-Path $env:USERPROFILE ".bun\bin\ocs.ps1"
+    if (-not (Test-Path $ps1Path)) {
+        return $false
+    }
+
+    $escapedPath = $ps1Path.Replace("'", "''")
+
+    try {
+        $probeOutput = (& powershell -NoProfile -Command "& '$escapedPath' --help" 2>&1 | Out-String).Trim()
+        $probeExit = $LASTEXITCODE
+
+        if ($probeExit -ne 0 -and $probeOutput -match "running scripts is disabled|PSSecurityException|cannot be loaded because running scripts is disabled") {
+            $Diagnostic.Value = $probeOutput
+            return $true
+        }
+    } catch {
+        $message = $_.Exception.Message
+        if ($message -match "running scripts is disabled|PSSecurityException|cannot be loaded because running scripts is disabled") {
+            $Diagnostic.Value = $message
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Test-OpencodeWorks {
     param([int]$TimeoutSeconds = 8)
 
     $resolved = Get-Command opencode -ErrorAction SilentlyContinue
     if (-not $resolved) {
+        return $false
+    }
+
+    if ($resolved.CommandType -notin @("Application", "ExternalScript")) {
         return $false
     }
 
@@ -1117,6 +1156,9 @@ function Install-OcsShimFromBundle {
 
 function Install-OcsShimFromOpencode {
     $opencodeCmd = Get-Command opencode -ErrorAction SilentlyContinue
+    if ($opencodeCmd -and $opencodeCmd.CommandType -notin @("Application", "ExternalScript")) {
+        $opencodeCmd = $null
+    }
     $cmdLine = if ($opencodeCmd) { "opencode %*" } else { "bunx opencode-ai %*" }
     $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
 
@@ -1885,6 +1927,27 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
     Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
     Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
 }
+$policyProbe = ""
+if (Test-OcsPowerShellPolicyBlocked -Diagnostic ([ref]$policyProbe)) {
+    Write-Warning "PowerShell execution policy is blocking ocs.ps1 in regular shells."
+    Write-Output ""
+    Write-Output "   QUICK FIX (no policy change):"
+    Write-Output "   - Use cmd shim commands:"
+    Write-Output "     ocs.cmd setup:profile"
+    Write-Output "     ocs.cmd prefs"
+    Write-Output ""
+    Write-Output "   Optional persistent fix (CurrentUser):"
+    Write-Output "   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
+    Write-Output ""
+    Write-Output "   Session-only alternative:"
+    Write-Output "   powershell -NoProfile -ExecutionPolicy Bypass -Command \"ocs setup:profile\""
+    Write-Output ""
+    if ($policyProbe) {
+        Write-Output "   Detected error snippet:"
+        Write-Output "   $policyProbe"
+        Write-Output ""
+    }
+}
 Write-Output ""
 Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
@@ -1906,9 +1969,18 @@ if (Test-OpencodeWorks) {
 Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
-Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
-Write-Output "   3. Add account via: opencode auth login"
-Write-Output "   4. Running Opencode via web UI:"
+Write-Output "      If Windows PowerShell blocks ocs.ps1, use fallback: ocs.cmd setup:profile"
+Write-Output "   2. Optional PowerShell policy fix (CurrentUser):"
+Write-Output "      Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
+Write-Output "      Session-only alternative: powershell -NoProfile -ExecutionPolicy Bypass -Command \"ocs setup:profile\""
+Write-Output "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+Write-Output "      If blocked, use fallback: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
+Write-Output "   4. Verify Exa MCP: ocs exa check"
+Write-Output "      If blocked, use fallback: ocs.cmd exa check"
+Write-Output "   5. Configure preferences: ocs prefs (optional, advanced users)"
+Write-Output "      If still blocked, use fallback: ocs.cmd prefs"
+Write-Output "   6. Add account via: opencode auth login"
+Write-Output "   7. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
 

@@ -44,8 +44,8 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
-DEFAULT_RELEASE_BRANCH="beta"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-feat/buyer-setup-smoke}"
+DEFAULT_RELEASE_BRANCH="feat/buyer-setup-smoke"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -1417,10 +1417,32 @@ ensure_antigravity_oauth_integrity "${setup_script}"
 
   echo ""
   echo "   Next steps:"
-  echo "   1. Configure profile: ocs setup:profile"
-  echo "   2. Configure preferences: ocs prefs"
-  echo "   3. Verify runtime: opencode auth login"
-  echo "   4. Start coding!"
+  if [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version; then
+    echo "   1. Configure profile: ocs setup:profile"
+    echo "      If you run from Windows PowerShell and see ocs.ps1 blocked, use: ocs.cmd setup:profile"
+    echo "   2. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+    echo "      If blocked in PowerShell, use: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
+    echo "   3. Verify Exa MCP: ocs exa check"
+    echo "      If blocked in PowerShell, use: ocs.cmd exa check"
+    echo "   4. Configure preferences: ocs prefs"
+    echo "      If still blocked in PowerShell, use: ocs.cmd prefs"
+    echo "   5. Verify runtime: opencode auth login"
+    echo "   6. Start coding from this same shell session."
+  elif [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    echo "   1. Configure profile: ocs setup:profile"
+    echo "   2. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+    echo "   3. Verify Exa MCP: ocs exa check"
+    echo "   4. Configure preferences: ocs prefs"
+    echo "   5. Verify runtime: opencode auth login"
+    echo "   6. Run browser UI: opencode web --port 8089"
+  else
+    echo "   1. Configure profile: ocs setup:profile"
+    echo "   2. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+    echo "   3. Verify Exa MCP: ocs exa check"
+    echo "   4. Configure preferences: ocs prefs"
+    echo "   5. Verify runtime: opencode auth login"
+    echo "   6. Start coding!"
+  fi
   echo ""
 }
 
