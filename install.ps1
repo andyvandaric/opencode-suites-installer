@@ -1913,10 +1913,15 @@ if (Test-OpencodeWorks) {
 Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
-Write-Output "   2. Configure preferences: ocs prefs (optional, if needed for advanced users)"
+Write-Output "   2. Setup Exa MCP via ocs command:"
+Write-Output "      - Create Exa account: https://dashboard.exa.ai"
+Write-Output "      - Create API key: https://dashboard.exa.ai/api-keys"
+Write-Output "      - Run: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+Write-Output "      - Verify: ocs exa check"
 Write-Output "   3. Add account via: opencode auth login"
 Write-Output "   4. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
+Write-Output "   5. (Optional advanced) Configure preferences: ocs prefs"
 Write-Output ""
 
 if (Test-Path $TMP_DIR) {
