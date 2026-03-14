@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.7 - 2026-03-14
+
+- Synced installer public release line to `v2.1.7` to align with buyer release `beta-v2.1.7`.
+- Documented GLM comparison rollout support for buyer bundle `2.1.7` (Flash/FlashX lane vs Air lane profiles).
+- Kept beta-channel installer continuity while aligning release metadata and notes with the buyer release cadence.
+
+## 2.1.6 - 2026-03-14
+
+- Updated installer beta defaults to pull buyer source branch `beta` instead of feat/smoke branch defaults.
+- Set `INSTALLER_DEFAULT_PROFILE` default to `codex-5.3-token-saver` in both shell and PowerShell installer flows.
+- Refreshed README examples to use beta installer commands and current pinned version guidance.
+
+## 2.1.5 - 2026-03-14
+
+- Generalized buyer branch naming in installer docs/scripts from version-specific smoke naming to `feat/buyer-setup-smoke` for safer long-term maintenance.
+- Added branch/reference alignment updates so installer guidance remains consistent with buyer branch restructuring.
+
 ## 2.1.4 - 2026-03-13
 
 - Hardened cross-platform installer behavior for WSL/macOS/Windows on `feat/buyer-setup-smoke`, including safer command resolution and reduced false-warning noise in non-interactive shells.
