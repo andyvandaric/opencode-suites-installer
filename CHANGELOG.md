@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.8 - 2026-03-14
+
+- Synced installer release line with buyer bundle hotfix `beta-v2.1.8` for GLM Coding Plan auth-header compatibility.
+- Documented that GLM token-saver installs now rely on `zai-coding-plan` namespace alignment in the buyer bundle.
+
 ## 2.1.7 - 2026-03-14
 
 - Synced installer public release line to `v2.1.7` to align with buyer release `beta-v2.1.7`.
