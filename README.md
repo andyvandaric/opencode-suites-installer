@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.9
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -39,7 +39,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.9"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -67,13 +67,13 @@ If you want deterministic behavior while this branch is still collecting edge-ca
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.9 --branch feat/buyer-setup-smoke
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4 --branch feat/buyer-setup-smoke
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.9"; $env:OCS_RELEASE_BRANCH = "feat/buyer-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.4"; $env:OCS_RELEASE_BRANCH = "feat/buyer-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -92,11 +92,11 @@ ocs setup:profile --help
   - Token-efficient worker lane: `openai/gpt-5.1-codex-mini`
   - Recommended default for most users: strongest balance for planning -> execution flow, efficient token usage, and stable precision once your workflow is already tidy.
   - Best for: daily coding sessions where you want high throughput without sacrificing decision quality.
-- `gpt-5.4-best-perform`
+- `codex-5.4-best-perform`
   - Primary model: `openai/gpt-5.4`
   - Fast lane: `openai/gpt-5.3-codex`
   - Best for: maximum-depth architecture reviews and the toughest debugging cases.
-- `gpt-5.4-token-saver`
+- `codex-5.4-token-saver`
   - Primary model: `openai/gpt-5.4`
   - Token-efficient worker lane: `openai/gpt-5.1-codex-mini`
   - Best for: teams that want GPT-5.4 orchestration with tighter token control.
@@ -185,7 +185,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.9
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.4
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
