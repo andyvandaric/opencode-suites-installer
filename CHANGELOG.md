@@ -11,6 +11,12 @@
 - Introduced strict non-interactive CI mode to avoid waiting on interactive OAuth prompts while still validating OAuth command wiring and config integrity.
 - Synced installer smoke workflow with buyer `v2.1.10` auth/EXA stabilization line.
 
+## 2.1.9 - 2026-03-14
+
+- Synced installer release line with buyer bundle `v2.1.9` so public install commands stay aligned with the published suite artifact.
+- Added installer-side EXA onboarding guidance around `ocs exa setup` and `ocs exa check` in preparation for `v2.1.10` smoke hardening.
+- Updated release narrative continuity so `v2.1.9` is explicitly tracked between `v2.1.8` hotfix and `v2.1.10` smoke/CI rollout.
+
 ## 2.1.8 - 2026-03-14
 
 - Synced installer release line with buyer bundle hotfix `beta-v2.1.8` for GLM Coding Plan auth-header compatibility.
