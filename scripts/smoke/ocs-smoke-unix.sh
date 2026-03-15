@@ -234,6 +234,48 @@ PY
   return 0
 }
 
+check_oauth_runtime_responsive() {
+  local oauth_out
+  local oauth_rc
+
+  oauth_out="$(run_with_timeout "$TIMEOUT_SECONDS" opencode auth login --provider google --method "OAuth with Google (Antigravity)" --print-logs 2>&1)"
+  oauth_rc=$?
+
+  if [ -n "$oauth_out" ] && printf "%s" "$oauth_out" | grep -qi "Unknown provider"; then
+    mark_fail "OAuth runtime check: invalid provider configuration"
+    printf "%s\n" "$oauth_out"
+    return 1
+  fi
+
+  if [ -n "$oauth_out" ] && printf "%s" "$oauth_out" | grep -qi "fetch() URL is invalid"; then
+    mark_fail "OAuth runtime check: provider flow failed with invalid URL"
+    printf "%s\n" "$oauth_out"
+    return 1
+  fi
+
+  if [ -n "$oauth_out" ] && printf "%s" "$oauth_out" | grep -qi "Enter your API key"; then
+    mark_fail "OAuth runtime check: fell back to API key prompt instead of Antigravity OAuth"
+    printf "%s\n" "$oauth_out"
+    return 1
+  fi
+
+  if [ -n "$oauth_out" ] && printf "%s" "$oauth_out" | grep -qiE "Antigravity OAuth|Project ID|OAuth with Google"; then
+    mark_pass "OAuth runtime check: Antigravity prompt flow is reachable"
+    return 0
+  fi
+
+  if [ "$oauth_rc" -eq 124 ]; then
+    mark_fail "OAuth runtime check: command timed out without Antigravity prompt output"
+  else
+    mark_fail "OAuth runtime check: command exited unexpectedly (rc=$oauth_rc)"
+  fi
+
+  if [ -n "$oauth_out" ]; then
+    printf "%s\n" "$oauth_out"
+  fi
+  return 1
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --exa-key)
@@ -303,6 +345,7 @@ run_check "opencode auth login --help" opencode auth login --help
 
 if [ "$CI_MODE" -eq 1 ]; then
   check_oauth_non_interactive
+  check_oauth_runtime_responsive
 elif [ "$PROBE_OAUTH" -eq 1 ]; then
   oauth_out="$(run_with_timeout "$TIMEOUT_SECONDS" opencode auth login --provider google --method "OAuth with Google (Antigravity)" --print-logs 2>&1 || true)"
   if printf "%s" "$oauth_out" | grep -qiE "Antigravity OAuth|Project ID|OAuth with Google"; then
