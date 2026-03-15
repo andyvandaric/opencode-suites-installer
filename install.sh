@@ -80,8 +80,8 @@ run_with_privilege() {
       return $?
     fi
 
-    if [[ -t 0 && -t 1 ]]; then
-      sudo "$@"
+    if [[ -t 1 && -r /dev/tty ]]; then
+      sudo "$@" < /dev/tty
       return $?
     fi
 
@@ -89,8 +89,8 @@ run_with_privilege() {
   fi
 
   if command -v su >/dev/null 2>&1; then
-    if [[ -t 0 && -t 1 ]]; then
-      su -c "$(printf '%q ' "$@")"
+    if [[ -t 1 && -r /dev/tty ]]; then
+      su -c "$(printf '%q ' "$@")" < /dev/tty
       return $?
     fi
 
@@ -371,7 +371,10 @@ ensure_antigravity_oauth_integrity() {
   local plugin_dist_dir="${PLUGIN_DIR}/dist"
   local plugin_entry_primary="${PLUGIN_DIR}/dist/src/plugin.js"
   local plugin_entry_fallback="${PLUGIN_DIR}/dist/index.js"
+  local target_plugin_dir="${config_dir}/node_modules/opencode-multi-auth"
+  local target_plugin_manifest="${target_plugin_dir}/package.json"
   local runtime_references_plugin=0
+  local runtime_plugin_mode="none"
   local needs_repair=0
 
   mkdir -p "${config_dir}" 2>/dev/null || true
@@ -388,15 +391,35 @@ ensure_antigravity_oauth_integrity() {
 
     if grep -Fq "opencode-multi-auth" "${runtime_opencode}"; then
       runtime_references_plugin=1
-      if [[ ! -f "${plugin_manifest}" || ! -f "${plugin_setup_script}" || ! -d "${plugin_dist_dir}" || ( ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ) ]]; then
-        needs_repair=1
+      if grep -Eq 'plugins/opencode-multi-auth|dist/src/plugin\.js|dist/index\.js|file:' "${runtime_opencode}"; then
+        runtime_plugin_mode="local"
+      else
+        runtime_plugin_mode="registry"
+      fi
+
+      if [[ "${runtime_plugin_mode}" == "registry" ]]; then
+        if [[ ! -f "${target_plugin_manifest}" ]]; then
+          needs_repair=1
+        fi
+      else
+        if [[ ! -f "${plugin_manifest}" || ! -f "${plugin_setup_script}" || ! -d "${plugin_dist_dir}" || ( ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ) ]]; then
+          needs_repair=1
+        fi
       fi
     fi
   fi
 
   if (( needs_repair )); then
     info "Repairing final Antigravity OAuth visibility before installer exit..."
-    if [[ -f "${plugin_manifest}" ]]; then
+    if [[ "${runtime_plugin_mode}" == "registry" ]]; then
+      if [[ -f "${config_dir}/package.json" ]]; then
+        info "Refreshing target node_modules for registry plugin fallback..."
+        (
+          cd "${config_dir}" || exit 1
+          install_dependencies_with_retry "${config_dir}"
+        ) >/dev/null 2>&1 || true
+      fi
+    elif [[ -f "${plugin_manifest}" ]]; then
       info "Rebuilding plugin artifacts to restore OAuth methods..."
       (
         cd "${PLUGIN_DIR}" || exit 1
@@ -425,11 +448,15 @@ ensure_antigravity_oauth_integrity() {
   fi
 
   if (( runtime_references_plugin )); then
-    [[ -f "${plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: plugin package is missing at ${plugin_manifest}."
-    [[ -f "${plugin_setup_script}" ]] || error "Final Antigravity OAuth integrity check failed: plugin setup script is missing at ${plugin_setup_script}."
-    [[ -d "${plugin_dist_dir}" ]] || error "Final Antigravity OAuth integrity check failed: plugin build directory is missing at ${plugin_dist_dir}."
-    if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
-      error "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under ${plugin_dist_dir}."
+    if [[ "${runtime_plugin_mode}" == "registry" ]]; then
+      [[ -f "${target_plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: registry plugin package is missing at ${target_plugin_manifest}."
+    else
+      [[ -f "${plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: plugin package is missing at ${plugin_manifest}."
+      [[ -f "${plugin_setup_script}" ]] || error "Final Antigravity OAuth integrity check failed: plugin setup script is missing at ${plugin_setup_script}."
+      [[ -d "${plugin_dist_dir}" ]] || error "Final Antigravity OAuth integrity check failed: plugin build directory is missing at ${plugin_dist_dir}."
+      if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
+        error "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under ${plugin_dist_dir}."
+      fi
     fi
   fi
 
@@ -850,41 +877,65 @@ ensure_shell_path_priority() {
 }
 
 ensure_system_command_links() {
-  local target_dir="/usr/local/bin"
+  local target_dirs=("/usr/local/bin")
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    target_dirs=("/opt/homebrew/bin" "/usr/local/bin")
+  fi
+  local target_dir=""
   local cmd source_path target_path current_target
 
-  for cmd in ocs opencode; do
-    source_path=""
-    if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
-      source_path="${HOME}/.local/bin/${cmd}"
-    elif [[ -x "${HOME}/.bun/bin/${cmd}" ]]; then
-      source_path="${HOME}/.bun/bin/${cmd}"
-    fi
+  for target_dir in "${target_dirs[@]}"; do
+    local linked_any=0
+    local link_failed=0
 
-    [[ -n "${source_path}" ]] || continue
-    target_path="${target_dir}/${cmd}"
+    for cmd in ocs opencode; do
+      source_path=""
+      if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
+        source_path="${HOME}/.local/bin/${cmd}"
+      elif [[ -x "${HOME}/.bun/bin/${cmd}" ]]; then
+        source_path="${HOME}/.bun/bin/${cmd}"
+      fi
 
-    if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
-      continue
-    fi
+      [[ -n "${source_path}" ]] || continue
+      target_path="${target_dir}/${cmd}"
 
-    if [[ -L "${target_path}" ]]; then
-      current_target="$(readlink "${target_path}" 2>/dev/null || true)"
-      if [[ "${current_target}" == "${source_path}" ]]; then
+      if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
         continue
       fi
+
+      if [[ -L "${target_path}" ]]; then
+        current_target="$(readlink "${target_path}" 2>/dev/null || true)"
+        if [[ "${current_target}" == "${source_path}" ]]; then
+          linked_any=1
+          continue
+        fi
+      fi
+
+      if [[ -w "${target_dir}" ]]; then
+        if ln -sfn "${source_path}" "${target_path}"; then
+          linked_any=1
+        else
+          link_failed=1
+        fi
+      elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
+        linked_any=1
+      else
+        link_failed=1
+      fi
+    done
+
+    if (( linked_any )); then
+      hash -r 2>/dev/null || true
+      return 0
     fi
 
-    if [[ -w "${target_dir}" ]]; then
-      ln -sfn "${source_path}" "${target_path}" || true
-    elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
-      :
-    else
-      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
+    if (( link_failed )); then
+      warn "Cannot create command links in ${target_dir}. Keep using shell profile PATH entries."
     fi
   done
 
   hash -r 2>/dev/null || true
+  return 1
 }
 
 is_lock_error() {
@@ -1428,7 +1479,8 @@ ensure_antigravity_oauth_integrity "${setup_script}"
     echo "      If blocked in PowerShell, use: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
     echo "   4. Verify Exa MCP: ocs exa check"
     echo "      If blocked in PowerShell, use: ocs.cmd exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login && export GITHUB_PERSONAL_ACCESS_TOKEN=\"$(gh auth token)\""
+    echo "   5. Keep GitHub MCP green: gh auth login"
+    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
     echo "   6. Verify MCP status: opencode mcp list"
     echo "   7. Configure preferences: ocs prefs"
     echo "      If still blocked in PowerShell, use: ocs.cmd prefs"
@@ -1442,7 +1494,8 @@ ensure_antigravity_oauth_integrity "${setup_script}"
     echo "      c) Create key, then copy it once (store it securely)."
     echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
     echo "   4. Verify Exa MCP: ocs exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login && export GITHUB_PERSONAL_ACCESS_TOKEN=\"$(gh auth token)\""
+    echo "   5. Keep GitHub MCP green: gh auth login"
+    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
     echo "   6. Verify MCP status: opencode mcp list"
     echo "   7. Configure preferences: ocs prefs"
     echo "   8. Verify runtime: opencode auth login"
@@ -1455,7 +1508,8 @@ ensure_antigravity_oauth_integrity "${setup_script}"
     echo "      c) Create key, then copy it once (store it securely)."
     echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
     echo "   4. Verify Exa MCP: ocs exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login && export GITHUB_PERSONAL_ACCESS_TOKEN=\"$(gh auth token)\""
+    echo "   5. Keep GitHub MCP green: gh auth login"
+    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
     echo "   6. Verify MCP status: opencode mcp list"
     echo "   7. Configure preferences: ocs prefs"
     echo "   8. Verify runtime: opencode auth login"

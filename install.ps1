@@ -603,6 +603,17 @@ function Resolve-Token {
         }
 
         $ghToken = gh auth token 2>$null
+        if ((-not $ghToken) -or [string]::IsNullOrWhiteSpace($ghToken)) {
+            $statusWithToken = gh auth status --show-token 2>$null
+            if ($LASTEXITCODE -eq 0 -and $statusWithToken) {
+                $statusText = ($statusWithToken | Out-String)
+                $match = [regex]::Match($statusText, 'Token:\s*([^\s]+)')
+                if ($match.Success) {
+                    $ghToken = $match.Groups[1].Value
+                }
+            }
+        }
+
         if ($LASTEXITCODE -eq 0 -and $ghToken) {
             $trimmed = $ghToken.Trim()
             Write-Host "Auth: using gh CLI token"
@@ -1642,7 +1653,10 @@ function Assert-AntigravityOauthIntegrity {
     $pluginDistDir = Join-Path $PLUGIN_DIR "dist"
     $pluginEntryPrimary = Join-Path $PLUGIN_DIR "dist\src\plugin.js"
     $pluginEntryFallback = Join-Path $PLUGIN_DIR "dist\index.js"
+    $targetPluginDir = Join-Path $configDir "node_modules\opencode-multi-auth"
+    $targetPluginManifest = Join-Path $targetPluginDir "package.json"
     $runtimeReferencesPlugin = $false
+    $runtimePluginMode = "none"
     $needsRepair = $false
 
     if (-not (Test-Path $configDir)) {
@@ -1662,7 +1676,17 @@ function Assert-AntigravityOauthIntegrity {
 
         if ($runtimeContent -match 'opencode-multi-auth') {
             $runtimeReferencesPlugin = $true
-            if ((-not (Test-Path $pluginManifest)) -or (-not (Test-Path $pluginSetupScript)) -or (-not (Test-Path $pluginDistDir)) -or ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback)))) {
+            if ($runtimeContent -match 'plugins/opencode-multi-auth|dist/src/plugin\.js|dist/index\.js|file:') {
+                $runtimePluginMode = "local"
+            } else {
+                $runtimePluginMode = "registry"
+            }
+
+            if ($runtimePluginMode -eq "registry") {
+                if (-not (Test-Path $targetPluginManifest)) {
+                    $needsRepair = $true
+                }
+            } elseif ((-not (Test-Path $pluginManifest)) -or (-not (Test-Path $pluginSetupScript)) -or (-not (Test-Path $pluginDistDir)) -or ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback)))) {
                 $needsRepair = $true
             }
         }
@@ -1670,7 +1694,16 @@ function Assert-AntigravityOauthIntegrity {
 
     if ($needsRepair) {
         Write-Output "Repairing final Antigravity OAuth visibility before installer exit..."
-        if (Test-Path $pluginManifest) {
+        if ($runtimePluginMode -eq "registry") {
+            if (Test-Path (Join-Path $configDir "package.json")) {
+                Write-Output "Refreshing target node_modules for registry plugin fallback..."
+                try {
+                    Invoke-BunInstallWithRetry -Directory $configDir -MaxAttempts 3
+                } catch {
+                    # best effort refresh
+                }
+            }
+        } elseif (Test-Path $pluginManifest) {
             Write-Output "Rebuilding plugin artifacts to restore OAuth methods..."
             try {
                 Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 3
@@ -1723,17 +1756,23 @@ function Assert-AntigravityOauthIntegrity {
     }
 
     if ($runtimeReferencesPlugin) {
-        if (-not (Test-Path $pluginManifest)) {
-            throw "Final Antigravity OAuth integrity check failed: plugin package is missing at $pluginManifest."
-        }
-        if (-not (Test-Path $pluginSetupScript)) {
-            throw "Final Antigravity OAuth integrity check failed: plugin setup script is missing at $pluginSetupScript."
-        }
-        if (-not (Test-Path $pluginDistDir)) {
-            throw "Final Antigravity OAuth integrity check failed: plugin build directory is missing at $pluginDistDir."
-        }
-        if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
-            throw "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under $pluginDistDir."
+        if ($runtimePluginMode -eq "registry") {
+            if (-not (Test-Path $targetPluginManifest)) {
+                throw "Final Antigravity OAuth integrity check failed: registry plugin package is missing at $targetPluginManifest."
+            }
+        } else {
+            if (-not (Test-Path $pluginManifest)) {
+                throw "Final Antigravity OAuth integrity check failed: plugin package is missing at $pluginManifest."
+            }
+            if (-not (Test-Path $pluginSetupScript)) {
+                throw "Final Antigravity OAuth integrity check failed: plugin setup script is missing at $pluginSetupScript."
+            }
+            if (-not (Test-Path $pluginDistDir)) {
+                throw "Final Antigravity OAuth integrity check failed: plugin build directory is missing at $pluginDistDir."
+            }
+            if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
+                throw "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under $pluginDistDir."
+            }
         }
     }
 
@@ -1981,7 +2020,8 @@ Write-Output "   4. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
 Write-Output "      If blocked, use fallback: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
 Write-Output "   5. Verify Exa MCP: ocs exa check"
 Write-Output "      If blocked, use fallback: ocs.cmd exa check"
-Write-Output "   6. Keep GitHub MCP green: gh auth login; `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token"
+Write-Output "   6. Keep GitHub MCP green: gh auth login"
+Write-Output "      Then set token env manually: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = '<YOUR_GITHUB_PAT>'"
 Write-Output "   7. Verify MCP status: opencode mcp list"
 Write-Output "   8. Configure preferences: ocs prefs (optional, advanced users)"
 Write-Output "      If still blocked, use fallback: ocs.cmd prefs"
