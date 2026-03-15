@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -39,7 +39,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -67,13 +67,13 @@ If you want deterministic behavior while this beta branch is still collecting ed
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11 --branch beta
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12 --branch beta
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -215,7 +215,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
@@ -256,7 +256,7 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.11 Private Rollout - Yang Sudah Solid
+## OCS v2.1.12 Private Rollout - Yang Sudah Solid
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
