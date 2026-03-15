@@ -492,6 +492,38 @@ PY
   opencode --version >/dev/null 2>&1 || opencode --help >/dev/null 2>&1
 }
 
+is_wsl_environment() {
+  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
+}
+
+ensure_wsl_stable_opencode_shim() {
+  if ! is_wsl_environment; then
+    return 0
+  fi
+
+  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
+  if [[ ! -x "${direct_bin}" ]]; then
+    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
+    return 0
+  fi
+
+  mkdir -p "${HOME}/.local/bin"
+  cat > "${HOME}/.local/bin/opencode" <<EOF
+#!/usr/bin/env bash
+exec "${direct_bin}" "\$@"
+EOF
+  chmod +x "${HOME}/.local/bin/opencode"
+
+  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  hash -r 2>/dev/null || true
+
+  if opencode_works; then
+    info "WSL stable opencode launcher shim installed."
+  else
+    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
+  fi
+}
+
 install_opencode_shim() {
   local bun_bin="${HOME}/.bun/bin"
   local local_bin="${HOME}/.local/bin"
@@ -1428,8 +1460,16 @@ main() {
       success "Setup completed automatically (headless)."
     else
       warn "Headless setup failed. Falling back to interactive setup..."
-      if ! bun "${setup_script}"; then
-        error "Setup script failed."
+      if has_interactive_tty; then
+        if ! bun "${setup_script}"; then
+          error "Setup script failed."
+        fi
+      elif [[ -r /dev/tty ]]; then
+        if ! bun "${setup_script}" </dev/tty; then
+          error "Setup script failed (interactive retry via /dev/tty)."
+        fi
+      else
+        error "Headless setup failed in a non-interactive session; interactive fallback is unavailable. Rerun in an interactive terminal or export OCS_SKIP_AUTO_SETUP=1 and run setup manually later."
       fi
     fi
     unset OCS_SETUP_INSTALLER_MODE
@@ -1449,6 +1489,7 @@ else
 fi
 
 ensure_shell_path_priority
+ensure_wsl_stable_opencode_shim
 ensure_system_command_links
 
 if opencode_works; then
