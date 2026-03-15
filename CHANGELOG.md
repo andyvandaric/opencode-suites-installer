@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.10 - 2026-03-15
+
+- Added cross-platform smoke validation scripts for post-install checks:
+  - `scripts/smoke/ocs-smoke-unix.sh`
+  - `scripts/smoke/ocs-smoke-windows.ps1`
+  - CI wrappers: `scripts/smoke/ocs-smoke-ci-unix.sh`, `scripts/smoke/ocs-smoke-ci-windows.ps1`
+  - root wrappers: `smoke.sh`, `smoke.ps1`, `smoke-ci.sh`, `smoke-ci.ps1`
+- Added `SMOKE-CHECKS.md` guide with local and no-clone run commands for Windows, WSL, Linux, and macOS.
+- Introduced strict non-interactive CI mode to avoid waiting on interactive OAuth prompts while still validating OAuth command wiring and config integrity.
+- Synced installer smoke workflow with buyer `v2.1.10` auth/EXA stabilization line.
+
 ## 2.1.8 - 2026-03-14
 
 - Synced installer release line with buyer bundle hotfix `beta-v2.1.8` for GLM Coding Plan auth-header compatibility.
