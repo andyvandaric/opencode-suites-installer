@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.12 - 2026-03-15
+
+- Restored cross-platform installer parity after regression in auto-handler paths (macOS, WSL, Linux, Windows).
+- Hardened final OAuth integrity checks to support both local bundled plugin mode and registry fallback mode without false failures.
+- Improved macOS command link provisioning by trying `/opt/homebrew/bin` before `/usr/local/bin`.
+- Updated next-step GitHub MCP guidance to manual PAT export instructions (no inline `gh auth token` evaluation).
+- Synced release bundle version metadata so installed `ocs --version` matches current release line.
+
 ## 2.1.11 - 2026-03-15
 
 - Aligned installer MCP defaults with buyer `v2.1.11` runtime stabilization:
