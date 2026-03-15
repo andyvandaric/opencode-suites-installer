@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.11 - 2026-03-15
+
+- Aligned installer MCP defaults with buyer `v2.1.11` runtime stabilization:
+  - `github` route migrated to local `bunx @modelcontextprotocol/server-github`
+  - `time` route migrated to local `bunx @modelcontextprotocol/server-everything`
+- Added EXA API registration parity guidance (Windows, WSL, Linux, macOS) in installer docs and post-install next steps with explicit dashboard links.
+- Synced installer README pinned examples from `2.1.10` to `2.1.11`.
+- Re-ran full smoke matrix in EXA-required mode (Unix + Windows wrappers): all checks passed.
+
 ## 2.1.10 - 2026-03-15
 
 - Added cross-platform smoke validation scripts for post-install checks:

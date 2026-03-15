@@ -2,6 +2,19 @@
 
 These scripts validate `ocs`, `opencode`, OAuth method visibility, and optional EXA wiring.
 
+## EXA API Key Registration (Same on Windows/WSL/Linux/macOS)
+
+1. Sign in or register at `https://dashboard.exa.ai`
+2. Open API Keys page: `https://dashboard.exa.ai/api-keys`
+3. Create key, copy it once, then store it securely.
+
+Use that key with the same commands on all platforms:
+
+- Setup: `ocs exa setup --api-key <YOUR_EXA_API_KEY>`
+- Verify: `ocs exa check`
+
+If PowerShell policy blocks script shims, run `ocs.cmd exa setup ...` and `ocs.cmd exa check`.
+
 ## Quick Run (Local Clone)
 
 ### Linux / macOS / WSL

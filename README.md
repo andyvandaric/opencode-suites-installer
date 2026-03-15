@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.10
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -39,7 +39,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.10"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -67,13 +67,13 @@ If you want deterministic behavior while this beta branch is still collecting ed
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.10 --branch beta
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11 --branch beta
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.10"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -84,6 +84,36 @@ opencode auth login --help
 opencode web --help
 ocs setup:profile --help
 ```
+
+## EXA API Onboarding (Windows/WSL/Linux/macOS parity)
+
+Use the exact same EXA account flow on every platform:
+
+1. Sign in or create account: `https://dashboard.exa.ai`
+2. Open API key page: `https://dashboard.exa.ai/api-keys`
+3. Create an API key and copy it once (store securely; dashboard will not always show it again).
+
+Then wire and verify in terminal:
+
+- macOS / Linux / WSL:
+  ```bash
+  ocs exa setup --api-key <YOUR_EXA_API_KEY>
+  ocs exa check
+  ```
+- Windows PowerShell 7:
+  ```powershell
+  ocs exa setup --api-key <YOUR_EXA_API_KEY>
+  ocs exa check
+  ```
+  If PowerShell policy blocks script shims, use `ocs.cmd` fallback.
+
+To keep GitHub MCP green on all platforms:
+
+- Authenticate once: `gh auth login`
+- Export token for MCP config:
+  - macOS / Linux / WSL: `export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token)"`
+  - Windows PowerShell: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token`
+- Verify MCP health: `opencode mcp list`
 
 ## Codex Setup Profiles
 
@@ -185,7 +215,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.10
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
