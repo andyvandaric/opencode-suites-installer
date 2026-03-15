@@ -8,7 +8,11 @@ WARN_COUNT=0
 EXA_API_KEY=""
 PROBE_OAUTH=0
 FIX_WSL_SHIM=0
+CI_MODE=0
+REQUIRE_EXA=0
 TIMEOUT_SECONDS=35
+
+SCRIPT_NAME="$(basename "$0")"
 
 if [ -t 1 ]; then
   C_GREEN='\033[32m'
@@ -25,16 +29,18 @@ else
 fi
 
 usage() {
-  cat <<'EOF'
+  cat <<EOF
 OCS Smoke Test (Linux/macOS/WSL)
 
 Usage:
-  bash scripts/smoke/ocs-smoke-unix.sh [options]
+  bash ${SCRIPT_NAME} [options]
 
 Options:
   --exa-key <key>     Run EXA setup/check with provided key
-  --probe-oauth       Probe OAuth prompt automatically (can require TTY)
+  --probe-oauth       Probe OAuth prompt automatically (interactive)
   --fix-wsl-shim      In WSL, create stable ~/.local/bin/opencode shim if needed
+  --ci                Strict non-interactive CI mode (no interactive OAuth probe)
+  --require-exa       Fail if EXA key is not provided
   --timeout <sec>     Command timeout in seconds (default: 35)
   --help              Show this help
 EOF
@@ -44,6 +50,16 @@ log_info() { printf "%b[INFO]%b %s\n" "$C_BLUE" "$C_RESET" "$*"; }
 log_pass() { printf "%b[PASS]%b %s\n" "$C_GREEN" "$C_RESET" "$*"; }
 log_fail() { printf "%b[FAIL]%b %s\n" "$C_RED" "$C_RESET" "$*"; }
 log_warn() { printf "%b[WARN]%b %s\n" "$C_YELLOW" "$C_RESET" "$*"; }
+
+mark_pass() {
+  PASS_COUNT=$((PASS_COUNT + 1))
+  log_pass "$*"
+}
+
+mark_fail() {
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  log_fail "$*"
+}
 
 run_with_timeout() {
   local sec="$1"
@@ -84,13 +100,11 @@ run_check() {
 
   local out
   if out="$(run_with_timeout "$TIMEOUT_SECONDS" "$@" 2>&1)"; then
-    PASS_COUNT=$((PASS_COUNT + 1))
-    log_pass "$title"
+    mark_pass "$title"
     return 0
   fi
 
-  FAIL_COUNT=$((FAIL_COUNT + 1))
-  log_fail "$title"
+  mark_fail "$title"
   if [ -n "$out" ]; then
     printf "%s\n" "$out"
   fi
@@ -120,7 +134,7 @@ fix_wsl_shim_if_needed() {
   fi
 
   if run_with_timeout 15 opencode --help >/dev/null 2>&1; then
-    log_pass "WSL opencode launcher responsive"
+    mark_pass "WSL opencode launcher responsive"
     return 0
   fi
 
@@ -140,10 +154,84 @@ EOF
   hash -r
 
   if run_with_timeout 20 opencode --help >/dev/null 2>&1; then
-    log_pass "WSL stable opencode shim installed"
+    mark_pass "WSL stable opencode shim installed"
   else
     warn_skip "WSL shim installed but opencode still not responsive"
   fi
+}
+
+check_oauth_non_interactive() {
+  local help_out
+  if ! help_out="$(run_with_timeout "$TIMEOUT_SECONDS" opencode auth login --help 2>&1)"; then
+    mark_fail "OAuth non-interactive check: opencode auth login --help"
+    printf "%s\n" "$help_out"
+    return 1
+  fi
+
+  if ! printf "%s" "$help_out" | grep -q -- "--provider"; then
+    mark_fail "OAuth non-interactive check: missing --provider flag"
+    printf "%s\n" "$help_out"
+    return 1
+  fi
+
+  if ! printf "%s" "$help_out" | grep -q -- "--method"; then
+    mark_fail "OAuth non-interactive check: missing --method flag"
+    printf "%s\n" "$help_out"
+    return 1
+  fi
+
+  mark_pass "OAuth non-interactive check: login help exposes provider/method flags"
+
+  local config_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  local config_path="$config_dir/opencode.json"
+
+  if [ ! -f "$config_path" ]; then
+    mark_fail "OAuth non-interactive check: missing config file ($config_path)"
+    return 1
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    local py_out
+    if py_out="$(python3 - "$config_path" <<'PY' 2>&1
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding='utf-8'))
+
+if cfg.get('google_auth', None) is True:
+    raise SystemExit('google_auth must be false for antigravity oauth flow')
+
+plugins = cfg.get('plugin') or []
+matches = [p for p in plugins if isinstance(p, str) and p.startswith('opencode-multi-auth')]
+if len(matches) != 1:
+    raise SystemExit(f'opencode-multi-auth plugin count invalid: {len(matches)}')
+if plugins[-1] != matches[0]:
+    raise SystemExit('opencode-multi-auth must be last plugin entry')
+
+print('OK')
+PY
+      )"; then
+      mark_pass "OAuth non-interactive check: config wiring valid (google_auth + plugin order)"
+    else
+      mark_fail "OAuth non-interactive check: config wiring invalid"
+      printf "%s\n" "$py_out"
+      return 1
+    fi
+  else
+    if grep -q '"google_auth"[[:space:]]*:[[:space:]]*true' "$config_path"; then
+      mark_fail "OAuth non-interactive check: google_auth=true in config"
+      return 1
+    fi
+    if ! grep -q 'opencode-multi-auth' "$config_path"; then
+      mark_fail "OAuth non-interactive check: opencode-multi-auth not found in plugin list"
+      return 1
+    fi
+    mark_pass "OAuth non-interactive check: basic config markers present"
+  fi
+
+  return 0
 }
 
 while [ "$#" -gt 0 ]; do
@@ -158,6 +246,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --fix-wsl-shim)
       FIX_WSL_SHIM=1
+      shift
+      ;;
+    --ci)
+      CI_MODE=1
+      shift
+      ;;
+    --require-exa)
+      REQUIRE_EXA=1
       shift
       ;;
     --timeout)
@@ -176,16 +272,19 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if [ "$CI_MODE" -eq 1 ]; then
+  PROBE_OAUTH=0
+  log_info "CI mode enabled: strict non-interactive checks active"
+fi
+
 log_info "Starting OCS smoke checks (unix)"
 fix_wsl_shim_if_needed
 
 for cmd in bun ocs opencode; do
   if command -v "$cmd" >/dev/null 2>&1; then
-    PASS_COUNT=$((PASS_COUNT + 1))
-    log_pass "command exists: $cmd"
+    mark_pass "command exists: $cmd"
   else
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    log_fail "missing command: $cmd"
+    mark_fail "missing command: $cmd"
   fi
 done
 
@@ -202,14 +301,14 @@ run_check "opencode --help" opencode --help
 run_check "opencode auth --help" opencode auth --help
 run_check "opencode auth login --help" opencode auth login --help
 
-if [ "$PROBE_OAUTH" -eq 1 ]; then
+if [ "$CI_MODE" -eq 1 ]; then
+  check_oauth_non_interactive
+elif [ "$PROBE_OAUTH" -eq 1 ]; then
   oauth_out="$(run_with_timeout "$TIMEOUT_SECONDS" opencode auth login --provider google --method "OAuth with Google (Antigravity)" --print-logs 2>&1 || true)"
   if printf "%s" "$oauth_out" | grep -qiE "Antigravity OAuth|Project ID|OAuth with Google"; then
-    PASS_COUNT=$((PASS_COUNT + 1))
-    log_pass "OAuth probe returned Antigravity prompt signal"
+    mark_pass "OAuth probe returned Antigravity prompt signal"
   else
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    log_fail "OAuth probe did not show expected Antigravity prompt signal"
+    mark_fail "OAuth probe did not show expected Antigravity prompt signal"
     if [ -n "$oauth_out" ]; then
       printf "%s\n" "$oauth_out"
     fi
@@ -221,6 +320,8 @@ fi
 if [ -n "$EXA_API_KEY" ]; then
   run_check "ocs exa setup --persist" ocs exa setup --api-key "$EXA_API_KEY" --persist
   run_check "ocs exa check" ocs exa check
+elif [ "$REQUIRE_EXA" -eq 1 ]; then
+  mark_fail "EXA checks required but no key provided (--exa-key <key>)"
 else
   warn_skip "EXA checks skipped. Use --exa-key <key> to enable."
 fi
