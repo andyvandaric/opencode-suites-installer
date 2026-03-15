@@ -66,14 +66,14 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\smoke-ci.ps1 -RequireExa -ExaApi
 ### Linux / macOS / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/scripts/smoke/ocs-smoke-unix.sh | bash -s -- --exa-key "EXA_KEY_HERE" --probe-oauth
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/scripts/smoke/ocs-smoke-unix.sh | bash -s -- --exa-key "EXA_KEY_HERE" --probe-oauth
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
 $tmp = Join-Path $env:TEMP "ocs-smoke-windows.ps1"
-Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/scripts/smoke/ocs-smoke-windows.ps1" -OutFile $tmp
+Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/scripts/smoke/ocs-smoke-windows.ps1" -OutFile $tmp
 pwsh -NoProfile -ExecutionPolicy Bypass -File $tmp -ExaApiKey "EXA_KEY_HERE" -ProbeOAuth
 ```
 
