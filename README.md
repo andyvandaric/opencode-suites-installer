@@ -4,9 +4,9 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 
 ## Quick Install
 
-### Beta branch (`beta`)
+### Private rollout branch (`feat/buyer-setup-smoke`)
 
-Use this branch for beta rollout and validation before main release.
+Use this branch for private rollout and buyer-branch validation.
 
 This branch currently includes installer hardening for WSL/macOS/Windows edge cases:
 
@@ -19,13 +19,13 @@ This branch currently includes installer hardening for WSL/macOS/Windows edge ca
 #### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash
 ```
 
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.11
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -33,13 +33,13 @@ WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows P
 #### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -60,20 +60,20 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 
 Run installer from your normal user shell. Do not wrap installer command in `sudo`, or profile/config writes may target the wrong home directory.
 
-## Quick Start (Latest Beta Stabilization)
+## Quick Start (Latest Private Stabilization)
 
-If you want deterministic behavior while this beta branch is still collecting edge-case reports, use pinned version + branch:
+If you want deterministic behavior while this private rollout branch is still collecting edge-case reports, use pinned version + branch:
 
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11 --branch beta
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.11 --branch feat/buyer-setup-smoke
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.11"; $env:OCS_RELEASE_BRANCH = "feat/buyer-setup-smoke"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -215,7 +215,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.11
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/feat/buyer-setup-smoke/install.sh | bash -s -- --version 2.1.11
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
@@ -256,7 +256,7 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.3 Beta - Yang Sudah Solid
+## OCS v2.1.11 Private Rollout - Yang Sudah Solid
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
@@ -275,11 +275,11 @@ Install OCS sekarang:
 
 ## Channel Mapping
 
-- Buyer beta source repo: `andyvandaric/andyvand-opencode-config`
-- Default source branch: `beta`
+- Buyer private source repo: `andyvandaric/andyvand-opencode-config`
+- Default source branch: `feat/buyer-setup-smoke`
 - Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
 
 ## Access Behavior
 
-- If your GitHub account has beta access, installer pulls bundle from buyer beta channel.
+- If your GitHub account has private access, installer pulls bundle from buyer `feat/buyer-setup-smoke` channel.
 - If access is missing, installer redirects to WhatsApp purchase CTA.
