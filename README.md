@@ -60,20 +60,20 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercont
 
 Run installer from your normal user shell. Do not wrap installer command in `sudo`, or profile/config writes may target the wrong home directory.
 
-## Quick Start (Latest Beta Stabilization)
+## Quick Start (Latest Main)
 
-If you want deterministic behavior while this beta branch is still collecting edge-case reports, use pinned version + branch:
+Use pinned version + branch from `main` for deterministic installs:
 
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12 --branch beta
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.1.12 --branch main
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; $env:OCS_RELEASE_BRANCH = "beta"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; $env:OCS_RELEASE_BRANCH = "main"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 Post-install smoke checks:

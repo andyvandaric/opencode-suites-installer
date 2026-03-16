@@ -14,8 +14,8 @@ $ErrorActionPreference = "Stop"
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
-$DEFAULT_RELEASE_BRANCH = "beta"
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "main" }
+$DEFAULT_RELEASE_BRANCH = "main"
 $INSTALLER_DEFAULT_PROFILE = "codex-5.3-token-saver"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"

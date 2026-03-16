@@ -44,8 +44,8 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
-DEFAULT_RELEASE_BRANCH="beta"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-main}"
+DEFAULT_RELEASE_BRANCH="main"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
