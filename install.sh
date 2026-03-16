@@ -1460,13 +1460,13 @@ main() {
       success "Setup completed automatically (headless)."
     else
       warn "Headless setup failed. Falling back to interactive setup..."
-      if has_interactive_tty; then
-        if ! bun "${setup_script}"; then
-          error "Setup script failed."
-        fi
-      elif [[ -r /dev/tty ]]; then
+      if [[ -r /dev/tty && -w /dev/tty ]]; then
         if ! bun "${setup_script}" </dev/tty; then
           error "Setup script failed (interactive retry via /dev/tty)."
+        fi
+      elif has_interactive_tty; then
+        if ! bun "${setup_script}"; then
+          error "Setup script failed."
         fi
       else
         error "Headless setup failed in a non-interactive session; interactive fallback is unavailable. Rerun in an interactive terminal or export OCS_SKIP_AUTO_SETUP=1 and run setup manually later."
