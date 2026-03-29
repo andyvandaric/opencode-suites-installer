@@ -1333,6 +1333,37 @@ install_bun() {
   success "Bun $(bun --version) installed successfully"
 }
 
+ensure_bun_in_path() {
+  local candidate_dirs=(
+    "${HOME}/.bun/bin"
+    "${HOME}/.local/bin"
+  )
+
+  for dir in "${candidate_dirs[@]}"; do
+    [[ -d "${dir}" ]] || continue
+    case ":${PATH}:" in
+      *":${dir}:"*) ;;
+      *) PATH="${dir}:${PATH}" ;;
+    esac
+  done
+}
+
+resolve_bun_command() {
+  ensure_bun_in_path
+
+  if command -v bun >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local explicit_bun="${HOME}/.bun/bin/bun"
+  if [[ -x "${explicit_bun}" ]]; then
+    PATH="${HOME}/.bun/bin:${PATH}"
+    return 0
+  fi
+
+  return 1
+}
+
 main() {
   parse_cli_args "$@"
 
@@ -1343,9 +1374,11 @@ main() {
   ensure_shell_dependencies
 
   # Bun version check
-  if ! command -v bun &>/dev/null; then
+  if ! resolve_bun_command; then
     install_bun
   fi
+
+  resolve_bun_command || error "Bun is still unavailable after install/path bootstrap."
 
   local bun_version
   bun_version="$(bun --version)"
