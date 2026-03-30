@@ -4,7 +4,7 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 
 ## Quick Install
 
-### Staging rollout branch (`staging/v2.1.12`)
+### Staging rollout branch (`staging/v2.1.13`)
 
 Use this branch for staging rollout and validation before broad release.
 
@@ -19,13 +19,13 @@ This branch currently includes installer hardening for WSL/macOS/Windows edge ca
 #### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash
 ```
 
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.sh | bash -s -- --version 2.1.12 --branch staging/v2.1.12
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash -s -- --version 2.1.13 --branch staging/v2.1.13
 ```
 
 WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows PowerShell.
@@ -33,13 +33,13 @@ WSL note: run the command inside WSL terminal (`bash`/`zsh`), not from Windows P
 #### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.ps1 | iex"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; $env:OCS_RELEASE_BRANCH = "staging/v2.1.12"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.13"; $env:OCS_RELEASE_BRANCH = "staging/v2.1.13"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -62,18 +62,18 @@ Run installer from your normal user shell. Do not wrap installer command in `sud
 
 ## Quick Start (Latest Staging)
 
-Use pinned version + branch from `staging/v2.1.12` for deterministic staging installs:
+Use pinned version + branch from `staging/v2.1.13` for deterministic staging installs:
 
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.sh | bash -s -- --version 2.1.12 --branch staging/v2.1.12
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash -s -- --version 2.1.13 --branch staging/v2.1.13
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.12"; $env:OCS_RELEASE_BRANCH = "staging/v2.1.12"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.13"; $env:OCS_RELEASE_BRANCH = "staging/v2.1.13"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex'
 ```
 
 Post-install smoke checks:
@@ -215,7 +215,7 @@ ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.conf
 Kalau folder plugin belum ada sama sekali, rerun installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.12/install.sh | bash -s -- --version 2.1.12 --branch staging/v2.1.12
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash -s -- --version 2.1.13 --branch staging/v2.1.13
 ```
 
 3) Paksa login via provider Antigravity dengan PATH prioritas:
@@ -256,7 +256,7 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.12 Private Rollout - Yang Sudah Solid
+## OCS v2.1.13 Private Rollout - Yang Sudah Solid
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
@@ -276,10 +276,10 @@ Install OCS sekarang:
 ## Channel Mapping
 
 - Buyer private source repo: `andyvandaric/andyvand-opencode-config`
-- Default source branch: `staging/v2.1.12`
+- Default source branch: `staging/v2.1.13`
 - Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
 
 ## Access Behavior
 
-- If your GitHub account has staging access, installer pulls bundle from buyer `staging/v2.1.12` channel.
+- If your GitHub account has staging access, installer pulls bundle from buyer `staging/v2.1.13` channel.
 - If access is missing, installer redirects to WhatsApp purchase CTA.

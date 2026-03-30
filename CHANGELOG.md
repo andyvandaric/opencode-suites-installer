@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.13 - 2026-03-30
+
+- Advanced staging default lane to `staging/v2.1.13` in both Bash and PowerShell installers.
+- Updated README staging commands and channel mapping to `v2.1.13` for deterministic staging rollout validation.
+
 ## 2.1.12 - 2026-03-15
 
 - Restored cross-platform installer parity after regression in auto-handler paths (macOS, WSL, Linux, Windows).
