@@ -32,6 +32,36 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.3"; ir
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
 
+## EXA API Onboarding (Windows/WSL/Linux/macOS parity)
+
+Use the same EXA flow on every platform:
+
+1. Create/sign in account: `https://dashboard.exa.ai`
+2. Open API key page: `https://dashboard.exa.ai/api-keys`
+3. Create API key and copy it once (store securely).
+
+Wire and verify from terminal:
+
+- macOS / Linux / WSL:
+  ```bash
+  ocs exa setup --api-key <YOUR_EXA_API_KEY>
+  ocs exa check
+  ```
+- Windows PowerShell 7:
+  ```powershell
+  ocs exa setup --api-key <YOUR_EXA_API_KEY>
+  ocs exa check
+  ```
+  If script policy blocks shims, use `ocs.cmd` fallback.
+
+To keep GitHub MCP healthy:
+
+- Authenticate once: `gh auth login`
+- Export token for MCP config:
+  - macOS / Linux / WSL: `export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token)"`
+  - Windows PowerShell: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token`
+- Verify MCP status: `opencode mcp list`
+
 ## Codex Setup Profiles
 
 - `codex-5.4-best-perform`
