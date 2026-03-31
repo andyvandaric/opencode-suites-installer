@@ -5,6 +5,8 @@
 - Synced installer lane notes to `staging/v2.1.13` with the EXA MCP activation wave from source/buyer.
 - Added explicit EXA onboarding next steps in installer UX (`ocs exa setup`, `ocs exa check`) plus MCP health verification guidance.
 - Updated installer-facing README flow to include GitHub MCP token hygiene and cross-platform EXA parity notes (Windows/WSL/Linux/macOS).
+- Fixed branch resolution defaults so staging installer URLs resolve staging assets by default, while keeping `--branch` / `OCS_RELEASE_BRANCH` / `OCS_FALLBACK_RELEASE_BRANCH` lane-flexible.
+- Fixed PowerShell relaunch fetch path to follow the active installer branch instead of hardcoded `main`.
 
 ## 2.1.12 - 2026-03-16
 
