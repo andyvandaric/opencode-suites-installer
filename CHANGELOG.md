@@ -8,6 +8,7 @@
 - Fixed branch resolution defaults so staging installer URLs resolve staging assets by default, while keeping `--branch` / `OCS_RELEASE_BRANCH` / `OCS_FALLBACK_RELEASE_BRANCH` lane-flexible.
 - Fixed PowerShell relaunch fetch path to follow the active installer branch instead of hardcoded `main`.
 - Fixed EXA MCP config compatibility by standardizing `x-api-key` header mapping to string token format (`{env:EXA_API_KEY}`) for OpenCode schema validation.
+- Updated OpenAI quota check UX to show realtime-only refresh values and forward-looking reset duration formatting (`in Xh Ym`) in staging output.
 
 ## 2.1.12 - 2026-03-16
 
