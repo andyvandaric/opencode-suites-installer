@@ -13,9 +13,32 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.1.13"
+$INFERRED_INSTALLER_SOURCE_BRANCH = ""
+
+$invocationLine = $MyInvocation.Line
+if ($invocationLine -and $invocationLine -match "raw\.githubusercontent\.com/andyvandaric/opencode-suites-installer/(.+?)/install\.ps1") {
+    $INFERRED_INSTALLER_SOURCE_BRANCH = $matches[1]
+}
+
+if (-not $INFERRED_INSTALLER_SOURCE_BRANCH) {
+    try {
+        $currentProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop
+        $parentId = [int]$currentProcess.ParentProcessId
+        if ($parentId -gt 0) {
+            $parentProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $parentId" -ErrorAction SilentlyContinue
+            if ($parentProcess -and $parentProcess.CommandLine -match "raw\.githubusercontent\.com/andyvandaric/opencode-suites-installer/(.+?)/install\.ps1") {
+                $INFERRED_INSTALLER_SOURCE_BRANCH = $matches[1]
+            }
+        }
+    } catch {
+        # best-effort branch inference; keep fallback chain below
+    }
+}
+
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
-$DEFAULT_RELEASE_BRANCH = "beta"
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } elseif ($INFERRED_INSTALLER_SOURCE_BRANCH) { $INFERRED_INSTALLER_SOURCE_BRANCH } else { $INSTALLER_SOURCE_BRANCH_HINT }
+$DEFAULT_RELEASE_BRANCH = if ($env:OCS_FALLBACK_RELEASE_BRANCH) { $env:OCS_FALLBACK_RELEASE_BRANCH } else { $GITHUB_SOURCE_BRANCH }
 $INSTALLER_DEFAULT_PROFILE = "codex-5.3-hybrid"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -89,7 +112,7 @@ function Invoke-PwshRelaunch {
             return $true
         }
 
-        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1"
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/$GITHUB_SOURCE_BRANCH/install.ps1"
         $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
         & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
@@ -468,7 +491,7 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Warning "You do not have OCS beta access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+            Write-Warning "You do not have OCS release access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
             Write-Host "GitHub API response: HTTP $code"
             if (-not $SuppressLandingPage) {
                 Open-LandingPage
@@ -1366,6 +1389,7 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
+Write-Output "Fallback release branch: $DEFAULT_RELEASE_BRANCH"
 if ($REQUESTED_VERSION) {
     Write-Output "Requested version pin: v$REQUESTED_VERSION"
 }
