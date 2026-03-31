@@ -9,6 +9,7 @@
 - Fixed PowerShell relaunch fetch path to follow the active installer branch instead of hardcoded `main`.
 - Fixed EXA MCP config compatibility by standardizing `x-api-key` header mapping to string token format (`{env:EXA_API_KEY}`) for OpenCode schema validation.
 - Updated OpenAI quota check UX to show realtime-only refresh values and forward-looking reset duration formatting (`in Xh Ym`) in staging output.
+- Restored OpenAI multi-account menu takeover on installer deployments by bundling the OpenAI auth wrapper plugin and rewriting runtime plugin specs to loader-safe local `file://` plugin directory URLs.
 
 ## 2.1.12 - 2026-03-16
 
