@@ -44,8 +44,9 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
-DEFAULT_RELEASE_BRANCH="beta"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.1.13"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
+DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-hybrid"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -53,7 +54,7 @@ PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 REQUESTED_VERSION="${OCS_VERSION:-}"
-RESOLVED_SOURCE_BRANCH="${GITHUB_SOURCE_BRANCH}"
+RESOLVED_SOURCE_BRANCH=""
 
 # ─── Cleanup on exit ─────────────────────────────────────────────────────────
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -155,13 +156,59 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: beta)
+  --branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.1.13)
   --help, -h      Show this help
 
 Env alternatives:
   OCS_VERSION         Same as --version
   OCS_RELEASE_BRANCH  Same as --branch
+  OCS_FALLBACK_RELEASE_BRANCH  Override fallback branch for missing requested asset
 EOF
+}
+
+detect_installer_branch_from_parent_commandline() {
+  local cmdline=""
+
+  if [[ -r "/proc/${PPID}/cmdline" ]]; then
+    cmdline="$(tr '\0' ' ' <"/proc/${PPID}/cmdline" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$cmdline" ]] && command -v ps >/dev/null 2>&1; then
+    cmdline="$(ps -o command= -p "${PPID}" 2>/dev/null || true)"
+  fi
+
+  [[ -n "$cmdline" ]] || return 1
+
+  local marker="raw.githubusercontent.com/andyvandaric/opencode-suites-installer/"
+  local tail="${cmdline#*${marker}}"
+  [[ "$tail" != "$cmdline" ]] || return 1
+
+  local branch="${tail%%/install.sh*}"
+  branch="${branch%%\"*}"
+  branch="${branch%%\'*}"
+  branch="${branch%% *}"
+  [[ -n "$branch" ]] || return 1
+
+  printf '%s\n' "$branch"
+}
+
+resolve_release_branch_config() {
+  if [[ -z "${GITHUB_SOURCE_BRANCH}" ]]; then
+    local detected_branch=""
+    detected_branch="$(detect_installer_branch_from_parent_commandline || true)"
+
+    if [[ -n "$detected_branch" ]]; then
+      GITHUB_SOURCE_BRANCH="$detected_branch"
+    else
+      GITHUB_SOURCE_BRANCH="${INSTALLER_SOURCE_BRANCH_HINT}"
+    fi
+  fi
+
+  if [[ -z "${DEFAULT_RELEASE_BRANCH}" ]]; then
+    DEFAULT_RELEASE_BRANCH="${GITHUB_SOURCE_BRANCH}"
+  fi
+
+  RESOLVED_SOURCE_BRANCH="${GITHUB_SOURCE_BRANCH}"
 }
 
 parse_cli_args() {
@@ -1044,7 +1091,7 @@ verify_access() {
   fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
-    warn "You do not have OCS beta access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    warn "You do not have OCS release access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
     if command -v gh >/dev/null 2>&1; then
       warn "If you already have repo access, run: gh auth refresh -h github.com -s repo"
     fi
@@ -1193,6 +1240,7 @@ install_bun() {
 
 main() {
   parse_cli_args "$@"
+  resolve_release_branch_config
 
   echo ""
   echo "🔌 opencode-multi-auth — Plugin Installer"
@@ -1214,6 +1262,7 @@ main() {
   fi
   info "Bun ${bun_version} detected"
   info "Installer source branch: ${GITHUB_SOURCE_BRANCH}"
+  info "Fallback release branch: ${DEFAULT_RELEASE_BRANCH}"
   if [[ -n "${REQUESTED_VERSION}" ]]; then
     info "Requested version pin: v${REQUESTED_VERSION}"
   fi
