@@ -1537,7 +1537,9 @@ if ($isLocalSource) {
         $version = "$($script:ResolvedSourceBranch)"
     }
 
-    Copy-Item -Path "$pluginSource\*" -Destination $PLUGIN_DIR -Recurse -Force
+Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
+Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
+}
 
     if (-not (Test-Path (Join-Path $PLUGIN_DIR "package.json"))) {
         Write-Error "Installation failed: package.json not found in $PLUGIN_DIR after extraction."

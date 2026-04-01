@@ -1333,7 +1333,7 @@ main() {
   tar -xzf "${tar_path}" -C "${extract_tmp}" --strip-components=1
   local plugin_source_dir="${extract_tmp}"
   [[ -f "${plugin_source_dir}/package.json" ]] || error "Invalid plugin bundle: package.json not found"
-  cp -R "${plugin_source_dir}/"* "${PLUGIN_DIR}/"
+  cp -R "${plugin_source_dir}/." "${PLUGIN_DIR}/"
 
   local version
   version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
