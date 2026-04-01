@@ -18,12 +18,13 @@
 - Fixed: 5
 - Changed: 0
 - Docs: 8
-- Chore/Build/CI: 2
+- Chore/Build/CI: 3
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `315913a` chore(installer): sync scripts from opencode-config-suites
 - `99266c8` docs(changelog): note OCS skills sync rollout
 - `9b2c1c4` fix(installer): preserve hidden bundle directories
 - `be9f66d` docs(changelog): note auth menu activation fix
