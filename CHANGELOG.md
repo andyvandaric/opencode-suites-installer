@@ -13,12 +13,13 @@
 - Fixed: 0
 - Changed: 0
 - Docs: 0
-- Chore/Build/CI: 7
+- Chore/Build/CI: 8
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `dbdc078` chore(installer): sync scripts from opencode-config-suites
 - `978efb3` chore(installer): sync scripts from opencode-config-suites
 - `b10cbfa` chore(installer): sync scripts from opencode-config-suites
 - `5ec3fc2` chore(installer): align staging docs and branch hints to v2.1.14
