@@ -1,6 +1,30 @@
 # Changelog
 
+## 2.1.14 - 2026-04-02
+- Synced installer lane to source `staging/v2.1.14` for OpenAI auth/runtime hotfix wave.
+- Preserved runtime API credential safety on reinstall by carrying schema-safe provider option restore behavior into installer-delivered setup flow.
+- Restored non-TTY OpenAI auth operational parity by ensuring fallback prompts include both `Manage accounts` and `Check quotas` actions.
+- Enforced prebuild guardrails in release path so installer-bound bundles fail fast when multi-auth dist/wrapper wiring is stale.
+
+### Automated Release Summary
+<!-- OCS_AUTO_SUMMARY_START -->
+- Commit window: `v2.1.13..HEAD`
+- Added: 0
+- Fixed: 0
+- Changed: 0
+- Docs: 0
+- Chore/Build/CI: 3
+- Other: 0
+<!-- OCS_AUTO_SUMMARY_END -->
+
+### Commit Coverage (auto-generated)
+<!-- OCS_COMMIT_COVERAGE_START -->
+- `a682e07` chore(installer): sync scripts from opencode-config-suites
+- `63f2c05` chore(installer): sync scripts from opencode-config-suites
+- `315913a` chore(installer): sync scripts from opencode-config-suites
+<!-- OCS_COMMIT_COVERAGE_END -->
 ## 2.1.13 - 2026-03-31
+
 - Synced installer lane notes to `staging/v2.1.13` with the EXA MCP activation wave from source/buyer.
 - Added explicit EXA onboarding next steps in installer UX (`ocs exa setup`, `ocs exa check`) plus MCP health verification guidance.
 - Updated installer-facing README flow to include GitHub MCP token hygiene and cross-platform EXA parity notes (Windows/WSL/Linux/macOS).
@@ -11,37 +35,6 @@
 - Restored OpenAI multi-account menu takeover on installer deployments by bundling the OpenAI auth wrapper plugin and rewriting runtime plugin specs to loader-safe local `file://` plugin directory URLs.
 - Fixed installer extraction copy behavior to include hidden bundle directories so `.opencode/skills` is deployed and synced into `~/.config/opencode/skills`.
 
-### Automated Release Summary
-<!-- OCS_AUTO_SUMMARY_START -->
-- Commit window: `v2.1.12..HEAD`
-- Added: 0
-- Fixed: 5
-- Changed: 0
-- Docs: 8
-- Chore/Build/CI: 4
-- Other: 0
-<!-- OCS_AUTO_SUMMARY_END -->
-
-### Commit Coverage (auto-generated)
-<!-- OCS_COMMIT_COVERAGE_START -->
-- `63f2c05` chore(installer): sync scripts from opencode-config-suites
-- `315913a` chore(installer): sync scripts from opencode-config-suites
-- `99266c8` docs(changelog): note OCS skills sync rollout
-- `9b2c1c4` fix(installer): preserve hidden bundle directories
-- `be9f66d` docs(changelog): note auth menu activation fix
-- `3e6746f` docs(changelog): note realtime quota check update
-- `5d29eaa` docs(changelog): note exa schema compatibility update
-- `e2422c0` docs(changelog): document installer lane resolution fix
-- `7cbf454` fix(installer): infer source lane and align fallback branch
-- `0cddd62` docs(readme): pin staging installer quickstart paths
-- `ed66f03` docs(installer): sync exa onboarding and full changelog chain
-- `5c3bc45` chore(installer): sync staging v2.1.13 release wave
-- `8a58433` chore(staging): bump installer defaults to v2.1.13 lane
-- `5ac7376` fix(installer): detect bun reliably in non-interactive shells
-- `93283d7` fix(installer): route staging lane to staging buyer branch
-- `f1b10a1` docs(installer): correct main as default branch in help text
-- `b1e41f5` fix(installer): default main branch for bundle source
-<!-- OCS_COMMIT_COVERAGE_END -->
 ## 2.1.12 - 2026-03-16
 
 - Repacked installer lane with setup self-copy guard parity so bundled plugin sync does not duplicate identical source/target copies.
