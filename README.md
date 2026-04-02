@@ -7,7 +7,7 @@ OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI codin
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.sh | bash
 ```
 
 Run it from your normal user shell. Do not wrap the installer in `sudo`, or profile/config writes may target the wrong home directory.
@@ -15,19 +15,19 @@ Run it from your normal user shell. Do not wrap the installer in `sudo`, or prof
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.sh | bash -s -- --version 2.1.13
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.sh | bash -s -- --version 2.1.14
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.13"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.14"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
@@ -113,7 +113,7 @@ Notes:
   - MSI installer: https://github.com/PowerShell/PowerShell/releases/latest
 - If terminal still opens 5.1, force full path:
   ```powershell
-& "$env:ProgramFiles\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.13/install.ps1 | iex"
+& "$env:ProgramFiles\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex"
   ```
 
 ## Buat yang Nggak Ada Waktu Ngoprek
@@ -124,7 +124,7 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.13 Staging - Yang Sudah Solid
+## OCS v2.1.14 Staging - Yang Sudah Solid
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
@@ -144,7 +144,7 @@ Install OCS sekarang:
 ## Channel Mapping
 
 - Buyer beta source repo: `andyvandaric/andyvand-opencode-config`
-- Default source branch: `staging/v2.1.13`
+- Default source branch: `staging/v2.1.14`
 - Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
 
 ## Access Behavior
