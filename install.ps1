@@ -39,7 +39,7 @@ if (-not $INFERRED_INSTALLER_SOURCE_BRANCH) {
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
 $GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } elseif ($INFERRED_INSTALLER_SOURCE_BRANCH) { $INFERRED_INSTALLER_SOURCE_BRANCH } else { $INSTALLER_SOURCE_BRANCH_HINT }
 $DEFAULT_RELEASE_BRANCH = if ($env:OCS_FALLBACK_RELEASE_BRANCH) { $env:OCS_FALLBACK_RELEASE_BRANCH } else { $GITHUB_SOURCE_BRANCH }
-$INSTALLER_DEFAULT_PROFILE = "codex-5.3-hybrid"
+$INSTALLER_DEFAULT_PROFILE = "codex-5.3-token-saver"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 $PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
