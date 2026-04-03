@@ -32,6 +32,70 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.14"; i
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
 
+## Uninstall (Safe by default)
+
+Default uninstall mode is `safe`: installer/runtime artifacts are removed while account/API-key artifacts are preserved.
+
+### Linux / macOS / WSL
+
+```bash
+bash uninstall.sh --mode safe
+```
+
+Dry-run preview:
+
+```bash
+bash uninstall.sh --mode safe --dry-run
+```
+
+Full purge (destructive):
+
+```bash
+bash uninstall.sh --mode purge
+```
+
+Non-interactive purge requires explicit destructive gate:
+
+```bash
+bash uninstall.sh --mode purge --yes --force-purge
+```
+
+WSL host-boundary cleanup is opt-in only:
+
+```bash
+bash uninstall.sh --mode safe --windows-host-cleanup
+```
+
+Note: in this opt-in path, safe-mode preservation applies to Linux-side credential/account files; documented Windows-host runtime paths may still be removed.
+
+### Windows (PowerShell 7)
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe
+```
+
+Dry-run preview:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -DryRun
+```
+
+Full purge (destructive):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode purge
+```
+
+Non-interactive purge requires explicit destructive gate:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode purge -Yes -ForcePurge
+```
+
+Reference docs:
+- `docs/uninstall-parity-matrix.md`
+- `docs/uninstall-cli-ux.md`
+
 ## EXA API Onboarding (Windows/WSL/Linux/macOS parity)
 
 Use the same EXA flow on every platform:
