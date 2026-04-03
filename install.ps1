@@ -13,9 +13,32 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.1.15"
+$INFERRED_INSTALLER_SOURCE_BRANCH = ""
+
+$invocationLine = $MyInvocation.Line
+if ($invocationLine -and $invocationLine -match "raw\.githubusercontent\.com/andyvandaric/opencode-suites-installer/(.+?)/install\.ps1") {
+    $INFERRED_INSTALLER_SOURCE_BRANCH = $matches[1]
+}
+
+if (-not $INFERRED_INSTALLER_SOURCE_BRANCH) {
+    try {
+        $currentProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop
+        $parentId = [int]$currentProcess.ParentProcessId
+        if ($parentId -gt 0) {
+            $parentProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $parentId" -ErrorAction SilentlyContinue
+            if ($parentProcess -and $parentProcess.CommandLine -match "raw\.githubusercontent\.com/andyvandaric/opencode-suites-installer/(.+?)/install\.ps1") {
+                $INFERRED_INSTALLER_SOURCE_BRANCH = $matches[1]
+            }
+        }
+    } catch {
+        # best-effort branch inference; keep fallback chain below
+    }
+}
+
 $REQUESTED_VERSION = if ($Version) { $Version.TrimStart('v') } elseif ($env:OCS_VERSION) { $env:OCS_VERSION.TrimStart('v') } else { "" }
-$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } else { "beta" }
-$DEFAULT_RELEASE_BRANCH = "beta"
+$GITHUB_SOURCE_BRANCH = if ($SourceBranch) { $SourceBranch } elseif ($env:OCS_RELEASE_BRANCH) { $env:OCS_RELEASE_BRANCH } elseif ($INFERRED_INSTALLER_SOURCE_BRANCH) { $INFERRED_INSTALLER_SOURCE_BRANCH } else { $INSTALLER_SOURCE_BRANCH_HINT }
+$DEFAULT_RELEASE_BRANCH = if ($env:OCS_FALLBACK_RELEASE_BRANCH) { $env:OCS_FALLBACK_RELEASE_BRANCH } else { $GITHUB_SOURCE_BRANCH }
 $INSTALLER_DEFAULT_PROFILE = "codex-5.3-token-saver"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -27,20 +50,6 @@ $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
-
-function Get-EnvOrDefault {
-    param(
-        [string]$Name,
-        [string]$Default
-    )
-
-    $value = [Environment]::GetEnvironmentVariable($Name)
-    if ([string]::IsNullOrWhiteSpace($value)) {
-        return $Default
-    }
-
-    return $value
-}
 
 function Resolve-PwshPath {
     $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -103,7 +112,7 @@ function Invoke-PwshRelaunch {
             return $true
         }
 
-        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1"
+        $relaunchUrl = "https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/$GITHUB_SOURCE_BRANCH/install.ps1"
         $relaunchCommand = '$env:OCS_PWSH_RELAUNCHED=''1''; irm ''' + $relaunchUrl + ''' | iex'
         & $PwshPath -NoProfile -ExecutionPolicy Bypass -Command $relaunchCommand
         if ($LASTEXITCODE -ne $null) {
@@ -313,183 +322,6 @@ function Ensure-WindowsShellEnv {
     }
 }
 
-function Should-RenderInstallerProgress {
-    if ($env:CI -eq "1" -or $env:CI -eq "true") {
-        return $false
-    }
-
-    return [bool]([Environment]::UserInteractive)
-}
-
-function Invoke-ExternalWithProgress {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Activity,
-        [Parameter(Mandatory = $true)]
-        [string]$Executable,
-        [string[]]$Arguments = @(),
-        [string]$WorkingDirectory = "",
-        [string]$LogPath = ""
-    )
-
-    if (-not $LogPath) {
-        $safeName = ($Activity -replace "[^a-zA-Z0-9]+", "-").Trim("-").ToLowerInvariant()
-        if (-not $safeName) {
-            $safeName = "installer-step"
-        }
-
-        if ($TMP_DIR -and -not (Test-Path $TMP_DIR)) {
-            New-Item -ItemType Directory -Force -Path $TMP_DIR | Out-Null
-        }
-
-        $LogPath = Join-Path $TMP_DIR ("$safeName.log")
-    }
-
-    $logDir = Split-Path -Parent $LogPath
-    if ($logDir -and -not (Test-Path $logDir)) {
-        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-    }
-
-    if (Test-Path $LogPath) {
-        Remove-Item -Path $LogPath -Force -ErrorAction SilentlyContinue
-    }
-
-    $runSync = {
-        param(
-            [string]$SyncActivity,
-            [string]$SyncExecutable,
-            [string[]]$SyncArguments,
-            [string]$SyncWorkingDirectory,
-            [string]$SyncLogPath
-        )
-
-        $exitCode = 0
-        Write-Host "[...] $SyncActivity"
-
-        try {
-            if ($SyncWorkingDirectory) {
-                Push-Location $SyncWorkingDirectory
-            }
-
-            & $SyncExecutable @SyncArguments *> $SyncLogPath
-            if ($LASTEXITCODE -is [int]) {
-                $exitCode = $LASTEXITCODE
-            }
-        } catch {
-            $exitCode = 1
-            "ERROR: $($_.Exception.Message)" | Out-File -FilePath $SyncLogPath -Encoding UTF8 -Append
-        } finally {
-            if ($SyncWorkingDirectory) {
-                Pop-Location
-            }
-        }
-
-        $ok = ($exitCode -eq 0)
-        if ($ok) {
-            Write-Host "[OK] $SyncActivity"
-        } else {
-            Write-Warning "$SyncActivity failed (exit $exitCode). Log: $SyncLogPath"
-        }
-
-        return [PSCustomObject]@{
-            Success  = $ok
-            ExitCode = $exitCode
-            LogPath  = $SyncLogPath
-        }
-    }
-
-    if (-not (Get-Command Start-Job -ErrorAction SilentlyContinue)) {
-        return & $runSync $Activity $Executable $Arguments $WorkingDirectory $LogPath
-    }
-
-    try {
-        $job = Start-Job -ScriptBlock {
-        param(
-            [string]$Exe,
-            [string[]]$ArgList,
-            [string]$WorkDir,
-            [string]$OutLog
-        )
-
-        $exitCode = 0
-        try {
-            if ($WorkDir) {
-                Set-Location -Path $WorkDir
-            }
-
-            & $Exe @ArgList *> $OutLog
-            if ($LASTEXITCODE -is [int]) {
-                $exitCode = $LASTEXITCODE
-            }
-        } catch {
-            $exitCode = 1
-            "ERROR: $($_.Exception.Message)" | Out-File -FilePath $OutLog -Encoding UTF8 -Append
-        }
-
-        [PSCustomObject]@{
-            ExitCode = $exitCode
-            LogPath  = $OutLog
-        }
-    } -ArgumentList $Executable, $Arguments, $WorkingDirectory, $LogPath
-    } catch {
-        Write-Warning "Could not start background job for '$Activity'. Falling back to synchronous execution."
-        return & $runSync $Activity $Executable $Arguments $WorkingDirectory $LogPath
-    }
-
-    $renderProgress = Should-RenderInstallerProgress
-    $spinnerFrames = @("|", "/", "-", "\\")
-    $frameIndex = 0
-    $startTime = Get-Date
-    $dotTicks = 0
-
-    while (($job.State -eq "Running") -or ($job.State -eq "NotStarted")) {
-        $elapsedSeconds = [Math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
-
-        if ($renderProgress) {
-            $status = "{0} {1}s" -f $spinnerFrames[$frameIndex], $elapsedSeconds
-            Write-Progress -Activity $Activity -Status $status
-            $frameIndex = ($frameIndex + 1) % $spinnerFrames.Count
-        } else {
-            if (($dotTicks % 20) -eq 0) {
-                Write-Host "[...] $Activity"
-            }
-            $dotTicks++
-        }
-
-        Start-Sleep -Milliseconds 200
-        $job = Get-Job -Id $job.Id
-    }
-
-    if ($renderProgress) {
-        Write-Progress -Activity $Activity -Completed
-    }
-
-    $result = Receive-Job -Job $job -ErrorAction SilentlyContinue | Select-Object -Last 1
-    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-
-    if (-not $result) {
-        Write-Warning "$Activity failed: no process result was returned."
-        return [PSCustomObject]@{
-            Success  = $false
-            ExitCode = 1
-            LogPath  = $LogPath
-        }
-    }
-
-    $success = ([int]$result.ExitCode -eq 0)
-    if ($success) {
-        Write-Host "[OK] $Activity"
-    } else {
-        Write-Warning "$Activity failed (exit $($result.ExitCode)). Log: $($result.LogPath)"
-    }
-
-    return [PSCustomObject]@{
-        Success  = $success
-        ExitCode = [int]$result.ExitCode
-        LogPath  = [string]$result.LogPath
-    }
-}
-
 function Ensure-GitHubCli {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         return $true
@@ -603,17 +435,6 @@ function Resolve-Token {
         }
 
         $ghToken = gh auth token 2>$null
-        if ((-not $ghToken) -or [string]::IsNullOrWhiteSpace($ghToken)) {
-            $statusWithToken = gh auth status --show-token 2>$null
-            if ($LASTEXITCODE -eq 0 -and $statusWithToken) {
-                $statusText = ($statusWithToken | Out-String)
-                $match = [regex]::Match($statusText, 'Token:\s*([^\s]+)')
-                if ($match.Success) {
-                    $ghToken = $match.Groups[1].Value
-                }
-            }
-        }
-
         if ($LASTEXITCODE -eq 0 -and $ghToken) {
             $trimmed = $ghToken.Trim()
             Write-Host "Auth: using gh CLI token"
@@ -670,7 +491,7 @@ function Test-RepoAccess {
         }
 
         if ($code -in @(401, 403, 404)) {
-            Write-Warning "You do not have OCS access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
+            Write-Warning "You do not have OCS release access yet. Repo/branch: $GITHUB_SOURCE_REPO@$GITHUB_SOURCE_BRANCH"
             Write-Host "GitHub API response: HTTP $code"
             if (-not $SuppressLandingPage) {
                 Open-LandingPage
@@ -879,16 +700,14 @@ function Ensure-Bun {
         $bunInstallerPath = Join-Path $TMP_DIR "bun-install.ps1"
         Invoke-WebRequest -Uri "https://bun.sh/install.ps1" -UseBasicParsing -OutFile $bunInstallerPath -ErrorAction Stop
 
-        $runner = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
-        $bunInstallRun = Invoke-ExternalWithProgress `
-            -Activity "Installing Bun runtime" `
-            -Executable $runner `
-            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bunInstallerPath) `
-            -WorkingDirectory $TMP_DIR `
-            -LogPath (Join-Path $TMP_DIR "bun-runtime-install.log")
+        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+            & pwsh -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
+        } else {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
+        }
 
-        if (-not $bunInstallRun.Success) {
-            throw "Bun installer exited with code $($bunInstallRun.ExitCode). See log: $($bunInstallRun.LogPath)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Bun installer exited with code $LASTEXITCODE"
         }
     } catch {
         Write-Error "Failed to auto-install Bun: $($_.Exception.Message)"
@@ -941,86 +760,6 @@ function Test-OcsWorks {
     return $true
 }
 
-function Test-OcsPowerShellPolicyBlocked {
-    param([ref]$Diagnostic)
-
-    $Diagnostic.Value = ""
-
-    if ($env:OS -ne "Windows_NT") {
-        return $false
-    }
-
-    $ps1Path = Join-Path $env:USERPROFILE ".bun\bin\ocs.ps1"
-    if (-not (Test-Path $ps1Path)) {
-        return $false
-    }
-
-    $escapedPath = $ps1Path.Replace("'", "''")
-
-    try {
-        $probeOutput = (& powershell -NoProfile -Command "& '$escapedPath' --help" 2>&1 | Out-String).Trim()
-        $probeExit = $LASTEXITCODE
-
-        if ($probeExit -ne 0 -and $probeOutput -match "running scripts is disabled|PSSecurityException|cannot be loaded because running scripts is disabled") {
-            $Diagnostic.Value = $probeOutput
-            return $true
-        }
-    } catch {
-        $message = $_.Exception.Message
-        if ($message -match "running scripts is disabled|PSSecurityException|cannot be loaded because running scripts is disabled") {
-            $Diagnostic.Value = $message
-            return $true
-        }
-    }
-
-    return $false
-}
-
-function Test-OpencodeWorks {
-    param([int]$TimeoutSeconds = 8)
-
-    $resolved = Get-Command opencode -ErrorAction SilentlyContinue
-    if (-not $resolved) {
-        return $false
-    }
-
-    if ($resolved.CommandType -notin @("Application", "ExternalScript")) {
-        return $false
-    }
-
-    $commandToRun = $resolved.Source
-    $job = Start-Job -ScriptBlock {
-        param([string]$Cmd)
-
-        try {
-            & $Cmd --version *> $null
-            if ($LASTEXITCODE -eq 0) {
-                return $true
-            }
-
-            & $Cmd --help *> $null
-            if ($LASTEXITCODE -eq 0) {
-                return $true
-            }
-        } catch {
-            return $false
-        }
-
-        return $false
-    } -ArgumentList $commandToRun
-
-    $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
-    if (-not $completed) {
-        Stop-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-        return $false
-    }
-
-    $result = Receive-Job -Job $job -ErrorAction SilentlyContinue
-    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-    return [bool]($result -contains $true)
-}
-
 function Install-OcsFromPath {
     param([string]$SourcePath)
 
@@ -1038,18 +777,12 @@ function Install-OcsFromPath {
         $lastOutput = ""
         try {
             Write-Output "Attempting ocs install from local path (attempt $attempt/$maxAttempts)..."
-            $bunInstall = Invoke-ExternalWithProgress `
-                -Activity "Installing ocs globally via bun (attempt $attempt/$maxAttempts)" `
-                -Executable "bun" `
-                -Arguments @("install", "-g", $resolvedSource) `
-                -WorkingDirectory $resolvedSource `
-                -LogPath (Join-Path $TMP_DIR ("ocs-bun-global-attempt-$attempt.log"))
-            if ($bunInstall.Success) {
-                return $true
+            $bunOutput = & bun install -g $resolvedSource 2>&1
+            if ($bunOutput) {
+                $lastOutput = ($bunOutput | Out-String).Trim()
             }
-
-            if (Test-Path $bunInstall.LogPath) {
-                $lastOutput = (Get-Content -Raw -Path $bunInstall.LogPath -ErrorAction SilentlyContinue).Trim()
+            if ($LASTEXITCODE -eq 0) {
+                return $true
             }
         } catch {
             $lastOutput = $_.Exception.Message
@@ -1071,13 +804,8 @@ function Install-OcsFromPath {
     if (Get-Command npm -ErrorAction SilentlyContinue) {
         try {
             Write-Warning "bun global install failed, trying npm global install..."
-            $npmInstall = Invoke-ExternalWithProgress `
-                -Activity "Installing ocs globally via npm fallback" `
-                -Executable "npm" `
-                -Arguments @("install", "-g", $resolvedSource) `
-                -WorkingDirectory $resolvedSource `
-                -LogPath (Join-Path $TMP_DIR "ocs-npm-global-fallback.log")
-            if ($npmInstall.Success) {
+            & npm install -g $resolvedSource *> $null
+            if ($LASTEXITCODE -eq 0) {
                 return $true
             }
         } catch {
@@ -1088,13 +816,8 @@ function Install-OcsFromPath {
     if (Get-Command pnpm -ErrorAction SilentlyContinue) {
         try {
             Write-Warning "npm fallback unavailable/failed, trying pnpm global install..."
-            $pnpmInstall = Invoke-ExternalWithProgress `
-                -Activity "Installing ocs globally via pnpm fallback" `
-                -Executable "pnpm" `
-                -Arguments @("add", "-g", $resolvedSource) `
-                -WorkingDirectory $resolvedSource `
-                -LogPath (Join-Path $TMP_DIR "ocs-pnpm-global-fallback.log")
-            if ($pnpmInstall.Success) {
+            & pnpm add -g $resolvedSource *> $null
+            if ($LASTEXITCODE -eq 0) {
                 return $true
             }
         } catch {
@@ -1167,9 +890,6 @@ function Install-OcsShimFromBundle {
 
 function Install-OcsShimFromOpencode {
     $opencodeCmd = Get-Command opencode -ErrorAction SilentlyContinue
-    if ($opencodeCmd -and $opencodeCmd.CommandType -notin @("Application", "ExternalScript")) {
-        $opencodeCmd = $null
-    }
     $cmdLine = if ($opencodeCmd) { "opencode %*" } else { "bunx opencode-ai %*" }
     $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
 
@@ -1216,49 +936,7 @@ function Install-OpencodeShimFromBun {
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
-    if (Test-OpencodeWorks) {
-        return $true
-    }
-
-    Remove-Item -Path $cmdPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -Path $ps1Path -Force -ErrorAction SilentlyContinue
-    Write-Warning "Generated opencode bunx shim failed health check and was removed."
-    return $false
-}
-
-function Install-OpencodeBunGlobal {
-    if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
-        return $false
-    }
-
-    try {
-        Write-Output "Installing opencode-ai via bun global package..."
-        $opencodeInstall = Invoke-ExternalWithProgress `
-            -Activity "Installing opencode-ai globally via bun" `
-            -Executable "bun" `
-            -Arguments @("add", "-g", "opencode-ai@latest") `
-            -LogPath (Join-Path $TMP_DIR "opencode-bun-global.log")
-        if (-not $opencodeInstall.Success) {
-            return $false
-        }
-    } catch {
-        return $false
-    }
-
-    Ensure-OpencodePathEntries
-    return (Test-OpencodeWorks)
-}
-
-function Ensure-OpencodeCommand {
-    if (Test-OpencodeWorks) {
-        return $true
-    }
-
-    if (Install-OpencodeBunGlobal) {
-        return $true
-    }
-
-    return (Install-OpencodeShimFromBun)
+    return (Test-Path $cmdPath)
 }
 
 function Install-OcsFromPrivateRepo {
@@ -1269,10 +947,6 @@ function Install-OcsFromPrivateRepo {
     }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         return $false
-    }
-
-    if (-not (Test-Path $TMP_DIR)) {
-        New-Item -ItemType Directory -Force $TMP_DIR | Out-Null
     }
 
     $suitePath = Join-Path $TMP_DIR "opencode-config-suites"
@@ -1314,7 +988,12 @@ function Ensure-OcsCommand {
         return $true
     }
 
-    $enableGlobalOcsInstall = ((Get-EnvOrDefault -Name "OCS_ENABLE_OCS_GLOBAL_INSTALL" -Default "1") -eq "1")
+    if (Install-OcsShimFromOpencode) {
+        Write-Output "ocs shim via opencode install and verification passed."
+        return $true
+    }
+
+    $enableGlobalOcsInstall = (($env:OCS_ENABLE_OCS_GLOBAL_INSTALL ?? "1") -eq "1")
     if (-not $enableGlobalOcsInstall) {
         Write-Warning "Skipping global ocs installation fallback (set OCS_ENABLE_OCS_GLOBAL_INSTALL=1 to enable)."
         return $false
@@ -1472,15 +1151,16 @@ function Invoke-BunInstallWithRetry {
 
     $resolvedDirectory = (Resolve-Path $Directory).Path
 
-    $finalMessage = "unknown error"
+    Push-Location $resolvedDirectory
+    try {
+        $finalMessage = "unknown error"
 
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $lastOutput = ""
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            $lastOutput = ""
 
             if ($attempt -eq 3) {
                 Write-Warning "Attempt $attempt/${MaxAttempts}: cleaning local node_modules before retry..."
-                $nodeModulesPath = Join-Path $resolvedDirectory "node_modules"
-                Remove-Item -Path $nodeModulesPath -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item -Path ".\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
             }
 
             if ($attempt -eq 4) {
@@ -1498,23 +1178,17 @@ function Invoke-BunInstallWithRetry {
                 $env:BUN_CONFIG_REGISTRY = "https://registry.npmjs.org/"
             }
 
-        try {
-            $bunInstall = Invoke-ExternalWithProgress `
-                -Activity "Installing plugin dependencies (attempt $attempt/$MaxAttempts)" `
-                -Executable "bun" `
-                -Arguments $args `
-                -WorkingDirectory $resolvedDirectory `
-                -LogPath (Join-Path $TMP_DIR ("bun-install-attempt-$attempt.log"))
-            if ($bunInstall.Success) {
-                return
+            try {
+                $bunOutput = & bun @args 2>&1
+                if ($bunOutput) {
+                    $lastOutput = ($bunOutput | Out-String).Trim()
+                }
+                if ($LASTEXITCODE -eq 0) {
+                    return
+                }
+            } catch {
+                $lastOutput = $_.Exception.Message
             }
-
-            if (Test-Path $bunInstall.LogPath) {
-                $lastOutput = (Get-Content -Raw -Path $bunInstall.LogPath -ErrorAction SilentlyContinue).Trim()
-            }
-        } catch {
-            $lastOutput = $_.Exception.Message
-        }
 
             $message = ""
             if ($lastOutput) {
@@ -1532,46 +1206,49 @@ function Invoke-BunInstallWithRetry {
                 Write-Warning "bun install attempt $attempt/${MaxAttempts} failed with unknown error."
             }
 
-        if ($message) {
-            $finalMessage = $message
-        }
-
-        if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
-            Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
-            Ensure-WindowsShellEnv
-            Start-Sleep -Milliseconds (700 * $attempt)
-            continue
-        }
-
-        if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
-            Write-Warning "Detected likely file-lock issue. Applying lock handler..."
-            Stop-WindowsLockHolders -PathHint $resolvedDirectory
-            Start-Sleep -Milliseconds (700 * $attempt)
-            continue
-        }
-
-        if (($attempt -lt $MaxAttempts) -and (Test-TransientInstallError -Message $message)) {
-            Write-Warning "Detected likely network/registry issue. Retrying with stronger network settings..."
-            if ($attempt -ge 3) {
-                Invoke-BunCachePurge
+            if ($message) {
+                $finalMessage = $message
             }
-            if (-not (Test-BunRegistryReachable)) {
-                Write-Warning "Registry check failed for https://registry.npmjs.org/@types%2Fnode (network/proxy/DNS/TLS issue likely)."
+
+            if (($attempt -lt $MaxAttempts) -and ($message -match "cmd\.exe|ComSpec|COMSPEC|uv_spawn|spawn")) {
+                Write-Warning "Detected shell spawn issue. Re-applying Windows shell environment fixes..."
+                Ensure-WindowsShellEnv
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
             }
-            Ensure-WindowsShellEnv
-            Start-Sleep -Milliseconds (1500 * $attempt)
-            continue
+
+            if (($attempt -lt $MaxAttempts) -and (Test-LockRelatedError -Message $message)) {
+                Write-Warning "Detected likely file-lock issue. Applying lock handler..."
+                Stop-WindowsLockHolders -PathHint $resolvedDirectory
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
+            }
+
+            if (($attempt -lt $MaxAttempts) -and (Test-TransientInstallError -Message $message)) {
+                Write-Warning "Detected likely network/registry issue. Retrying with stronger network settings..."
+                if ($attempt -ge 3) {
+                    Invoke-BunCachePurge
+                }
+                if (-not (Test-BunRegistryReachable)) {
+                    Write-Warning "Registry check failed for https://registry.npmjs.org/@types%2Fnode (network/proxy/DNS/TLS issue likely)."
+                }
+                Ensure-WindowsShellEnv
+                Start-Sleep -Milliseconds (1500 * $attempt)
+                continue
+            }
+
+            if ($attempt -lt $MaxAttempts) {
+                Start-Sleep -Milliseconds (700 * $attempt)
+                continue
+            }
+
+            break
         }
 
-        if ($attempt -lt $MaxAttempts) {
-            Start-Sleep -Milliseconds (700 * $attempt)
-            continue
-        }
-
-        break
+        throw "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
+    } finally {
+        Pop-Location
     }
-
-    throw "bun install failed after $MaxAttempts attempts. Last error: $finalMessage"
 }
 
 function Invoke-AutoSetup {
@@ -1648,15 +1325,6 @@ function Assert-AntigravityOauthIntegrity {
     $runtimeOpencode = Join-Path $configDir "opencode.json"
     $runtimeAntigravity = Join-Path $configDir "antigravity.json"
     $templateAntigravity = Join-Path $PLUGIN_DIR "backups\antigravity.json.template"
-    $pluginManifest = Join-Path $PLUGIN_DIR "package.json"
-    $pluginSetupScript = Join-Path $PLUGIN_DIR "scripts\setup.js"
-    $pluginDistDir = Join-Path $PLUGIN_DIR "dist"
-    $pluginEntryPrimary = Join-Path $PLUGIN_DIR "dist\src\plugin.js"
-    $pluginEntryFallback = Join-Path $PLUGIN_DIR "dist\index.js"
-    $targetPluginDir = Join-Path $configDir "node_modules\opencode-multi-auth"
-    $targetPluginManifest = Join-Path $targetPluginDir "package.json"
-    $runtimeReferencesPlugin = $false
-    $runtimePluginMode = "none"
     $needsRepair = $false
 
     if (-not (Test-Path $configDir)) {
@@ -1673,62 +1341,14 @@ function Assert-AntigravityOauthIntegrity {
         if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
             $needsRepair = $true
         }
-
-        if ($runtimeContent -match 'opencode-multi-auth') {
-            $runtimeReferencesPlugin = $true
-            if ($runtimeContent -match 'plugins/opencode-multi-auth|dist/src/plugin\.js|dist/index\.js|file:') {
-                $runtimePluginMode = "local"
-            } else {
-                $runtimePluginMode = "registry"
-            }
-
-            if ($runtimePluginMode -eq "registry") {
-                if (-not (Test-Path $targetPluginManifest)) {
-                    $needsRepair = $true
-                }
-            } elseif ((-not (Test-Path $pluginManifest)) -or (-not (Test-Path $pluginSetupScript)) -or (-not (Test-Path $pluginDistDir)) -or ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback)))) {
-                $needsRepair = $true
-            }
-        }
     }
 
     if ($needsRepair) {
         Write-Output "Repairing final Antigravity OAuth visibility before installer exit..."
-        if ($runtimePluginMode -eq "registry") {
-            if (Test-Path (Join-Path $configDir "package.json")) {
-                Write-Output "Refreshing target node_modules for registry plugin fallback..."
-                try {
-                    Invoke-BunInstallWithRetry -Directory $configDir -MaxAttempts 3
-                } catch {
-                    # best effort refresh
-                }
-            }
-        } elseif (Test-Path $pluginManifest) {
-            Write-Output "Rebuilding plugin artifacts to restore OAuth methods..."
-            try {
-                Invoke-BunInstallWithRetry -Directory $PLUGIN_DIR -MaxAttempts 3
-                if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
-                    Push-Location $PLUGIN_DIR
-                    try {
-                        & bun run build *> $null
-                        if ($LASTEXITCODE -ne 0) {
-                            & npm run build *> $null
-                        }
-                    } finally {
-                        Pop-Location
-                    }
-                }
-            } catch {
-                # best effort rebuild
-            }
-        }
-
         $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
         $env:OCS_SETUP_INSTALLER_MODE = "1"
         try {
-            if (Test-Path $pluginSetupScript) {
-                & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
-            }
+            & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
         } catch {
             # best effort repair
         } finally {
@@ -1755,27 +1375,6 @@ function Assert-AntigravityOauthIntegrity {
         }
     }
 
-    if ($runtimeReferencesPlugin) {
-        if ($runtimePluginMode -eq "registry") {
-            if (-not (Test-Path $targetPluginManifest)) {
-                throw "Final Antigravity OAuth integrity check failed: registry plugin package is missing at $targetPluginManifest."
-            }
-        } else {
-            if (-not (Test-Path $pluginManifest)) {
-                throw "Final Antigravity OAuth integrity check failed: plugin package is missing at $pluginManifest."
-            }
-            if (-not (Test-Path $pluginSetupScript)) {
-                throw "Final Antigravity OAuth integrity check failed: plugin setup script is missing at $pluginSetupScript."
-            }
-            if (-not (Test-Path $pluginDistDir)) {
-                throw "Final Antigravity OAuth integrity check failed: plugin build directory is missing at $pluginDistDir."
-            }
-            if ((-not (Test-Path $pluginEntryPrimary)) -and (-not (Test-Path $pluginEntryFallback))) {
-                throw "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under $pluginDistDir."
-            }
-        }
-    }
-
     Write-Output "Antigravity OAuth integrity check passed."
 }
 
@@ -1790,12 +1389,13 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
+Write-Output "Fallback release branch: $DEFAULT_RELEASE_BRANCH"
 if ($REQUESTED_VERSION) {
     Write-Output "Requested version pin: v$REQUESTED_VERSION"
 }
 
 $rootDir = (Resolve-Path ".").Path
-$forceLocalSource = ((Get-EnvOrDefault -Name "OCS_FORCE_LOCAL_SOURCE" -Default "0") -eq "1")
+$forceLocalSource = (($env:OCS_FORCE_LOCAL_SOURCE ?? "0") -eq "1")
 $isLocalSource = $false
 $hasLocalSourceMarkers =
     (Test-Path (Join-Path $rootDir "plugins\opencode-multi-auth\package.json")) -and
@@ -1937,7 +1537,9 @@ if ($isLocalSource) {
         $version = "$($script:ResolvedSourceBranch)"
     }
 
-    Copy-Item -Path "$pluginSource\*" -Destination $PLUGIN_DIR -Recurse -Force
+Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
+Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
+}
 
     if (-not (Test-Path (Join-Path $PLUGIN_DIR "package.json"))) {
         Write-Error "Installation failed: package.json not found in $PLUGIN_DIR after extraction."
@@ -1955,6 +1557,10 @@ Invoke-AutoSetup -IsLocalSource:$isLocalSource
 Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
 Ensure-OpencodePathEntries
 
+if (Test-Path $TMP_DIR) {
+    Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue
+}
+
 Write-Output ""
 Write-Output "opencode-multi-auth $version installed to $PLUGIN_DIR"
 Write-Output "Bundle source branch used: $($script:ResolvedSourceBranch)"
@@ -1966,70 +1572,35 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
     Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
     Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
 }
-$policyProbe = ""
-if (Test-OcsPowerShellPolicyBlocked -Diagnostic ([ref]$policyProbe)) {
-    Write-Warning "PowerShell execution policy is blocking ocs.ps1 in regular shells."
-    Write-Output ""
-    Write-Output "   QUICK FIX (no policy change):"
-    Write-Output "   - Use cmd shim commands:"
-    Write-Output "     ocs.cmd setup:profile"
-    Write-Output "     ocs.cmd prefs"
-    Write-Output ""
-    Write-Output "   Optional persistent fix (CurrentUser):"
-    Write-Output "   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
-    Write-Output ""
-    Write-Output "   Session-only alternative:"
-    Write-Output "   powershell -NoProfile -ExecutionPolicy Bypass -Command \"ocs setup:profile\""
-    Write-Output ""
-    if ($policyProbe) {
-        Write-Output "   Detected error snippet:"
-        Write-Output "   $policyProbe"
-        Write-Output ""
-    }
-}
 Write-Output ""
 Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
-if (Test-OpencodeWorks) {
-    Write-Output "opencode verification passed."
-} elseif ((Get-EnvOrDefault -Name "OCS_ENABLE_OPENCODE_AUTO_RECOVERY" -Default "1") -eq "1") {
-    Write-Warning "opencode command not healthy. Auto-recovery enabled; attempting repair..."
-    if (Ensure-OpencodeCommand) {
-        Write-Output "opencode verification passed after auto-recovery."
-    } else {
-        Write-Warning "opencode command is still unavailable. Ensure bunx can run opencode-ai."
-        Write-Output "Manual check: opencode --help"
+$opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+if (-not $opencodeCommand) {
+    if (Install-OpencodeShimFromBun) {
+        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
     }
+}
+
+if ($opencodeCommand) {
+    Write-Output "opencode verification passed."
 } else {
-    Write-Warning "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
-    Write-Output "Manual check: opencode --help"
-    Write-Output "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
+    Write-Warning "opencode command not found. Skipping heavy auto-recovery to avoid long waits."
+    Write-Output "Manual check: opencode --version"
 }
 Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
-Write-Output "      If Windows PowerShell blocks ocs.ps1, use fallback: ocs.cmd setup:profile"
-Write-Output "   2. Optional PowerShell policy fix (CurrentUser):"
-Write-Output "      Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
-Write-Output "      Session-only alternative: powershell -NoProfile -ExecutionPolicy Bypass -Command \"ocs setup:profile\""
-Write-Output "   3. Create EXA API key (same flow on Windows/WSL/Linux/macOS):"
-Write-Output "      a) Sign in: https://dashboard.exa.ai"
-Write-Output "      b) Open API Keys: https://dashboard.exa.ai/api-keys"
-Write-Output "      c) Create key, then copy it once (store it securely)."
-Write-Output "   4. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
-Write-Output "      If blocked, use fallback: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
-Write-Output "   5. Verify Exa MCP: ocs exa check"
-Write-Output "      If blocked, use fallback: ocs.cmd exa check"
-Write-Output "   6. Keep GitHub MCP green: gh auth login"
-Write-Output "      Then set token env manually: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = '<YOUR_GITHUB_PAT>'"
-Write-Output "   7. Verify MCP status: opencode mcp list"
-Write-Output "   8. Configure preferences: ocs prefs (optional, advanced users)"
-Write-Output "      If still blocked, use fallback: ocs.cmd prefs"
-Write-Output "   9. Add account via: opencode auth login"
-Write-Output "   10. Running Opencode via web UI:"
+Write-Output "   2. Create EXA API key: https://dashboard.exa.ai/api-keys"
+Write-Output "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+Write-Output "      If script policy blocks, use: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
+Write-Output "   4. Verify Exa MCP: ocs exa check"
+Write-Output "      If script policy blocks, use: ocs.cmd exa check"
+Write-Output "   5. Keep GitHub MCP green: gh auth login"
+Write-Output "      Then set token env: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token"
+Write-Output "   6. Verify MCP status: opencode mcp list"
+Write-Output "   7. Configure preferences: ocs prefs"
+Write-Output "   8. Add account via: opencode auth login"
+Write-Output "   9. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
-
-if (Test-Path $TMP_DIR) {
-    Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue
-}

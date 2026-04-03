@@ -44,8 +44,9 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-beta}"
-DEFAULT_RELEASE_BRANCH="beta"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.1.15"
+GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
+DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
@@ -53,7 +54,7 @@ PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 REQUESTED_VERSION="${OCS_VERSION:-}"
-RESOLVED_SOURCE_BRANCH="${GITHUB_SOURCE_BRANCH}"
+RESOLVED_SOURCE_BRANCH=""
 
 # ─── Cleanup on exit ─────────────────────────────────────────────────────────
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -80,8 +81,8 @@ run_with_privilege() {
       return $?
     fi
 
-    if [[ -t 1 && -r /dev/tty ]]; then
-      sudo "$@" < /dev/tty
+    if [[ -t 0 && -t 1 ]]; then
+      sudo "$@"
       return $?
     fi
 
@@ -89,8 +90,8 @@ run_with_privilege() {
   fi
 
   if command -v su >/dev/null 2>&1; then
-    if [[ -t 1 && -r /dev/tty ]]; then
-      su -c "$(printf '%q ' "$@")" < /dev/tty
+    if [[ -t 0 && -t 1 ]]; then
+      su -c "$(printf '%q ' "$@")"
       return $?
     fi
 
@@ -155,13 +156,59 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: beta)
+  --branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.1.15)
   --help, -h      Show this help
 
 Env alternatives:
   OCS_VERSION         Same as --version
   OCS_RELEASE_BRANCH  Same as --branch
+  OCS_FALLBACK_RELEASE_BRANCH  Override fallback branch for missing requested asset
 EOF
+}
+
+detect_installer_branch_from_parent_commandline() {
+  local cmdline=""
+
+  if [[ -r "/proc/${PPID}/cmdline" ]]; then
+    cmdline="$(tr '\0' ' ' <"/proc/${PPID}/cmdline" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$cmdline" ]] && command -v ps >/dev/null 2>&1; then
+    cmdline="$(ps -o command= -p "${PPID}" 2>/dev/null || true)"
+  fi
+
+  [[ -n "$cmdline" ]] || return 1
+
+  local marker="raw.githubusercontent.com/andyvandaric/opencode-suites-installer/"
+  local tail="${cmdline#*${marker}}"
+  [[ "$tail" != "$cmdline" ]] || return 1
+
+  local branch="${tail%%/install.sh*}"
+  branch="${branch%%\"*}"
+  branch="${branch%%\'*}"
+  branch="${branch%% *}"
+  [[ -n "$branch" ]] || return 1
+
+  printf '%s\n' "$branch"
+}
+
+resolve_release_branch_config() {
+  if [[ -z "${GITHUB_SOURCE_BRANCH}" ]]; then
+    local detected_branch=""
+    detected_branch="$(detect_installer_branch_from_parent_commandline || true)"
+
+    if [[ -n "$detected_branch" ]]; then
+      GITHUB_SOURCE_BRANCH="$detected_branch"
+    else
+      GITHUB_SOURCE_BRANCH="${INSTALLER_SOURCE_BRANCH_HINT}"
+    fi
+  fi
+
+  if [[ -z "${DEFAULT_RELEASE_BRANCH}" ]]; then
+    DEFAULT_RELEASE_BRANCH="${GITHUB_SOURCE_BRANCH}"
+  fi
+
+  RESOLVED_SOURCE_BRANCH="${GITHUB_SOURCE_BRANCH}"
 }
 
 parse_cli_args() {
@@ -360,90 +407,12 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
-normalize_runtime_plugin_paths() {
-  local config_dir="${HOME}/.config/opencode"
-  local runtime_opencode="${config_dir}/opencode.json"
-
-  [[ -f "${runtime_opencode}" ]] || return 0
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 unavailable; skipping runtime plugin path normalization."
-    return 0
-  fi
-
-  if python3 - "${runtime_opencode}" "${PLUGIN_DIR}" <<'PY'
-import json
-import pathlib
-import sys
-from urllib.parse import quote
-
-runtime_path = pathlib.Path(sys.argv[1])
-plugin_dir = pathlib.Path(sys.argv[2]).resolve()
-
-raw = runtime_path.read_text(encoding="utf-8")
-data = json.loads(raw)
-plugin_field_name = None
-plugins = data.get("plugin")
-if isinstance(plugins, list):
-    plugin_field_name = "plugin"
-else:
-    plugins = data.get("plugins")
-    if isinstance(plugins, list):
-        plugin_field_name = "plugins"
-
-if plugin_field_name is None:
-    raise SystemExit(0)
-
-plugin_dir_url = "file://" + quote(plugin_dir.as_posix().rstrip("/") + "/", safe=":/-._~")
-changed = False
-rewritten = []
-
-for item in plugins:
-    if not isinstance(item, str):
-        rewritten.append(item)
-        continue
-
-    normalized = item
-    lowered = item.lower()
-
-    if "opencode-multi-auth" in lowered:
-        if lowered.startswith("opencode-multi-auth@file:") or "/dist/index.js" in lowered or "plugins/opencode-multi-auth" in lowered:
-            normalized = plugin_dir_url
-
-    if normalized != item:
-        changed = True
-
-    rewritten.append(normalized)
-
-if not changed:
-    raise SystemExit(0)
-
-data[plugin_field_name] = rewritten
-runtime_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-print("normalized")
-PY
-  then
-    info "Normalized runtime plugin path for opencode-multi-auth."
-  else
-    warn "Failed to normalize runtime plugin path; continuing with existing config."
-  fi
-}
-
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
   local runtime_opencode="${config_dir}/opencode.json"
   local runtime_antigravity="${config_dir}/antigravity.json"
   local template_antigravity="${PLUGIN_DIR}/backups/antigravity.json.template"
-  local plugin_manifest="${PLUGIN_DIR}/package.json"
-  local plugin_setup_script="${PLUGIN_DIR}/scripts/setup.js"
-  local plugin_dist_dir="${PLUGIN_DIR}/dist"
-  local plugin_entry_primary="${PLUGIN_DIR}/dist/src/plugin.js"
-  local plugin_entry_fallback="${PLUGIN_DIR}/dist/index.js"
-  local target_plugin_dir="${config_dir}/node_modules/opencode-multi-auth"
-  local target_plugin_manifest="${target_plugin_dir}/package.json"
-  local runtime_references_plugin=0
-  local runtime_plugin_mode="none"
   local needs_repair=0
 
   mkdir -p "${config_dir}" 2>/dev/null || true
@@ -453,58 +422,15 @@ ensure_antigravity_oauth_integrity() {
     needs_repair=1
   fi
 
-  if [[ -f "${runtime_opencode}" ]]; then
-    if grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
-      needs_repair=1
-    fi
-
-    if grep -Fq "opencode-multi-auth" "${runtime_opencode}"; then
-      runtime_references_plugin=1
-      if grep -Eq 'plugins/opencode-multi-auth|dist/src/plugin\.js|dist/index\.js|file:' "${runtime_opencode}"; then
-        runtime_plugin_mode="local"
-      else
-        runtime_plugin_mode="registry"
-      fi
-
-      if [[ "${runtime_plugin_mode}" == "registry" ]]; then
-        if [[ ! -f "${target_plugin_manifest}" ]]; then
-          needs_repair=1
-        fi
-      else
-        if [[ ! -f "${plugin_manifest}" || ! -f "${plugin_setup_script}" || ! -d "${plugin_dist_dir}" || ( ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ) ]]; then
-          needs_repair=1
-        fi
-      fi
-    fi
+  if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
+    needs_repair=1
   fi
 
   if (( needs_repair )); then
     info "Repairing final Antigravity OAuth visibility before installer exit..."
-    if [[ "${runtime_plugin_mode}" == "registry" ]]; then
-      if [[ -f "${config_dir}/package.json" ]]; then
-        info "Refreshing target node_modules for registry plugin fallback..."
-        (
-          cd "${config_dir}" || exit 1
-          install_dependencies_with_retry "${config_dir}"
-        ) >/dev/null 2>&1 || true
-      fi
-    elif [[ -f "${plugin_manifest}" ]]; then
-      info "Rebuilding plugin artifacts to restore OAuth methods..."
-      (
-        cd "${PLUGIN_DIR}" || exit 1
-        install_dependencies_with_retry "${PLUGIN_DIR}"
-        if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
-          bun run build >/dev/null 2>&1 || npm run build >/dev/null 2>&1 || true
-        fi
-      ) >/dev/null 2>&1 || true
-    fi
-
-    if [[ -f "${plugin_setup_script}" ]]; then
-      export OCS_SETUP_INSTALLER_MODE=1
-      bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
-      unset OCS_SETUP_INSTALLER_MODE
-    fi
-
+    export OCS_SETUP_INSTALLER_MODE=1
+    bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
+    unset OCS_SETUP_INSTALLER_MODE
     if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
       cp "${template_antigravity}" "${runtime_antigravity}"
     fi
@@ -514,19 +440,6 @@ ensure_antigravity_oauth_integrity() {
 
   if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
     error "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
-  fi
-
-  if (( runtime_references_plugin )); then
-    if [[ "${runtime_plugin_mode}" == "registry" ]]; then
-      [[ -f "${target_plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: registry plugin package is missing at ${target_plugin_manifest}."
-    else
-      [[ -f "${plugin_manifest}" ]] || error "Final Antigravity OAuth integrity check failed: plugin package is missing at ${plugin_manifest}."
-      [[ -f "${plugin_setup_script}" ]] || error "Final Antigravity OAuth integrity check failed: plugin setup script is missing at ${plugin_setup_script}."
-      [[ -d "${plugin_dist_dir}" ]] || error "Final Antigravity OAuth integrity check failed: plugin build directory is missing at ${plugin_dist_dir}."
-      if [[ ! -f "${plugin_entry_primary}" && ! -f "${plugin_entry_fallback}" ]]; then
-        error "Final Antigravity OAuth integrity check failed: plugin OAuth entry file is missing under ${plugin_dist_dir}."
-      fi
-    fi
   fi
 
   success "Antigravity OAuth integrity check passed."
@@ -540,89 +453,7 @@ opencode_works() {
     return 0
   fi
 
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY' >/dev/null 2>&1
-import subprocess
-import sys
-
-for args in (["opencode", "--version"], ["opencode", "--help"]):
-    try:
-        result = subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
-    except Exception:
-        continue
-    if result.returncode == 0:
-        sys.exit(0)
-
-sys.exit(1)
-PY
-    return $?
-  fi
-
-  opencode --version >/dev/null 2>&1 || opencode --help >/dev/null 2>&1
-}
-
-is_wsl_environment() {
-  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
-}
-
-ensure_wsl_stable_opencode_shim() {
-  if ! is_wsl_environment; then
-    return 0
-  fi
-
-  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
-  if [[ ! -x "${direct_bin}" ]]; then
-    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
-    return 0
-  fi
-
-  mkdir -p "${HOME}/.local/bin"
-  cat > "${HOME}/.local/bin/opencode" <<EOF
-#!/usr/bin/env bash
-exec "${direct_bin}" "\$@"
-EOF
-  chmod +x "${HOME}/.local/bin/opencode"
-
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
-  hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    info "WSL stable opencode launcher shim installed."
-  else
-    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
-  fi
-}
-
-is_wsl_environment() {
-  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
-}
-
-ensure_wsl_stable_opencode_shim() {
-  if ! is_wsl_environment; then
-    return 0
-  fi
-
-  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
-  if [[ ! -x "${direct_bin}" ]]; then
-    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
-    return 0
-  fi
-
-  mkdir -p "${HOME}/.local/bin"
-  cat > "${HOME}/.local/bin/opencode" <<EOF
-#!/usr/bin/env bash
-exec "${direct_bin}" "\$@"
-EOF
-  chmod +x "${HOME}/.local/bin/opencode"
-
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
-  hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    info "WSL stable opencode launcher shim installed."
-  else
-    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
-  fi
+  return 0
 }
 
 install_opencode_shim() {
@@ -651,15 +482,7 @@ EOF
 
   export PATH="${local_bin}:${bun_bin}:${PATH}"
   hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    return 0
-  fi
-
-  rm -f "${bun_bin}/opencode" "${local_bin}/opencode"
-  hash -r 2>/dev/null || true
-  info "Generated opencode bunx shim failed health check and was removed."
-  return 1
+  opencode_works
 }
 
 install_opencode_official() {
@@ -695,23 +518,23 @@ ensure_opencode_command() {
     return 0
   fi
 
-  warn "opencode command not healthy. Trying bun global install..."
-  if install_opencode_bun_global && opencode_works; then
-    return 0
-  fi
-
-  warn "bun global install did not recover opencode. Installing bunx shim..."
-  if install_opencode_shim && opencode_works; then
-    return 0
-  fi
-
-  warn "bunx shim did not recover opencode. Trying official installer..."
+  warn "opencode command not healthy. Trying official installer..."
   if install_opencode_official && opencode_works; then
     return 0
   fi
 
+  warn "official installer did not recover opencode. Trying bun global install..."
+  if install_opencode_bun_global && opencode_works; then
+    return 0
+  fi
+
+  warn "opencode command not healthy. Installing bunx shim..."
+  if install_opencode_shim && opencode_works; then
+    return 0
+  fi
+
   if [[ "${OCS_ENABLE_NODE_AUTO_INSTALL:-0}" == "1" ]]; then
-    warn "official installer did not recover opencode. Trying Node.js + npm global install..."
+    warn "bunx shim did not recover opencode. Trying Node.js + npm global install..."
     if ensure_nodejs_runtime && install_opencode_npm_global && opencode_works; then
       return 0
     fi
@@ -951,6 +774,11 @@ ensure_ocs_command() {
     return 0
   fi
 
+  if install_ocs_shim_from_opencode; then
+    success "ocs shim via opencode install and verification passed."
+    return 0
+  fi
+
   if [[ "$is_local_source" == "true" ]]; then
     if install_ocs_from_path "$root_dir"; then
       success "ocs auto-install and verification passed."
@@ -1010,65 +838,41 @@ ensure_shell_path_priority() {
 }
 
 ensure_system_command_links() {
-  local target_dirs=("/usr/local/bin")
-  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
-    target_dirs=("/opt/homebrew/bin" "/usr/local/bin")
-  fi
-  local target_dir=""
+  local target_dir="/usr/local/bin"
   local cmd source_path target_path current_target
 
-  for target_dir in "${target_dirs[@]}"; do
-    local linked_any=0
-    local link_failed=0
-
-    for cmd in ocs opencode; do
-      source_path=""
-      if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
-        source_path="${HOME}/.local/bin/${cmd}"
-      elif [[ -x "${HOME}/.bun/bin/${cmd}" ]]; then
-        source_path="${HOME}/.bun/bin/${cmd}"
-      fi
-
-      [[ -n "${source_path}" ]] || continue
-      target_path="${target_dir}/${cmd}"
-
-      if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
-        continue
-      fi
-
-      if [[ -L "${target_path}" ]]; then
-        current_target="$(readlink "${target_path}" 2>/dev/null || true)"
-        if [[ "${current_target}" == "${source_path}" ]]; then
-          linked_any=1
-          continue
-        fi
-      fi
-
-      if [[ -w "${target_dir}" ]]; then
-        if ln -sfn "${source_path}" "${target_path}"; then
-          linked_any=1
-        else
-          link_failed=1
-        fi
-      elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
-        linked_any=1
-      else
-        link_failed=1
-      fi
-    done
-
-    if (( linked_any )); then
-      hash -r 2>/dev/null || true
-      return 0
+  for cmd in ocs opencode; do
+    source_path=""
+    if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
+      source_path="${HOME}/.local/bin/${cmd}"
+    elif [[ -x "${HOME}/.bun/bin/${cmd}" ]]; then
+      source_path="${HOME}/.bun/bin/${cmd}"
     fi
 
-    if (( link_failed )); then
-      warn "Cannot create command links in ${target_dir}. Keep using shell profile PATH entries."
+    [[ -n "${source_path}" ]] || continue
+    target_path="${target_dir}/${cmd}"
+
+    if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
+      continue
+    fi
+
+    if [[ -L "${target_path}" ]]; then
+      current_target="$(readlink "${target_path}" 2>/dev/null || true)"
+      if [[ "${current_target}" == "${source_path}" ]]; then
+        continue
+      fi
+    fi
+
+    if [[ -w "${target_dir}" ]]; then
+      ln -sfn "${source_path}" "${target_path}" || true
+    elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
+      :
+    else
+      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
     fi
   done
 
   hash -r 2>/dev/null || true
-  return 1
 }
 
 is_lock_error() {
@@ -1287,7 +1091,7 @@ verify_access() {
   fi
 
   if [[ "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404" ]]; then
-    warn "You do not have OCS access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
+    warn "You do not have OCS release access yet (repo/branch: ${GITHUB_SOURCE_REPO}@${GITHUB_SOURCE_BRANCH}, HTTP ${status_code})."
     if command -v gh >/dev/null 2>&1; then
       warn "If you already have repo access, run: gh auth refresh -h github.com -s repo"
     fi
@@ -1436,6 +1240,7 @@ install_bun() {
 
 main() {
   parse_cli_args "$@"
+  resolve_release_branch_config
 
   echo ""
   echo "🔌 opencode-multi-auth — Plugin Installer"
@@ -1457,6 +1262,7 @@ main() {
   fi
   info "Bun ${bun_version} detected"
   info "Installer source branch: ${GITHUB_SOURCE_BRANCH}"
+  info "Fallback release branch: ${DEFAULT_RELEASE_BRANCH}"
   if [[ -n "${REQUESTED_VERSION}" ]]; then
     info "Requested version pin: v${REQUESTED_VERSION}"
   fi
@@ -1527,7 +1333,7 @@ main() {
   tar -xzf "${tar_path}" -C "${extract_tmp}" --strip-components=1
   local plugin_source_dir="${extract_tmp}"
   [[ -f "${plugin_source_dir}/package.json" ]] || error "Invalid plugin bundle: package.json not found"
-  cp -R "${plugin_source_dir}/"* "${PLUGIN_DIR}/"
+  cp -R "${plugin_source_dir}/." "${PLUGIN_DIR}/"
 
   local version
   version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
@@ -1561,16 +1367,8 @@ main() {
       success "Setup completed automatically (headless)."
     else
       warn "Headless setup failed. Falling back to interactive setup..."
-      if [[ -r /dev/tty && -w /dev/tty ]]; then
-        if ! bun "${setup_script}" </dev/tty; then
-          error "Setup script failed (interactive retry via /dev/tty)."
-        fi
-      elif has_interactive_tty; then
-        if ! bun "${setup_script}"; then
-          error "Setup script failed."
-        fi
-      else
-        error "Headless setup failed in a non-interactive session; interactive fallback is unavailable. Rerun in an interactive terminal or export OCS_SKIP_AUTO_SETUP=1 and run setup manually later."
+      if ! bun "${setup_script}"; then
+        error "Setup script failed."
       fi
     fi
     unset OCS_SETUP_INSTALLER_MODE
@@ -1590,26 +1388,16 @@ else
 fi
 
 ensure_shell_path_priority
-ensure_wsl_stable_opencode_shim
-ensure_system_command_links || true
-normalize_runtime_plugin_paths
+ensure_system_command_links
 
 if opencode_works; then
   info "opencode verification passed."
 elif install_opencode_shim && opencode_works; then
   info "opencode shim installed and verification passed."
-elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-1}" == "1" ]]; then
+elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
-  fi
-
-  ensure_shell_path_priority
-  ensure_wsl_stable_opencode_shim
-  ensure_system_command_links || true
-
-  if opencode_works; then
-    info "opencode verification passed after recovery link refresh."
   fi
 else
   warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
@@ -1621,59 +1409,16 @@ ensure_antigravity_oauth_integrity "${setup_script}"
 
   echo ""
   echo "   Next steps:"
-  if [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version; then
-    echo "   1. Configure profile: ocs setup:profile"
-    echo "      If you run from Windows PowerShell and see ocs.ps1 blocked, use: ocs.cmd setup:profile"
-    echo "   2. Create EXA API key (same flow on Windows/WSL/Linux/macOS):"
-    echo "      a) Sign in: https://dashboard.exa.ai"
-    echo "      b) Open API Keys: https://dashboard.exa.ai/api-keys"
-    echo "      c) Create key, then copy it once (store it securely)."
-    echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
-    echo "      If blocked in PowerShell, use: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
-    echo "   4. Verify Exa MCP: ocs exa check"
-    echo "      If blocked in PowerShell, use: ocs.cmd exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login"
-    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
-    echo "   6. Verify MCP status: opencode mcp list"
-    echo "   7. Configure preferences: ocs prefs"
-    echo "      If still blocked in PowerShell, use: ocs.cmd prefs"
-    echo "   8. Verify runtime: opencode auth login"
-    echo "      Then choose: Google -> OAuth with Google (Antigravity)."
-    echo "      If you see 'Add credential', auth is waiting for your input (not stuck)."
-    echo "   9. Start coding from this same shell session."
-  elif [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
-    echo "   1. Configure profile: ocs setup:profile"
-    echo "   2. Create EXA API key (same flow on Windows/WSL/Linux/macOS):"
-    echo "      a) Sign in: https://dashboard.exa.ai"
-    echo "      b) Open API Keys: https://dashboard.exa.ai/api-keys"
-    echo "      c) Create key, then copy it once (store it securely)."
-    echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
-    echo "   4. Verify Exa MCP: ocs exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login"
-    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
-    echo "   6. Verify MCP status: opencode mcp list"
-    echo "   7. Configure preferences: ocs prefs"
-    echo "   8. Verify runtime: opencode auth login"
-    echo "      Then choose: Google -> OAuth with Google (Antigravity)."
-    echo "      If you see 'Add credential', auth is waiting for your input (not stuck)."
-    echo "   9. Run browser UI: opencode web --port 8089"
-  else
-    echo "   1. Configure profile: ocs setup:profile"
-    echo "   2. Create EXA API key (same flow on Windows/WSL/Linux/macOS):"
-    echo "      a) Sign in: https://dashboard.exa.ai"
-    echo "      b) Open API Keys: https://dashboard.exa.ai/api-keys"
-    echo "      c) Create key, then copy it once (store it securely)."
-    echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
-    echo "   4. Verify Exa MCP: ocs exa check"
-    echo "   5. Keep GitHub MCP green: gh auth login"
-    echo "      Then set token env manually: export GITHUB_PERSONAL_ACCESS_TOKEN=<YOUR_GITHUB_PAT>"
-    echo "   6. Verify MCP status: opencode mcp list"
-    echo "   7. Configure preferences: ocs prefs"
-    echo "   8. Verify runtime: opencode auth login"
-    echo "      Then choose: Google -> OAuth with Google (Antigravity)."
-    echo "      If you see 'Add credential', auth is waiting for your input (not stuck)."
-    echo "   9. Start coding!"
-  fi
+  echo "   1. Configure profile: ocs setup:profile"
+  echo "   2. Create EXA API key: https://dashboard.exa.ai/api-keys"
+  echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
+  echo "   4. Verify Exa MCP: ocs exa check"
+  echo "   5. Keep GitHub MCP green: gh auth login"
+  echo "      Then export token: export GITHUB_PERSONAL_ACCESS_TOKEN=\"\$(gh auth token)\""
+  echo "   6. Verify MCP status: opencode mcp list"
+  echo "   7. Configure preferences: ocs prefs"
+  echo "   8. Verify runtime: opencode auth login"
+  echo "   9. Start coding!"
   echo ""
 }
 

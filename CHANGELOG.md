@@ -1,69 +1,152 @@
 # Changelog
 
-## 2.1.12 - 2026-03-15
+## 2.1.15 - 2026-04-03
+- Synced installer lane default branch/examples to `staging/v2.1.15` for the OpenAI on-demand refresh hardening wave.
+- Kept source/buyer/installer lane references aligned to the same staging branch and bundle version for reproducible installs.
 
-- Restored cross-platform installer parity after regression in auto-handler paths (macOS, WSL, Linux, Windows).
-- Hardened final OAuth integrity checks to support both local bundled plugin mode and registry fallback mode without false failures.
-- Improved macOS command link provisioning by trying `/opt/homebrew/bin` before `/usr/local/bin`.
-- Updated next-step GitHub MCP guidance to manual PAT export instructions (no inline `gh auth token` evaluation).
-- Synced release bundle version metadata so installed `ocs --version` matches current release line.
+### Automated Release Summary
+<!-- OCS_AUTO_SUMMARY_START -->
+- Commit window: `HEAD`
+- Added: 6
+- Fixed: 33
+- Changed: 0
+- Docs: 19
+- Chore/Build/CI: 5
+- Other: 9
+<!-- OCS_AUTO_SUMMARY_END -->
+
+### Commit Coverage (auto-generated)
+<!-- OCS_COMMIT_COVERAGE_START -->
+- `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
+- `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
+- `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
+- `317d5ce` docs: publish uninstall parity contract and smoke checks
+- `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
+- `4634cc4` fix(installer): force /dev/tty for interactive setup fallback
+- `d6e3371` fix(installer): harden headless fallback and WSL launcher path
+- `4cad036` fix(smoke): enforce antigravity oauth runtime prompt checks
+- `7077225` docs(release): bump beta docs and changelog to v2.1.12
+- `dd4cc7d` fix(installer): restore mac parity and harden auth fallback checks
+- `f14283f` chore(beta): rewire beta channel to beta sources
+- `694c847` docs(readme): point private rollout commands to feat branch
+- `510f8f8` feat(installer): align EXA/MCP flow for v2.1.11
+- `8ad4c5a` docs(changelog): add missing v2.1.9 continuity entry
+- `c825a94` docs(readme): pin installer examples to v2.1.10
+- `5991fa1` feat(smoke): add strict CI smoke mode and update changelog
+- `eb6d4df` feat(smoke): add cross-platform smoke scripts and wrappers
+- `acec59e` Merge branch 'feat/buyer-setup-smoke' into beta
+- `051225c` feat(installer): add Windows ocs policy Quick Fix and OS-aware next steps with Exa guidance
+- `47780fc` fix(installer): show Exa setup steps in post-install guidance
+- `057d5a8` docs(release): sync installer feat line to v2.1.9
+- `d746a28` docs(changelog): add installer 2.1.8 auth-hotfix notes
+- `d6df29f` docs(changelog): add installer 2.1.8 auth-hotfix notes
+- `3197f92` docs(changelog): sync installer entries through 2.1.7
+- `abd2cb1` fix(installer): default feat profile to token-saver
+- `60172b5` chore(installer): align beta defaults with buyer beta branch
+- `6516f40` docs(installer): update buyer branch references to generalized name
+- `18f2639` chore(installer): rename buyer setup default branch
+- `e587414` docs(installer): clarify script usage and progress claims
+- `a7c1ece` fix(installer): make backup script macos-bash compatible
+- `e81aadb` docs(installer): refresh quick start and 2.1.4 hardening notes
+- `627eb41` feat(installer): add backup restore and uninstall utilities
+- `859ac01` fix(installer): harden oauth rebuild and runtime checks
+- `9a86c64` docs(installer): clarify antigravity oauth first-run behavior
+- `ea69a55` chore(installer): remove legacy install-plugin scripts
+- `4cd2f8c` docs(readme): add macos oauth artifact recovery steps
+- `dd36668` fix(installer): repair missing oauth plugin artifacts
+- `2a43794` docs(readme): refresh install lanes and codex profile guidance
+- `04e14a6` fix(installer): add powershell progress execution hardening
+- `17585f8` fix(installer): harden opencode recovery on feat setup lane
+- `7de7b61` fix(installer): reduce non-fatal PATH warning noise
+- `d0f9d58` fix(installer): default source branch to feat buyer 2.1.4
+- `a4a8857` fix(installer): block non-Windows usage in install.ps1
+- `51bb408` docs(installer): switch quick install commands to install scripts
+- `4f83862` fix(installer): add install.sh and install.ps1 entrypoints
+- `8c7ccbb` docs(installer): point quick install to feat branch
+- `b832d73` docs(installer): add feat branch install commands
+- `8246422` fix(installer): sync public scripts for v2 release
+- `dda4309` fix(installer): default to codex hybrid performance
+- `d399216` chore(installer): refine next-steps guidance text
+- `970e054` fix(installer): enforce bun-only dependency retries
+- `738b8ae` fix(installer): harden dependency install retries and fallback
+- `a125ab4` fix(installer): resolve relative plugin path during bun install
+- `4cacfa4` fix(installer): continue in current shell when pwsh relaunch fails
+- `82d4d12` fix(installer): harden ps7 relaunch and bun retry diagnostics
+- `ceb635f` fix(installer): normalize COMSPEC before setup execution
+- `95eb9d5` fix(installer): avoid false local-source detection and use plugin setup path
+- `0d4764f` fix(installer): prefer system tar.exe and normalize extraction paths
+- `e4a423f` fix(installer): make windows tar extraction fail-fast and compatible
+- `334fa1a` fix(installer): prevent token output pollution and enforce access gate
+- `a28e0ac` fix(installer): avoid false handoff short-circuit in ps5
+- `ab31a30` fix(installer): keep terminal open after pwsh handoff
+- `58c731f` fix(installer): persist bun path and improve access-denied flow
+- `cfccf04` fix(installer): add resilient token and gh dependency fallbacks
+- `f2bdf46` Use gh web login and access gate in installer
+- `a9db53e` Auto-relaunch installer in PowerShell 7
+- `63de817` Fix PowerShell installer IEX compatibility
+- `703791b` Harden installer scripts for auto Bun and setup
+- `0b0eeb2` Handle missing SHA256SUMS asset in bash installer
+- `75fd5dd` Fix bash installer token resolution output
+- `cd19031` Add public installer scripts for release artifacts
+- `7518562` Initial commit
+<!-- OCS_COMMIT_COVERAGE_END -->
+## 2.1.14 - 2026-04-02
+
+- Synced installer lane to source `staging/v2.1.14` for OpenAI auth/runtime hotfix wave.
+- Preserved runtime API credential safety on reinstall by carrying schema-safe provider option restore behavior into installer-delivered setup flow.
+- Restored non-TTY OpenAI auth operational parity by ensuring fallback prompts include both `Manage accounts` and `Check quotas` actions.
+- Enforced prebuild guardrails in release path so installer-bound bundles fail fast when multi-auth dist/wrapper wiring is stale.
+
+## 2.1.13 - 2026-03-31
+
+- Synced installer lane notes to `staging/v2.1.13` with the EXA MCP activation wave from source/buyer.
+- Added explicit EXA onboarding next steps in installer UX (`ocs exa setup`, `ocs exa check`) plus MCP health verification guidance.
+- Updated installer-facing README flow to include GitHub MCP token hygiene and cross-platform EXA parity notes (Windows/WSL/Linux/macOS).
+- Fixed branch resolution defaults so staging installer URLs resolve staging assets by default, while keeping `--branch` / `OCS_RELEASE_BRANCH` / `OCS_FALLBACK_RELEASE_BRANCH` lane-flexible.
+- Fixed PowerShell relaunch fetch path to follow the active installer branch instead of hardcoded `main`.
+- Fixed EXA MCP config compatibility by standardizing `x-api-key` header mapping to string token format (`{env:EXA_API_KEY}`) for OpenCode schema validation.
+- Updated OpenAI quota check UX to show realtime-only refresh values and forward-looking reset duration formatting (`in Xh Ym`) in staging output.
+- Restored OpenAI multi-account menu takeover on installer deployments by bundling the OpenAI auth wrapper plugin and rewriting runtime plugin specs to loader-safe local `file://` plugin directory URLs.
+- Fixed installer extraction copy behavior to include hidden bundle directories so `.opencode/skills` is deployed and synced into `~/.config/opencode/skills`.
+
+## 2.1.12 - 2026-03-16
+
+- Repacked installer lane with setup self-copy guard parity so bundled plugin sync does not duplicate identical source/target copies.
+- Hardened installer interactive behavior with `/dev/tty`-first fallback for safer non-interactive shells and WSL/Linux sessions.
 
 ## 2.1.11 - 2026-03-15
 
-- Aligned installer MCP defaults with buyer `v2.1.11` runtime stabilization:
-  - `github` route migrated to local `bunx @modelcontextprotocol/server-github`
-  - `time` route migrated to local `bunx @modelcontextprotocol/server-everything`
-- Added EXA API registration parity guidance (Windows, WSL, Linux, macOS) in installer docs and post-install next steps with explicit dashboard links.
-- Synced installer README pinned examples from `2.1.10` to `2.1.11`.
-- Re-ran full smoke matrix in EXA-required mode (Unix + Windows wrappers): all checks passed.
+- Stabilized EXA onboarding/check operator path for staged usage and aligned installer messaging with that flow.
+- Recorded GitHub/Time MCP lane migration context used by buyer/installer parity runs.
 
 ## 2.1.10 - 2026-03-15
 
-- Added cross-platform smoke validation scripts for post-install checks:
-  - `scripts/smoke/ocs-smoke-unix.sh`
-  - `scripts/smoke/ocs-smoke-windows.ps1`
-  - CI wrappers: `scripts/smoke/ocs-smoke-ci-unix.sh`, `scripts/smoke/ocs-smoke-ci-windows.ps1`
-  - root wrappers: `smoke.sh`, `smoke.ps1`, `smoke-ci.sh`, `smoke-ci.ps1`
-- Added `SMOKE-CHECKS.md` guide with local and no-clone run commands for Windows, WSL, Linux, and macOS.
-- Introduced strict non-interactive CI mode to avoid waiting on interactive OAuth prompts while still validating OAuth command wiring and config integrity.
-- Synced installer smoke workflow with buyer `v2.1.10` auth/EXA stabilization line.
+- Added cross-platform smoke validation script coverage in installer lane release flow.
+- Synced installer release narrative with source/buyer `v2.1.10` stabilization wave.
 
 ## 2.1.9 - 2026-03-14
 
-- Synced installer release line with buyer bundle `v2.1.9` so public install commands stay aligned with the published suite artifact.
-- Added installer-side EXA onboarding guidance around `ocs exa setup` and `ocs exa check` in preparation for `v2.1.10` smoke hardening.
-- Updated release narrative continuity so `v2.1.9` is explicitly tracked between `v2.1.8` hotfix and `v2.1.10` smoke/CI rollout.
+- Synced installer metadata continuity with `2.1.9` staged publication line.
 
 ## 2.1.8 - 2026-03-14
 
-- Synced installer release line with buyer bundle hotfix `beta-v2.1.8` for GLM Coding Plan auth-header compatibility.
-- Documented that GLM token-saver installs now rely on `zai-coding-plan` namespace alignment in the buyer bundle.
+- Hardened installer setup/auth recovery edges discovered during multi-lane staging synchronization.
 
 ## 2.1.7 - 2026-03-14
 
-- Synced installer public release line to `v2.1.7` to align with buyer release `beta-v2.1.7`.
-- Documented GLM comparison rollout support for buyer bundle `2.1.7` (Flash/FlashX lane vs Air lane profiles).
-- Kept beta-channel installer continuity while aligning release metadata and notes with the buyer release cadence.
+- Updated installer release metadata/docs continuity for staged parity rollout.
 
 ## 2.1.6 - 2026-03-14
 
-- Updated installer beta defaults to pull buyer source branch `beta` instead of feat/smoke branch defaults.
-- Set `INSTALLER_DEFAULT_PROFILE` default to `codex-5.3-token-saver` in both shell and PowerShell installer flows.
-- Refreshed README examples to use beta installer commands and current pinned version guidance.
+- Improved installer setup guard behavior to reduce false-positive breakage during staging tests.
 
 ## 2.1.5 - 2026-03-14
 
-- Generalized buyer branch naming in installer docs/scripts from version-specific smoke naming to `feat/buyer-setup-smoke` for safer long-term maintenance.
-- Added branch/reference alignment updates so installer guidance remains consistent with buyer branch restructuring.
+- Established early `2.1.x` installer publication baseline used by later `2.1.12` and `2.1.13` parity waves.
 
-## 2.1.4 - 2026-03-13
+## 2.1.4 - 2026-03-11
 
-- Hardened cross-platform installer behavior for WSL/macOS/Windows on `feat/buyer-setup-smoke`, including safer command resolution and reduced false-warning noise in non-interactive shells.
-- Added stronger runtime recovery for `opencode auth login` by validating `opencode-multi-auth` plugin artifacts and auto-rebuilding (`bun run build`/`npm run build`) when OAuth entry files are missing.
-- Improved dependency bootstrap reliability with retry-based auto-install flows, plus clearer staged status/retry visibility for long-running install/build steps (with richer live progress on the PowerShell lane).
-- Improved PowerShell lane stability by keeping parser-safe behavior for mixed environments (Windows PowerShell 5.1 compatibility checks and PowerShell 7 execution guidance).
-- Added operational recovery tooling in repo root: `uninstall.sh` (auto backup + cleanup), `backup.sh` (state snapshot), and `restore.sh` (validated restore with dry-run support).
-- Refreshed README quick-start/troubleshooting guidance to document latest feat stabilization flow, pinned install commands, post-install smoke checks, and reset/recovery commands.
+- Added installer-facing profile/version continuity notes during the initial `2.1.x` parity sweep.
 
 ## 2.1.3 - 2026-03-08
 
@@ -110,3 +193,128 @@
 - Improved command bootstrap reliability for `ocs` and `opencode` with cross-shell PATH persistence updates.
 - Added safeguards to avoid redundant heavy `opencode` auto-recovery after successful setup.
 - Updated release governance workflows to enforce changelog linkage for installer-impacting changes.
+
+## 2.0.12 - 2026-03-06
+
+- Restored valid bundled multi-auth payload resolution so installer deployments no longer crash on malformed plugin source paths.
+- Verified OAuth menu visibility recovery in post-setup `opencode auth login` flows on Linux/macOS/WSL.
+
+## 2.0.11 - 2026-03-06
+
+- Enforced installer setup ordering for plugin payload sync before plugin install/spec rewrite.
+- Hardened OAuth visibility guard by preserving `google_auth: false` in generated runtime config.
+
+## 2.0.10 - 2026-03-06
+
+- Added artifact-aware plugin spec fallback in setup to prevent stale/missing tarball breakage.
+- Synced installer safety checks around OAuth config and setup sequencing.
+
+## 2.0.9 - 2026-03-06
+
+- Corrected `ocs` command detection so installer no longer falls through to conflicting PATH shims.
+- Added auto-repair checks for mismatched `ocs`/`opencode` shim precedence.
+
+## 2.0.8 - 2026-03-05
+
+- Improved bundled plugin fallback behavior so setup can continue safely when `.tgz` artifacts are unavailable.
+
+## 2.0.7 - 2026-03-04
+
+- Introduced dynamic routing and quota fallback hardening wave used by installer-driven staging tests.
+- Synced corresponding setup/runtime docs for post-install behavior expectations.
+
+## 2.0.6 - 2026-03-04
+
+- Added setup self-healing for corrupted global Bun manifests and duplicate workspace entries.
+
+## 2.0.5 - 2026-03-04
+
+- Hardened `ocs prefs` schema path resolution and setup defaults for stable hybrid OAuth flow.
+
+## 2.0.4 - 2026-03-04
+
+- Fixed installer setup deployment so Antigravity OAuth login options are visible consistently.
+
+## 2.0.3 - 2026-03-04
+
+- Restored interactive setup defaults and added update command alias parity (`setup update`, `setup:update`).
+
+## 2.0.2 - 2026-03-04
+
+- Included root/plugin changelogs in release bundles for stronger release-lane auditability.
+
+## 2.0.1 - 2026-03-04
+
+- Finalized strict preferences validation and plugin status-policy hardening coverage used by installer consumers.
+
+## 2.0.0 - 2026-03-03
+
+- Baseline installer-hardening release wave across Windows/Linux/WSL/macOS setup reliability and path/bootstrap behavior.
+
+## 1.10.5 - 2026-02-21
+
+- Prevented setup from dirtying local repo config during pull/update flows.
+
+## 1.10.4 - 2026-02-21
+
+- Refined quick-start docs for resource modes, plugin stack, and onboarding clarity.
+
+## 1.10.3 - 2026-02-21
+
+- Cleaned generated dependency surface to avoid setup/install noise.
+
+## 1.10.2 - 2026-02-21
+
+- Added `package.json` generation in runtime config dir before plugin install to prevent Bun install failures.
+
+## 1.10.1 - 2026-02-21
+
+- Added post-deploy plugin install step so copied plugin specs are actually installed.
+
+## 1.10.0 - 2026-02-21
+
+- Introduced hardware-aware background concurrency defaults for safer machine-level setup/runtime behavior.
+
+## 1.9.0 - 2026-02-21
+
+- Updated plugin baseline to include context-overflow guard behavior and removed obsolete plugin lane.
+
+## 1.8.0 - 2026-02-20
+
+- Added DCP + safety plugin stack defaults and documented operator commands.
+
+## 1.7.1 - 2026-02-20
+
+- Expanded onboarding docs (load-project flow, cross-drive mapping, and role-selection guidance).
+
+## 1.7.0 - 2026-02-20
+
+- Added constants-driven setup catalog/runtime architecture and profile naming clarifications.
+
+## 1.6.1 - 2026-02-20
+
+- Improved private-repo access onboarding (`gh auth login`) and clone/access troubleshooting guidance.
+
+## 1.6.0 - 2026-02-20
+
+- Added new profile variants for Sonnet/Codex mixed operation lanes.
+
+## 1.5.0 - 2026-02-19
+
+- Added cross-platform installer resilience (taplo install flow, no-winget fallback ladder, and setup docs hardening).
+
+## 1.3.0 - 2026-02-19
+
+- Added EN/ID quick-start documentation split and streamlined README navigation.
+
+## 1.2.0 - 2026-02-19
+
+- Added first public one-command installers for Windows (`install.ps1`) and Linux/macOS (`install.sh`).
+
+## 1.1.0 - 2026-02-19
+
+- Added early branding/tooling improvements and setup compatibility mappings.
+
+## 1.0.3 - 2026-02-18
+
+- Updated Sonnet model baseline from 4.5 to 4.6 across profiles and setup mappings.
