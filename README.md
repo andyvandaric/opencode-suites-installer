@@ -154,19 +154,47 @@ Notes:
   ocs doctor
   ```
 
-### Uninstall otomatis (Linux/macOS/WSL)
+### Uninstall (All OS) — Quick Guide
 
-Kalau mau reset total environment sebelum retest, jalankan script `uninstall.sh` dari root repo:
+Untuk reset cepat dan aman (preserve credential/account), pakai command ini:
 
-```bash
-bash ./uninstall.sh --yes
-```
+- Linux/macOS/WSL:
+  ```bash
+  bash ./uninstall.sh --mode safe --yes
+  ```
+- Windows (PowerShell 7):
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -Yes
+  ```
+
+Kalau mau gaya install one-liner (raw script, tanpa clone repo):
+
+- Linux/macOS/WSL (main):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Linux/macOS/WSL (beta):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Linux/macOS/WSL (staging/v2.1.14):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Windows PowerShell 7 (main):
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.ps1'))) -Mode safe -Yes"
+  ```
+
+Panduan lengkap uninstall untuk user:
+- `docs/uninstall-user-quickstart.md` (langsung pakai, minim risiko)
+- `docs/uninstall-cli-ux.md` (kontrak CLI + safety behavior)
+- `docs/uninstall-parity-matrix.md` (parity Linux/macOS/WSL/Windows)
 
 Catatan penting:
 - Default **auto backup aktif** sebelum data dihapus.
-- Untuk matikan backup: `./uninstall.sh --yes --no-backup`
-- Untuk set lokasi backup: `./uninstall.sh --yes --backup-dir /path/backup`
-- Untuk simulasi aman tanpa perubahan: `./uninstall.sh --dry-run --yes --no-backup`
+- Preview tanpa perubahan: `bash ./uninstall.sh --mode safe --dry-run`
+- Full wipe (destructive): `bash ./uninstall.sh --mode purge --yes --force-purge`
 
 ### Backup / Restore cepat (Linux/macOS/WSL)
 
