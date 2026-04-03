@@ -164,6 +164,111 @@ Notes:
   ocs doctor
   ```
 
+### Uninstall (All OS) — Quick Guide
+
+Untuk reset cepat dan aman (preserve credential/account), pakai command ini:
+
+- Linux/macOS/WSL:
+  ```bash
+  bash ./uninstall.sh --mode safe --yes
+  ```
+- Windows (PowerShell 7):
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -Yes
+  ```
+
+Kalau mau gaya install one-liner (raw script, tanpa clone repo):
+
+- Linux/macOS/WSL (main):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Linux/macOS/WSL (beta):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Linux/macOS/WSL (staging/v2.1.14):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/uninstall.sh | bash -s -- --mode safe --yes
+  ```
+- Windows PowerShell 7 (main):
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.ps1'))) -Mode safe -Yes"
+  ```
+
+Panduan lengkap uninstall untuk user:
+- `docs/uninstall-user-quickstart.md` (langsung pakai, minim risiko)
+- `docs/uninstall-cli-ux.md` (kontrak CLI + safety behavior)
+- `docs/uninstall-parity-matrix.md` (parity Linux/macOS/WSL/Windows)
+
+Catatan penting:
+- Default **auto backup aktif** sebelum data dihapus.
+- Preview tanpa perubahan: `bash ./uninstall.sh --mode safe --dry-run`
+- Full wipe (destructive): `bash ./uninstall.sh --mode purge --yes --force-purge`
+
+### Backup / Restore cepat (Linux/macOS/WSL)
+
+Kalau mau simpan lalu pulihkan state sebelum/selesai retest:
+
+```bash
+bash ./backup.sh --yes
+bash ./restore.sh --yes
+```
+
+Opsional aman:
+- Preview backup tanpa menulis apa pun: `bash ./backup.sh --dry-run`
+- Preview restore tanpa ekstrak: `bash ./restore.sh --dry-run`
+- Pilih archive tertentu saat restore: `bash ./restore.sh --archive /path/file.tar.gz --yes`
+
+### macOS: `opencode auth login` fallback ke API key
+
+Kalau di macOS login malah minta API key (padahal harusnya keluar OAuth Antigravity), jalankan langkah ini dari Terminal biasa:
+
+1) Pastikan binary yang kepanggil urutannya benar:
+
+```bash
+which -a opencode
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode --version
+```
+
+2) Pastikan plugin OAuth Antigravity terpasang (cek salah satu entry valid):
+
+```bash
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js || grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+grep -n "opencode-multi-auth" ~/.config/opencode/opencode.json
+```
+
+Jika `dist/src/plugin.js` dan `dist/index.js` sama-sama belum ada, jalankan repair cepat ini:
+
+```bash
+cd ~/.config/opencode/plugins/opencode-multi-auth || exit 1
+bun install --frozen-lockfile || bun install
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" bun run build || npm run build
+OCS_SETUP_INSTALLER_MODE=1 bun scripts/setup.js --headless --profile codex-5.3-token-saver --mode low
+ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
+```
+
+Kalau folder plugin belum ada sama sekali, rerun installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12
+```
+
+3) Paksa login via provider Antigravity dengan PATH prioritas:
+
+```bash
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
+```
+
+4) Kalau masih fallback ke API key, jalankan debug:
+
+```bash
+OPENCODE_LOG_LEVEL=debug PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
+```
+
+Catatan: jalankan perintah di shell Terminal normal (bukan embedded TUI) supaya picker OAuth tidak bentrok.
 ### Windows: PowerShell 7 requirement
 
 - Verify PowerShell 7:
