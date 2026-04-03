@@ -593,6 +593,38 @@ EOF
   fi
 }
 
+is_wsl_environment() {
+  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
+}
+
+ensure_wsl_stable_opencode_shim() {
+  if ! is_wsl_environment; then
+    return 0
+  fi
+
+  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
+  if [[ ! -x "${direct_bin}" ]]; then
+    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
+    return 0
+  fi
+
+  mkdir -p "${HOME}/.local/bin"
+  cat > "${HOME}/.local/bin/opencode" <<EOF
+#!/usr/bin/env bash
+exec "${direct_bin}" "\$@"
+EOF
+  chmod +x "${HOME}/.local/bin/opencode"
+
+  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  hash -r 2>/dev/null || true
+
+  if opencode_works; then
+    info "WSL stable opencode launcher shim installed."
+  else
+    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
+  fi
+}
+
 install_opencode_shim() {
   local bun_bin="${HOME}/.bun/bin"
   local local_bin="${HOME}/.local/bin"
@@ -663,23 +695,23 @@ ensure_opencode_command() {
     return 0
   fi
 
-  warn "opencode command not healthy. Trying official installer..."
-  if install_opencode_official && opencode_works; then
-    return 0
-  fi
-
-  warn "official installer did not recover opencode. Trying bun global install..."
+  warn "opencode command not healthy. Trying bun global install..."
   if install_opencode_bun_global && opencode_works; then
     return 0
   fi
 
-  warn "opencode command not healthy. Installing bunx shim..."
+  warn "bun global install did not recover opencode. Installing bunx shim..."
   if install_opencode_shim && opencode_works; then
     return 0
   fi
 
+  warn "bunx shim did not recover opencode. Trying official installer..."
+  if install_opencode_official && opencode_works; then
+    return 0
+  fi
+
   if [[ "${OCS_ENABLE_NODE_AUTO_INSTALL:-0}" == "1" ]]; then
-    warn "bunx shim did not recover opencode. Trying Node.js + npm global install..."
+    warn "official installer did not recover opencode. Trying Node.js + npm global install..."
     if ensure_nodejs_runtime && install_opencode_npm_global && opencode_works; then
       return 0
     fi
@@ -1564,10 +1596,20 @@ normalize_runtime_plugin_paths
 
 if opencode_works; then
   info "opencode verification passed."
+elif install_opencode_shim && opencode_works; then
+  info "opencode shim installed and verification passed."
 elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-1}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
+  fi
+
+  ensure_shell_path_priority
+  ensure_wsl_stable_opencode_shim
+  ensure_system_command_links || true
+
+  if opencode_works; then
+    info "opencode verification passed after recovery link refresh."
   fi
 else
   warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
