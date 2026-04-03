@@ -82,6 +82,30 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File $tmp -ExaApiKey "EXA_KEY_HERE" -Pr
 - `0`: smoke checks passed (warnings allowed)
 - `1`: one or more checks failed
 
+## Uninstall Validation (Manual)
+
+### Linux / macOS / WSL
+
+1. `bash uninstall.sh --mode safe --dry-run`
+2. Confirm dry-run prints deterministic steps and does not mutate files.
+3. `bash uninstall.sh --mode safe --yes`
+4. Confirm `~/.config/opencode/opencode.json` and `openai-accounts*.json` remain intact.
+5. `bash uninstall.sh --mode purge --yes --force-purge`
+6. Confirm `~/.config/opencode` is removed.
+
+WSL boundary check:
+
+1. Run safe mode **without** `--windows-host-cleanup`; verify host-side Windows paths are untouched.
+2. Run with `--windows-host-cleanup`; verify only documented host paths are removed.
+
+### Windows (PowerShell 7)
+
+1. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -DryRun`
+2. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -Yes`
+3. Validate credential/account artifacts remain.
+4. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode purge -Yes -ForcePurge`
+5. Validate full config removal behavior.
+
 ## Manual OAuth Probe (if you skip `--probe-oauth`)
 
 ```bash
