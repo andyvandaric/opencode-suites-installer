@@ -407,6 +407,75 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
+normalize_runtime_plugin_paths() {
+  local config_dir="${HOME}/.config/opencode"
+  local runtime_opencode="${config_dir}/opencode.json"
+
+  [[ -f "${runtime_opencode}" ]] || return 0
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 unavailable; skipping runtime plugin path normalization."
+    return 0
+  fi
+
+  if python3 - "${runtime_opencode}" "${PLUGIN_DIR}" <<'PY'
+import json
+import pathlib
+import sys
+from urllib.parse import quote
+
+runtime_path = pathlib.Path(sys.argv[1])
+plugin_dir = pathlib.Path(sys.argv[2]).resolve()
+
+raw = runtime_path.read_text(encoding="utf-8")
+data = json.loads(raw)
+plugin_field_name = None
+plugins = data.get("plugin")
+if isinstance(plugins, list):
+    plugin_field_name = "plugin"
+else:
+    plugins = data.get("plugins")
+    if isinstance(plugins, list):
+        plugin_field_name = "plugins"
+
+if plugin_field_name is None:
+    raise SystemExit(0)
+
+plugin_dir_url = "file://" + quote(plugin_dir.as_posix().rstrip("/") + "/", safe=":/-._~")
+changed = False
+rewritten = []
+
+for item in plugins:
+    if not isinstance(item, str):
+        rewritten.append(item)
+        continue
+
+    normalized = item
+    lowered = item.lower()
+
+    if "opencode-multi-auth" in lowered:
+        if lowered.startswith("opencode-multi-auth@file:") or "/dist/index.js" in lowered or "plugins/opencode-multi-auth" in lowered:
+            normalized = plugin_dir_url
+
+    if normalized != item:
+        changed = True
+
+    rewritten.append(normalized)
+
+if not changed:
+    raise SystemExit(0)
+
+data[plugin_field_name] = rewritten
+runtime_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+print("normalized")
+PY
+  then
+    info "Normalized runtime plugin path for opencode-multi-auth."
+  else
+    warn "Failed to normalize runtime plugin path; continuing with existing config."
+  fi
+}
+
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
@@ -1388,7 +1457,9 @@ else
 fi
 
 ensure_shell_path_priority
-ensure_system_command_links
+ensure_wsl_stable_opencode_shim
+ensure_system_command_links || true
+normalize_runtime_plugin_paths
 
 if opencode_works; then
   info "opencode verification passed."
