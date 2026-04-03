@@ -1,5 +1,7 @@
 # Uninstall CLI UX Contract
 
+For end-user execution steps, see: `docs/uninstall-user-quickstart.md`.
+
 ## Command Shapes
 
 ### Unix
