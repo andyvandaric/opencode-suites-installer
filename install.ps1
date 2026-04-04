@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.1.14"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.2.0"
 $INFERRED_INSTALLER_SOURCE_BRANCH = ""
 
 $invocationLine = $MyInvocation.Line
@@ -850,15 +850,20 @@ function Install-OcsShimFromBundle {
     param([string]$PluginPath, [string]$BasePath)
 
     $pluginAbsPath = Resolve-AbsolutePathSafe -BasePath $BasePath -Candidate $PluginPath
-    if (-not $pluginAbsPath) {
-        return $false
+    $baseAbsPath = Resolve-AbsolutePathSafe -BasePath $null -Candidate $BasePath
+
+    $candidatePaths = @()
+    if ($pluginAbsPath) {
+        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.cjs")
+        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.js")
+    }
+    if ($baseAbsPath) {
+        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.cjs")
+        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.js")
     }
 
-    $ocsJs = Join-Path $pluginAbsPath "bin\ocs.cjs"
-    if (-not (Test-Path $ocsJs)) {
-        $ocsJs = Join-Path $pluginAbsPath "bin\ocs.js"
-    }
-    if (-not (Test-Path $ocsJs)) {
+    $ocsJs = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $ocsJs) {
         return $false
     }
 
@@ -1046,6 +1051,41 @@ function Invoke-BunCachePurge {
     }
 }
 
+function Get-DependencyFingerprint {
+    param([string]$Directory)
+
+    $files = @(
+        "package.json",
+        "bun.lock",
+        "bun.lockb",
+        "bunfig.toml",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock"
+    )
+
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($file in $files) {
+        $fullPath = Join-Path $Directory $file
+        if (-not (Test-Path $fullPath)) {
+            continue
+        }
+
+        try {
+            $hashValue = (Get-FileHash -Path $fullPath -Algorithm SHA256).Hash.ToLower()
+            $parts.Add("${file}:$hashValue")
+        } catch {
+            continue
+        }
+    }
+
+    if ($parts.Count -eq 0) {
+        return ""
+    }
+
+    return ($parts -join "`n")
+}
+
 function Apply-InstallerDefaults {
     param([string]$PluginPath)
 
@@ -1150,6 +1190,21 @@ function Invoke-BunInstallWithRetry {
     )
 
     $resolvedDirectory = (Resolve-Path $Directory).Path
+    $stateDir = Join-Path $resolvedDirectory ".ocs-install-state"
+    $fingerprintFile = Join-Path $stateDir "bun-install.fingerprint"
+    $fingerprint = Get-DependencyFingerprint -Directory $resolvedDirectory
+
+    if ($fingerprint -and (Test-Path (Join-Path $resolvedDirectory "node_modules")) -and (Test-Path $fingerprintFile)) {
+        try {
+            $previousFingerprint = (Get-Content -Path $fingerprintFile -Raw -ErrorAction Stop).Trim()
+            if ($previousFingerprint -eq $fingerprint.Trim()) {
+                Write-Output "Dependency fingerprint unchanged. Skipping bun install in $resolvedDirectory."
+                return
+            }
+        } catch {
+            # ignore unreadable marker and continue with install
+        }
+    }
 
     Push-Location $resolvedDirectory
     try {
@@ -1184,6 +1239,11 @@ function Invoke-BunInstallWithRetry {
                     $lastOutput = ($bunOutput | Out-String).Trim()
                 }
                 if ($LASTEXITCODE -eq 0) {
+                    $freshFingerprint = Get-DependencyFingerprint -Directory $resolvedDirectory
+                    if ($freshFingerprint) {
+                        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+                        Set-Content -Path $fingerprintFile -Value $freshFingerprint -Encoding UTF8
+                    }
                     return
                 }
             } catch {
