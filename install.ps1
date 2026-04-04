@@ -983,6 +983,13 @@ function Ensure-OcsCommand {
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
+    if ($IsLocalSource) {
+        if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
+            Write-Output "ocs shim refreshed from local source and verification passed."
+            return $true
+        }
+    }
+
     if (Test-OcsWorks) {
         Write-Output "ocs verification passed."
         return $true
