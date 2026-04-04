@@ -12,13 +12,15 @@
 - Added: 6
 - Fixed: 38
 - Changed: 0
-- Docs: 27
-- Chore/Build/CI: 17
+- Docs: 28
+- Chore/Build/CI: 18
 - Other: 9
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `7dcc4a9` docs(readme): simplify installer page for conversions
+- `7e25762` chore(installer): sync staging v2.2.0 release wave
 - `7a41dd9` fix(installer): harden opencode recovery flow for WSL reinstall
 - `affd411` docs(uninstall): add raw one-liner quickstart and README links
 - `1ec522c` fix(installer): normalize runtime plugin path for OAuth menu
