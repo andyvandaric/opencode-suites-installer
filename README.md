@@ -1,13 +1,13 @@
 # opencode-suites-installer
 
-OCS (OpenCode Config Suites) quick installer for Multi Agents workflow, AI coding profile setup, and cross-platform OpenCode onboarding (Windows, Linux, macOS).
+OCS (OpenCode Config Suites) is the fast lane to a ready-to-work OpenCode environment across Windows, Linux, and macOS.
 
 ## Quick Install
 
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.sh | bash
 ```
 
 Run it from your normal user shell. Do not wrap the installer in `sudo`, or profile/config writes may target the wrong home directory.
@@ -15,86 +15,22 @@ Run it from your normal user shell. Do not wrap the installer in `sudo`, or prof
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.sh | bash -s -- --version 2.1.14
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.sh | bash -s -- --version 2.2.0
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.1.14"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.2.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex'
 ```
 
 Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
-
-## Uninstall (Safe by default)
-
-Default uninstall mode is `safe`: installer/runtime artifacts are removed while account/API-key artifacts are preserved.
-
-### Linux / macOS / WSL
-
-```bash
-bash uninstall.sh --mode safe
-```
-
-Dry-run preview:
-
-```bash
-bash uninstall.sh --mode safe --dry-run
-```
-
-Full purge (destructive):
-
-```bash
-bash uninstall.sh --mode purge
-```
-
-Non-interactive purge requires explicit destructive gate:
-
-```bash
-bash uninstall.sh --mode purge --yes --force-purge
-```
-
-WSL host-boundary cleanup is opt-in only:
-
-```bash
-bash uninstall.sh --mode safe --windows-host-cleanup
-```
-
-Note: in this opt-in path, safe-mode preservation applies to Linux-side credential/account files; documented Windows-host runtime paths may still be removed.
-
-### Windows (PowerShell 7)
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe
-```
-
-Dry-run preview:
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -DryRun
-```
-
-Full purge (destructive):
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode purge
-```
-
-Non-interactive purge requires explicit destructive gate:
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode purge -Yes -ForcePurge
-```
-
-Reference docs:
-- `docs/uninstall-parity-matrix.md`
-- `docs/uninstall-cli-ux.md`
 
 ## EXA API Onboarding (Windows/WSL/Linux/macOS parity)
 
@@ -128,18 +64,12 @@ To keep GitHub MCP healthy:
 
 ## Codex Setup Profiles
 
-- `codex-5.4-best-perform`
-  - Primary model: `openai/gpt-5.4`
-  - Fast lane: `openai/gpt-5.3-codex`
-  - Best for: architecture-heavy coding, deep debugging, and high-confidence production changes.
-- `codex-5.4-token-saver`
-  - Primary model: `openai/gpt-5.4`
-  - Token-efficient worker lane: `openai/gpt-5.1-codex-mini`
-  - Best for: daily implementation throughput, routine refactors, and lower-cost long sessions.
-- `codex-5.3-token-saver`
-  - Primary model: `openai/gpt-5.3-codex`
-  - Token-efficient worker lane: `openai/gpt-5.1-codex-mini`
-  - Best for: Codex-first daily implementation when you still want the orchestrator on Codex 5.3.
+- `codex-5.3-token-saver` (recommended daily default)
+  - Best fit for speed, accuracy, and quota stability in long sessions.
+- `gpt-5.4-best-perform`
+  - Backup profile when you need maximum quality for high-risk tasks.
+- `gpt-5.4-token-saver`
+  - Backup profile for GPT-quality lanes with lower worker token burn.
 
 Notes:
 - These three setups are now selectable from `ocs setup profile`.
@@ -164,111 +94,6 @@ Notes:
   ocs doctor
   ```
 
-### Uninstall (All OS) — Quick Guide
-
-Untuk reset cepat dan aman (preserve credential/account), pakai command ini:
-
-- Linux/macOS/WSL:
-  ```bash
-  bash ./uninstall.sh --mode safe --yes
-  ```
-- Windows (PowerShell 7):
-  ```powershell
-  pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Mode safe -Yes
-  ```
-
-Kalau mau gaya install one-liner (raw script, tanpa clone repo):
-
-- Linux/macOS/WSL (main):
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.sh | bash -s -- --mode safe --yes
-  ```
-- Linux/macOS/WSL (beta):
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/uninstall.sh | bash -s -- --mode safe --yes
-  ```
-- Linux/macOS/WSL (staging/v2.1.14):
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/uninstall.sh | bash -s -- --mode safe --yes
-  ```
-- Windows PowerShell 7 (main):
-  ```powershell
-  pwsh -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.ps1'))) -Mode safe -Yes"
-  ```
-
-Panduan lengkap uninstall untuk user:
-- `docs/uninstall-user-quickstart.md` (langsung pakai, minim risiko)
-- `docs/uninstall-cli-ux.md` (kontrak CLI + safety behavior)
-- `docs/uninstall-parity-matrix.md` (parity Linux/macOS/WSL/Windows)
-
-Catatan penting:
-- Default **auto backup aktif** sebelum data dihapus.
-- Preview tanpa perubahan: `bash ./uninstall.sh --mode safe --dry-run`
-- Full wipe (destructive): `bash ./uninstall.sh --mode purge --yes --force-purge`
-
-### Backup / Restore cepat (Linux/macOS/WSL)
-
-Kalau mau simpan lalu pulihkan state sebelum/selesai retest:
-
-```bash
-bash ./backup.sh --yes
-bash ./restore.sh --yes
-```
-
-Opsional aman:
-- Preview backup tanpa menulis apa pun: `bash ./backup.sh --dry-run`
-- Preview restore tanpa ekstrak: `bash ./restore.sh --dry-run`
-- Pilih archive tertentu saat restore: `bash ./restore.sh --archive /path/file.tar.gz --yes`
-
-### macOS: `opencode auth login` fallback ke API key
-
-Kalau di macOS login malah minta API key (padahal harusnya keluar OAuth Antigravity), jalankan langkah ini dari Terminal biasa:
-
-1) Pastikan binary yang kepanggil urutannya benar:
-
-```bash
-which -a opencode
-PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode --version
-```
-
-2) Pastikan plugin OAuth Antigravity terpasang (cek salah satu entry valid):
-
-```bash
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
-grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js || grep -n "OAuth with Google (Antigravity)" ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
-grep -n "opencode-multi-auth" ~/.config/opencode/opencode.json
-```
-
-Jika `dist/src/plugin.js` dan `dist/index.js` sama-sama belum ada, jalankan repair cepat ini:
-
-```bash
-cd ~/.config/opencode/plugins/opencode-multi-auth || exit 1
-bun install --frozen-lockfile || bun install
-PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" bun run build || npm run build
-OCS_SETUP_INSTALLER_MODE=1 bun scripts/setup.js --headless --profile codex-5.3-token-saver --mode low
-ls -la ~/.config/opencode/plugins/opencode-multi-auth/dist/src/plugin.js ~/.config/opencode/plugins/opencode-multi-auth/dist/index.js
-```
-
-Kalau folder plugin belum ada sama sekali, rerun installer:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/beta/install.sh | bash -s -- --version 2.1.12
-```
-
-3) Paksa login via provider Antigravity dengan PATH prioritas:
-
-```bash
-PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
-```
-
-4) Kalau masih fallback ke API key, jalankan debug:
-
-```bash
-OPENCODE_LOG_LEVEL=debug PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH" opencode auth login --provider antigravity
-```
-
-Catatan: jalankan perintah di shell Terminal normal (bukan embedded TUI) supaya picker OAuth tidak bentrok.
 ### Windows: PowerShell 7 requirement
 
 - Verify PowerShell 7:
@@ -282,7 +107,7 @@ Catatan: jalankan perintah di shell Terminal normal (bukan embedded TUI) supaya 
   - MSI installer: https://github.com/PowerShell/PowerShell/releases/latest
 - If terminal still opens 5.1, force full path:
   ```powershell
-& "$env:ProgramFiles\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.1.14/install.ps1 | iex"
+& "$env:ProgramFiles\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex"
   ```
 
 ## Buat yang Nggak Ada Waktu Ngoprek
@@ -293,16 +118,16 @@ Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau bar
 - Tidak perlu trial and error config dari nol.
 - Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
 
-## OCS v2.1.14 Staging - Yang Sudah Solid
+## OCS v2.2.0 Staging - Dependency Modernization Wave
 
 Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
 
-- Multi-agent teamwork dengan 14 agent role-specific (debug, riset docs, review, security audit, eksekusi).
-- 11 profile siap pilih (termasuk jalur GPT-5.4 quality-first, GPT-5.4 token-saver, dan Codex 5.3 token-saver).
-- Multi-account workflow untuk jalur penggunaan harian.
-- LSP + MCP aktif untuk docs lookup dan GitHub code search real-time.
-- Hardening installer Linux/WSL/Windows, termasuk stabilisasi `ocs` shim dan deteksi command `opencode`.
-- Jalur login Antigravity OAuth dipulihkan dan tervalidasi di `opencode auth login`, termasuk fallback setup baru yang menghindari spec mentah `file:///.../dist/index.js` di Linux/macOS/WSL.
+- Multi-agent workflow yang lebih cepat buat planning, coding, review, dan validasi rilis harian.
+- Profil siap pakai untuk mode quality-first maupun mode hemat-kuota, tinggal pilih sesuai ritme kerja.
+- Alur multi-account yang lebih stabil untuk sesi panjang, dengan gangguan re-auth yang makin minim.
+- Integrasi riset dan tooling pendukung aktif dari awal supaya cari referensi dan eksekusi jadi lebih lancar.
+- Installer cross-platform makin tahan banting di Linux/WSL/Windows dengan recovery path yang lebih rapi.
+- Onboarding langsung siap dipakai: install, login, pilih profile, lanjut ngoding tanpa setup manual berlapis.
 
 ## Nggak pake lama!
 
@@ -312,8 +137,7 @@ Install OCS sekarang:
 
 ## Channel Mapping
 
-- Buyer beta source repo: `andyvandaric/andyvand-opencode-config`
-- Default source branch: `staging/v2.1.14`
+- Default source branch: `staging/v2.2.0`
 - Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
 
 ## Access Behavior

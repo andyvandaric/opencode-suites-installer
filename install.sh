@@ -44,7 +44,7 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-INSTALLER_SOURCE_BRANCH_HINT="staging/v2.1.14"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.2.0"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
 DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
@@ -156,7 +156,7 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.1.14)
+--branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.2.0)
   --help, -h      Show this help
 
 Env alternatives:
@@ -407,75 +407,6 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
-normalize_runtime_plugin_paths() {
-  local config_dir="${HOME}/.config/opencode"
-  local runtime_opencode="${config_dir}/opencode.json"
-
-  [[ -f "${runtime_opencode}" ]] || return 0
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 unavailable; skipping runtime plugin path normalization."
-    return 0
-  fi
-
-  if python3 - "${runtime_opencode}" "${PLUGIN_DIR}" <<'PY'
-import json
-import pathlib
-import sys
-from urllib.parse import quote
-
-runtime_path = pathlib.Path(sys.argv[1])
-plugin_dir = pathlib.Path(sys.argv[2]).resolve()
-
-raw = runtime_path.read_text(encoding="utf-8")
-data = json.loads(raw)
-plugin_field_name = None
-plugins = data.get("plugin")
-if isinstance(plugins, list):
-    plugin_field_name = "plugin"
-else:
-    plugins = data.get("plugins")
-    if isinstance(plugins, list):
-        plugin_field_name = "plugins"
-
-if plugin_field_name is None:
-    raise SystemExit(0)
-
-plugin_dir_url = "file://" + quote(plugin_dir.as_posix().rstrip("/") + "/", safe=":/-._~")
-changed = False
-rewritten = []
-
-for item in plugins:
-    if not isinstance(item, str):
-        rewritten.append(item)
-        continue
-
-    normalized = item
-    lowered = item.lower()
-
-    if "opencode-multi-auth" in lowered:
-        if lowered.startswith("opencode-multi-auth@file:") or "/dist/index.js" in lowered or "plugins/opencode-multi-auth" in lowered:
-            normalized = plugin_dir_url
-
-    if normalized != item:
-        changed = True
-
-    rewritten.append(normalized)
-
-if not changed:
-    raise SystemExit(0)
-
-data[plugin_field_name] = rewritten
-runtime_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-print("normalized")
-PY
-  then
-    info "Normalized runtime plugin path for opencode-multi-auth."
-  else
-    warn "Failed to normalize runtime plugin path; continuing with existing config."
-  fi
-}
-
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
@@ -525,38 +456,6 @@ opencode_works() {
   return 0
 }
 
-is_wsl_environment() {
-  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
-}
-
-ensure_wsl_stable_opencode_shim() {
-  if ! is_wsl_environment; then
-    return 0
-  fi
-
-  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
-  if [[ ! -x "${direct_bin}" ]]; then
-    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
-    return 0
-  fi
-
-  mkdir -p "${HOME}/.local/bin"
-  cat > "${HOME}/.local/bin/opencode" <<EOF
-#!/usr/bin/env bash
-exec "${direct_bin}" "\$@"
-EOF
-  chmod +x "${HOME}/.local/bin/opencode"
-
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
-  hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    info "WSL stable opencode launcher shim installed."
-  else
-    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
-  fi
-}
-
 install_opencode_shim() {
   local bun_bin="${HOME}/.bun/bin"
   local local_bin="${HOME}/.local/bin"
@@ -583,15 +482,7 @@ EOF
 
   export PATH="${local_bin}:${bun_bin}:${PATH}"
   hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    return 0
-  fi
-
-  rm -f "${bun_bin}/opencode" "${local_bin}/opencode"
-  hash -r 2>/dev/null || true
-  info "Generated opencode bunx shim failed health check and was removed."
-  return 1
+  opencode_works
 }
 
 install_opencode_official() {
@@ -627,23 +518,23 @@ ensure_opencode_command() {
     return 0
   fi
 
-  warn "opencode command not healthy. Trying bun global install..."
-  if install_opencode_bun_global && opencode_works; then
-    return 0
-  fi
-
-  warn "bun global install did not recover opencode. Installing bunx shim..."
-  if install_opencode_shim && opencode_works; then
-    return 0
-  fi
-
-  warn "bunx shim did not recover opencode. Trying official installer..."
+  warn "opencode command not healthy. Trying official installer..."
   if install_opencode_official && opencode_works; then
     return 0
   fi
 
+  warn "official installer did not recover opencode. Trying bun global install..."
+  if install_opencode_bun_global && opencode_works; then
+    return 0
+  fi
+
+  warn "opencode command not healthy. Installing bunx shim..."
+  if install_opencode_shim && opencode_works; then
+    return 0
+  fi
+
   if [[ "${OCS_ENABLE_NODE_AUTO_INSTALL:-0}" == "1" ]]; then
-    warn "official installer did not recover opencode. Trying Node.js + npm global install..."
+    warn "bunx shim did not recover opencode. Trying Node.js + npm global install..."
     if ensure_nodejs_runtime && install_opencode_npm_global && opencode_works; then
       return 0
     fi
@@ -797,10 +688,28 @@ open_purchase_page() {
 
 install_ocs_shim_from_bundle() {
   local plugin_path="$1"
-  local ocs_js="${plugin_path}/bin/ocs.cjs"
-  if [[ ! -f "$ocs_js" ]]; then
-    ocs_js="${plugin_path}/bin/ocs.js"
+  local root_path="${2:-}"
+  local ocs_js=""
+  local candidate
+  local candidates=(
+    "${plugin_path}/bin/ocs.cjs"
+    "${plugin_path}/bin/ocs.js"
+  )
+
+  if [[ -n "$root_path" ]]; then
+    candidates+=(
+      "${root_path}/bin/ocs.cjs"
+      "${root_path}/bin/ocs.js"
+    )
   fi
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      ocs_js="$candidate"
+      break
+    fi
+  done
+
   [[ -f "$ocs_js" ]] || return 1
 
   local bun_bin="${HOME}/.bun/bin"
@@ -878,7 +787,7 @@ ensure_ocs_command() {
     return 0
   fi
 
-  if install_ocs_shim_from_bundle "$plugin_dir"; then
+  if install_ocs_shim_from_bundle "$plugin_dir" "$root_dir"; then
     success "ocs shim install and verification passed."
     return 0
   fi
@@ -989,6 +898,54 @@ is_lock_error() {
   [[ "$msg" =~ EBUSY|EFAULT|EPERM|ENOENT|resource\ busy|being\ used\ by\ another\ process|Access\ is\ denied ]]
 }
 
+hash_file_sha256() {
+  local file_path="$1"
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file_path" | awk '{print $1}'
+    return 0
+  fi
+
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file_path" | awk '{print $1}'
+    return 0
+  fi
+
+  return 1
+}
+
+compute_dependency_fingerprint() {
+  local install_dir="$1"
+  local files=(
+    "package.json"
+    "bun.lock"
+    "bun.lockb"
+    "bunfig.toml"
+    "package-lock.json"
+    "pnpm-lock.yaml"
+    "yarn.lock"
+  )
+  local file
+  local full_path
+  local hash_value
+  local parts=()
+
+  for file in "${files[@]}"; do
+    full_path="${install_dir}/${file}"
+    if [[ -f "$full_path" ]]; then
+      hash_value="$(hash_file_sha256 "$full_path" 2>/dev/null || true)"
+      [[ -n "$hash_value" ]] || continue
+      parts+=("${file}:${hash_value}")
+    fi
+  done
+
+  if [[ ${#parts[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${parts[@]}"
+}
+
 stop_windows_lock_holders() {
   if ! command -v powershell >/dev/null 2>&1; then
     return 0
@@ -1001,13 +958,38 @@ install_dependencies_with_retry() {
   local install_dir="$1"
   local attempts=5
   local i
+  local marker_dir="${install_dir}/.ocs-install-state"
+  local marker_file="${marker_dir}/bun-install.fingerprint"
+  local current_fingerprint=""
+
+  current_fingerprint="$(compute_dependency_fingerprint "$install_dir" 2>/dev/null || true)"
+  if [[ -n "$current_fingerprint" && -d "${install_dir}/node_modules" && -f "$marker_file" ]]; then
+    local previous_fingerprint
+    previous_fingerprint="$(cat "$marker_file" 2>/dev/null || true)"
+    if [[ "$previous_fingerprint" == "$current_fingerprint" ]]; then
+      info "Dependency fingerprint unchanged. Skipping bun install in ${install_dir}."
+      return 0
+    fi
+  fi
 
   for ((i=1; i<=attempts; i++)); do
     if bun install --frozen-lockfile >/dev/null 2>&1; then
+      local new_fingerprint
+      new_fingerprint="$(compute_dependency_fingerprint "$install_dir" 2>/dev/null || true)"
+      if [[ -n "$new_fingerprint" ]]; then
+        mkdir -p "$marker_dir"
+        printf '%s' "$new_fingerprint" >"$marker_file"
+      fi
       return 0
     fi
 
     if bun install >/tmp/ocs-bun-install.err 2>&1; then
+      local new_fingerprint
+      new_fingerprint="$(compute_dependency_fingerprint "$install_dir" 2>/dev/null || true)"
+      if [[ -n "$new_fingerprint" ]]; then
+        mkdir -p "$marker_dir"
+        printf '%s' "$new_fingerprint" >"$marker_file"
+      fi
       return 0
     fi
 
@@ -1497,26 +1479,16 @@ else
 fi
 
 ensure_shell_path_priority
-ensure_wsl_stable_opencode_shim
-ensure_system_command_links || true
-normalize_runtime_plugin_paths
+ensure_system_command_links
 
 if opencode_works; then
   info "opencode verification passed."
 elif install_opencode_shim && opencode_works; then
   info "opencode shim installed and verification passed."
-elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-1}" == "1" ]]; then
+elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
-  fi
-
-  ensure_shell_path_priority
-  ensure_wsl_stable_opencode_shim
-  ensure_system_command_links || true
-
-  if opencode_works; then
-    info "opencode verification passed after recovery link refresh."
   fi
 else
   warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."

@@ -19,7 +19,7 @@ This repo is the public installer entrypoint. Keep installer behavior stable acr
 
 ## Smoke Test Baseline
 
-- Run WSL smoke test with `--branch main --version 2.1.3`.
+- Run WSL smoke test with `--branch main --version 2.2.0`.
 - Expected result: installer falls back to `beta` and completes.
 
 ## Troubleshooting Fast Path
