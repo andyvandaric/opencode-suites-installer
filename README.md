@@ -1,6 +1,15 @@
 # opencode-suites-installer
 
-OCS (OpenCode Config Suites) is the fast lane to a ready-to-work OpenCode environment across Windows, Linux, and macOS.
+Install OCS (OpenCode Config Suites) in minutes on **Windows, Linux, and macOS**.
+
+OCS is built for people who want to code faster with AI without wasting time on manual setup and trial-error config.
+
+## Why OCS
+
+- 🚀 **Fast start** — install, login, pick a profile, and ship.
+- 🧠 **Ready-to-use multi-agent flow** for planning, coding, review, and testing.
+- 🔐 **Safer runtime defaults** for auth/session handling in long daily usage.
+- 🧩 **Cross-platform consistency** across Windows, WSL, Linux, and macOS.
 
 ## Quick Install
 
@@ -10,15 +19,13 @@ OCS (OpenCode Config Suites) is the fast lane to a ready-to-work OpenCode enviro
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.sh | bash
 ```
 
-Run it from your normal user shell. Do not wrap the installer in `sudo`, or profile/config writes may target the wrong home directory.
-
 Install specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.sh | bash -s -- --version 2.2.0
 ```
 
-### Windows (PowerShell)
+### Windows (PowerShell 7)
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex"
@@ -30,117 +37,48 @@ Install specific version:
 pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.2.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex'
 ```
 
-Windows note: run via `pwsh` (PowerShell 7), not `powershell.exe` (Windows PowerShell 5.1), to avoid parser errors like `Unexpected token '??'`.
+> Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
 
-## EXA API Onboarding (Windows/WSL/Linux/macOS parity)
+## After Install (60 seconds)
 
-Use the same EXA flow on every platform:
+```bash
+opencode auth login
+ocs setup profile
+```
 
-1. Create/sign in account: `https://dashboard.exa.ai`
-2. Open API key page: `https://dashboard.exa.ai/api-keys`
-3. Create API key and copy it once (store securely).
+Recommended daily profile:
 
-Wire and verify from terminal:
+- `codex-5.3-token-saver` (primary)
+- `gpt-5.4-best-perform` (backup)
+- `gpt-5.4-token-saver` (backup)
 
-- macOS / Linux / WSL:
-  ```bash
-  ocs exa setup --api-key <YOUR_EXA_API_KEY>
-  ocs exa check
-  ```
-- Windows PowerShell 7:
-  ```powershell
-  ocs exa setup --api-key <YOUR_EXA_API_KEY>
-  ocs exa check
-  ```
-  If script policy blocks shims, use `ocs.cmd` fallback.
+## Runtime Recommendation
 
-To keep GitHub MCP healthy:
+1. **Primary:** OpenCode VSCode Extension by SST (best stability for long sessions)
+2. **Secondary:** Web UI (`opencode web --port 8089`)
 
-- Authenticate once: `gh auth login`
-- Export token for MCP config:
-  - macOS / Linux / WSL: `export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token)"`
-  - Windows PowerShell: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token`
-- Verify MCP status: `opencode mcp list`
+## Uninstall
 
-## Codex Setup Profiles
+### macOS / Linux
 
-- `codex-5.3-token-saver` (recommended daily default)
-  - Best fit for speed, accuracy, and quota stability in long sessions.
-- `gpt-5.4-best-perform`
-  - Backup profile when you need maximum quality for high-risk tasks.
-- `gpt-5.4-token-saver`
-  - Backup profile for GPT-quality lanes with lower worker token burn.
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/uninstall.sh | bash
+```
 
-Notes:
-- These three setups are now selectable from `ocs setup profile`.
-- Model availability still follows your runtime account entitlements (`opencode models openai`).
+### Windows (PowerShell 7)
 
-## Troubleshooting Commands
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/uninstall.ps1 | iex"
+```
 
-- Diagnose PATH/shim issues:
-  ```bash
-  ocs doctor
-  ```
-- If `ocs` or `opencode` is not detected on macOS/Linux:
-  ```bash
-  export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"
-  hash -r
-  ocs doctor
-  ```
-- If `ocs` or `opencode` is not detected on Windows PowerShell:
-  ```powershell
-  Get-Command ocs
-  Get-Command opencode
-  ocs doctor
-  ```
+## Need full technical details?
 
-### Windows: PowerShell 7 requirement
+Public installer docs are intentionally lightweight (install/uninstall + onboarding).
 
-- Verify PowerShell 7:
-  ```powershell
-  pwsh --version
-  pwsh -NoProfile -Command "$PSVersionTable.PSVersion"
-  ```
-- Install PowerShell 7 on Windows:
-  - `winget install --id Microsoft.PowerShell --source winget`
-  - Microsoft Store: search **PowerShell** (Publisher: Microsoft)
-  - MSI installer: https://github.com/PowerShell/PowerShell/releases/latest
-- If terminal still opens 5.1, force full path:
-  ```powershell
-& "$env:ProgramFiles\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.2.0/install.ps1 | iex"
-  ```
+For deep technical docs (MCP setup, advanced runtime tuning, release-level details), use the **buyer repository README/docs**.
 
-## Buat yang Nggak Ada Waktu Ngoprek
+---
 
-Kalau kamu sudah lama ngikutin OpenCode tapi masih bingung setup agent, atau baru mulai dan belum kebayang harus start dari mana, OCS disiapkan buat jalur cepat.
-
-- Tinggal install, add akun, pilih profile, dan pakai.
-- Tidak perlu trial and error config dari nol.
-- Siap untuk workflow multi-agent harian dengan setup yang lebih rapi.
-
-## OCS v2.2.0 Staging - Dependency Modernization Wave
-
-Kalau kamu ngoding pakai AI setiap hari, biasanya yang bikin seret itu kuota cepat habis, workflow single-agent lama, dan pindah tool bikin fokus buyar. OCS dirancang untuk ngatasin problem itu dari awal.
-
-- Multi-agent workflow yang lebih cepat buat planning, coding, review, dan validasi rilis harian.
-- Profil siap pakai untuk mode quality-first maupun mode hemat-kuota, tinggal pilih sesuai ritme kerja.
-- Alur multi-account yang lebih stabil untuk sesi panjang, dengan gangguan re-auth yang makin minim.
-- Integrasi riset dan tooling pendukung aktif dari awal supaya cari referensi dan eksekusi jadi lebih lancar.
-- Installer cross-platform makin tahan banting di Linux/WSL/Windows dengan recovery path yang lebih rapi.
-- Onboarding langsung siap dipakai: install, login, pilih profile, lanjut ngoding tanpa setup manual berlapis.
-
-## Nggak pake lama!
-
-Install OCS sekarang:
+Install now:
 
 - https://github.com/andyvandaric/opencode-suites-installer#quick-install
-
-## Channel Mapping
-
-- Default source branch: `staging/v2.2.0`
-- Bundle source path: `assets/opencode-config-suites-v*.tar.gz`
-
-## Access Behavior
-
-- If your GitHub account has staging access, installer pulls bundle from buyer staging channel.
-- If access is missing, installer redirects to WhatsApp purchase CTA.
