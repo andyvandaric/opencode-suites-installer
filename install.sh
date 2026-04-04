@@ -782,6 +782,13 @@ ensure_ocs_command() {
     export PATH="${HOME}/.bun/bin:${PATH}"
   fi
 
+  if [[ "$is_local_source" == "true" ]]; then
+    if install_ocs_shim_from_bundle "$plugin_dir" "$root_dir"; then
+      success "ocs shim refreshed from local source and verification passed."
+      return 0
+    fi
+  fi
+
   if ocs_works; then
     info "ocs verification passed."
     return 0
