@@ -13,12 +13,13 @@
 - Fixed: 38
 - Changed: 0
 - Docs: 28
-- Chore/Build/CI: 21
+- Chore/Build/CI: 22
 - Other: 9
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `63c2533` chore(installer): sync staging v2.2.0 release wave
 - `cb8052d` chore(installer): sync staging v2.2.0 release wave
 - `36f1942` chore(installer): sync staging v2.2.0 release wave
 - `c368b60` chore(installer): sync staging v2.2.0 release wave
