@@ -1,10 +1,9 @@
 # Changelog
 
-## 2.2.0 - 2026-04-04
-- Synced installer lane defaults/examples to `staging/v2.2.0` and version pins to `2.2.0` across Bash/PowerShell quick-install commands.
-- Published high-level staging stability/compatibility notes while keeping source/buyer/installer release-line parity.
-- Added CocoIndex ready-to-use bootstrap during installer-driven setup with generated env/compose scaffolding for faster first-run indexing workflows.
-- Improved OpenAI staging runtime stability for long-running multi-account sessions and reduced unnecessary re-auth interruptions during normal use.
+## 2.2.1 - 2026-04-05
+- Synced installer lane defaults/examples to `staging/v2.2.1` and version pins to `2.2.1` across Bash/PowerShell quick-install commands.
+- Published high-level staging notes for setup reliability improvements and OpenAI auth robustness updates without exposing internal stack details.
+- Added installer-ready CocoIndex Code activation flow (`ccc`) and MCP registration guidance continuity for first-run indexing workflows.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
@@ -13,12 +12,13 @@
 - Fixed: 38
 - Changed: 0
 - Docs: 28
-- Chore/Build/CI: 25
+- Chore/Build/CI: 26
 - Other: 9
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `dcf50e6` chore(installer): sync staging v2.2.1 release wave
 - `f66e382` chore(installer): sync staging v2.2.0 release wave
 - `cb4f644` chore(installer): sync staging v2.2.0 release wave
 - `6b01de5` chore(installer): sync staging v2.2.0 release wave
@@ -126,6 +126,13 @@
 - `cd19031` Add public installer scripts for release artifacts
 - `7518562` Initial commit
 <!-- OCS_COMMIT_COVERAGE_END -->
+## 2.2.0 - 2026-04-04
+
+- Synced installer lane defaults/examples to `staging/v2.2.0` and version pins to `2.2.0` across Bash/PowerShell quick-install commands.
+- Published high-level staging stability/compatibility notes while keeping source/buyer/installer release-line parity.
+- Added CocoIndex ready-to-use bootstrap during installer-driven setup with generated env/compose scaffolding for faster first-run indexing workflows.
+- Improved OpenAI staging runtime stability for long-running multi-account sessions and reduced unnecessary re-auth interruptions during normal use.
+
 ## 2.1.15 - 2026-04-03
 
 - Synced installer lane default branch/examples to `staging/v2.1.15` for the OpenAI on-demand refresh hardening wave.
