@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.2.0"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.2.1"
 $INFERRED_INSTALLER_SOURCE_BRANCH = ""
 
 $invocationLine = $MyInvocation.Line

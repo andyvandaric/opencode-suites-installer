@@ -44,7 +44,7 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-INSTALLER_SOURCE_BRANCH_HINT="staging/v2.2.0"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.2.1"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
 DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
@@ -156,7 +156,7 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
---branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.2.0)
+--branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.2.1)
   --help, -h      Show this help
 
 Env alternatives:
