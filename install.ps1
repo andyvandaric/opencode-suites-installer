@@ -1696,7 +1696,7 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 Ensure-OpencodePathEntries
-Ensure-PnpmRuntimeForAgents | Out-Null
+Ensure-PnpmRuntime | Out-Null
 Ensure-PythonRuntimeForAgents | Out-Null
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
 Write-Output "Fallback release branch: $DEFAULT_RELEASE_BRANCH"
