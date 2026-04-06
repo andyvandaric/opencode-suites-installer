@@ -279,18 +279,258 @@ function Add-PathEntryToUserPath {
     }
 }
 
+function Get-PythonPathCandidates {
+    $allCandidates = @(
+        (Join-Path $env:USERPROFILE ".local\bin"),
+        (Join-Path $env:USERPROFILE ".local\pipx\bin"),
+        (Join-Path $env:USERPROFILE ".local\share\uv\tools\bin"),
+        (Join-Path $env:APPDATA "Python\Scripts")
+    )
+
+    $pythonRoots = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Python"),
+        (Join-Path $env:APPDATA "Python")
+    )
+
+    foreach ($root in $pythonRoots) {
+        if (-not $root -or -not (Test-Path $root)) {
+            continue
+        }
+
+        Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $allCandidates += $_.FullName
+            $allCandidates += (Join-Path $_.FullName "Scripts")
+        }
+    }
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $result = @()
+    foreach ($candidate in $allCandidates) {
+        if (-not $candidate) { continue }
+        $normalized = $candidate.TrimEnd("\\")
+        if ($seen.Add($normalized)) {
+            $result += $normalized
+        }
+    }
+
+    return $result
+}
+
+function Get-NodeGlobalPaths {
+    $paths = @()
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmCmd) {
+        return $paths
+    }
+
+    try {
+        $prefix = & npm config get prefix 2>$null
+    } catch {
+        $prefix = ""
+    }
+
+    $prefix = $prefix.Trim()
+    if (-not $prefix) {
+        return $paths
+    }
+
+    $normalized = $prefix.TrimEnd('\', '/')
+    if (-not $normalized) {
+        return $paths
+    }
+
+    $paths += $normalized
+    $paths += (Join-Path $normalized 'bin')
+    return $paths
+}
+
+function Get-PnpmBinDirectories {
+    $paths = @()
+    $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
+    if ($pnpmCmd) {
+        $binDir = Split-Path -Parent $pnpmCmd.Source
+        if ($binDir) {
+            $paths += $binDir
+        }
+    }
+    return $paths
+}
+
 function Ensure-OpencodePathEntries {
     $pathCandidates = @(
         (Join-Path $env:USERPROFILE ".opencode\bin"),
         (Join-Path $env:USERPROFILE ".bun\bin"),
-        (Join-Path $env:USERPROFILE ".local\bin")
+        (Join-Path $env:USERPROFILE ".local\bin"),
+        (Join-Path $env:USERPROFILE ".local\pipx\bin"),
+        (Join-Path $env:USERPROFILE ".local\share\uv\tools\bin")
     )
+
+    $pathCandidates += @(
+        (Join-Path $env:USERPROFILE ".node\bin"),
+        (Join-Path $env:USERPROFILE ".npm\bin"),
+        (Join-Path $env:USERPROFILE ".npm-global\bin"),
+        (Join-Path $env:USERPROFILE ".pnpm\bin"),
+        (Join-Path $env:USERPROFILE ".local\share\pnpm\bin")
+    )
+
+    $pathCandidates += Get-NodeGlobalPaths
+    $pathCandidates += Get-PnpmBinDirectories
+
+    $pathCandidates += Get-PythonPathCandidates
 
     foreach ($candidate in $pathCandidates) {
         Add-PathEntryToUserPath -PathEntry $candidate
     }
 
     Refresh-SessionPath
+}
+
+function Get-PythonRuntimeStatus {
+    $candidates = @(
+        @{ Name = "python"; Args = @("--version") },
+        @{ Name = "python3"; Args = @("--version") },
+        @{ Name = "py"; Args = @("-3", "--version") }
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not (Get-Command $candidate.Name -ErrorAction SilentlyContinue)) {
+            continue
+        }
+
+        try {
+            $output = & $candidate.Name @($candidate.Args) 2>&1
+            $versionLine = ($output | Select-Object -First 1)
+            if ($versionLine) {
+                return @{
+                    Ready = $true
+                    Command = $candidate.Name
+                    Version = [string]$versionLine
+                }
+            }
+        } catch {
+            # continue probing
+        }
+    }
+
+    return @{
+        Ready = $false
+        Command = ""
+        Version = ""
+    }
+}
+
+function Ensure-PythonRuntimeForAgents {
+    $status = Get-PythonRuntimeStatus
+    if ($status.Ready) {
+        Write-Output "Python runtime ready: $($status.Version)"
+        return $true
+    }
+
+    Write-Warning "Python runtime not found. Attempting auto-install for agent dependencies..."
+    $installed = $false
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        $wingetIds = @("Python.Python.3.12", "Python.Python.3.11")
+        foreach ($wingetId in $wingetIds) {
+            if ($installed) { break }
+            try {
+                & winget install --id $wingetId --exact --silent --accept-package-agreements --accept-source-agreements
+                if ($LASTEXITCODE -eq 0) {
+                    $installed = $true
+                }
+            } catch {
+                $installed = $false
+            }
+        }
+    }
+
+    if ((-not $installed) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        try {
+            & choco install python -y
+            if ($LASTEXITCODE -eq 0) {
+                $installed = $true
+            }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    if ((-not $installed) -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        try {
+            & scoop install python
+            if ($LASTEXITCODE -eq 0) {
+                $installed = $true
+            }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    Refresh-SessionPath
+    Ensure-OpencodePathEntries
+
+    $status = Get-PythonRuntimeStatus
+    if ($status.Ready) {
+        Write-Output "Python runtime ready: $($status.Version)"
+        return $true
+    }
+
+    Write-Warning "Python runtime is still unavailable. CocoIndex bootstrap may need manual Python installation."
+    return $false
+}
+
+function Ensure-PnpmRuntime {
+    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        Write-Output "pnpm already available."
+        return $true
+    }
+
+    Write-Warning "pnpm not found. Bootstrapping via corepack/npm..."
+    $bootstrapped = $false
+
+    $corepackCmd = Get-Command corepack -ErrorAction SilentlyContinue
+    if ($corepackCmd) {
+        try {
+            & corepack enable 2>$null
+            & corepack prepare pnpm@latest --activate 2>$null
+            if ($LASTEXITCODE -eq 0) { $bootstrapped = $true }
+        } catch {
+            Write-Warning "corepack bootstrap for pnpm failed: $($_.Exception.Message)"
+        }
+    }
+
+    if ((-not $bootstrapped) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+        try {
+            & npm install -g pnpm *> $null
+            if ($LASTEXITCODE -eq 0) { $bootstrapped = $true }
+        } catch {
+            Write-Warning "npm install -g pnpm failed: $($_.Exception.Message)"
+        }
+    }
+
+    $npmPrefix = $null
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        try {
+            $npmPrefix = (& npm config get prefix 2>$null).Trim()
+        } catch {
+            $npmPrefix = $null
+        }
+    }
+
+    if ($npmPrefix) {
+        $npmBin = Join-Path $npmPrefix 'bin'
+        Add-PathEntryToUserPath -PathEntry $npmBin
+    }
+
+    Refresh-SessionPath
+
+    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        Write-Output "pnpm ready for plugin workflows."
+        return $true
+    }
+
+    Write-Warning "pnpm remains unavailable after auto-bootstrap. Manual install may be required."
+    return $false
 }
 
 function Ensure-WindowsShellEnv {
@@ -1455,6 +1695,9 @@ if ($relaunchHandled) {
 }
 Ensure-Bun
 Ensure-WindowsShellEnv
+Ensure-OpencodePathEntries
+Ensure-PnpmRuntimeForAgents | Out-Null
+Ensure-PythonRuntimeForAgents | Out-Null
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
 Write-Output "Fallback release branch: $DEFAULT_RELEASE_BRANCH"
 if ($REQUESTED_VERSION) {
