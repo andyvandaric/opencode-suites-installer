@@ -12,12 +12,13 @@
 - Fixed: 40
 - Changed: 0
 - Docs: 28
-- Chore/Build/CI: 33
+- Chore/Build/CI: 34
 - Other: 9
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `40aeab5` chore(installer): sync staging v2.2.1 release wave
 - `369b21a` chore(installer): sync staging v2.2.1 release wave
 - `3e5b7ac` chore(installer): sync staging v2.2.1 release wave
 - `85a9494` fix(installer): align fallback branch hint to staging v2.2.1
