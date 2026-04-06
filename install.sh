@@ -180,7 +180,7 @@ detect_installer_branch_from_parent_commandline() {
   [[ -n "$cmdline" ]] || return 1
 
   local marker="raw.githubusercontent.com/andyvandaric/opencode-suites-installer/"
-  local tail="${cmdline#*${marker}}"
+  local tail="${cmdline#*"${marker}"}"
   [[ "$tail" != "$cmdline" ]] || return 1
 
   local branch="${tail%%/install.sh*}"
@@ -388,6 +388,60 @@ resolve_primary_shell_profile() {
   esac
 }
 
+resolve_binary_dir() {
+  local bin="$1"
+  if [[ -z "$bin" ]]; then
+    return 1
+  fi
+
+  local resolved
+  resolved="$(command -v "$bin" 2>/dev/null || true)"
+  if [[ -z "$resolved" ]]; then
+    return 1
+  fi
+
+  dirname "$resolved"
+}
+
+collect_node_bin_entries() {
+  local entries=(
+    "${HOME}/.node/bin"
+    "${HOME}/.npm/bin"
+    "${HOME}/.npm-global/bin"
+    "${HOME}/.local/share/pnpm/bin"
+    "${HOME}/.pnpm/bin"
+  )
+  local prefix
+  local bin_dir
+
+  if command -v npm >/dev/null 2>&1; then
+    prefix="$(npm config get prefix 2>/dev/null || true)"
+    if [[ -n "$prefix" ]]; then
+      entries+=("${prefix}/bin")
+    fi
+    bin_dir="$(resolve_binary_dir npm 2>/dev/null || true)"
+    if [[ -n "$bin_dir" ]]; then
+      entries+=("$bin_dir")
+    fi
+  fi
+
+  if command -v pnpm >/dev/null 2>&1; then
+    prefix="$(pnpm config get prefix 2>/dev/null || true)"
+    if [[ -n "$prefix" ]]; then
+      entries+=("${prefix}/bin")
+    fi
+    bin_dir="$(resolve_binary_dir pnpm 2>/dev/null || true)"
+    if [[ -n "$bin_dir" ]]; then
+      entries+=("$bin_dir")
+    fi
+  fi
+
+  local entry
+  for entry in "${entries[@]}"; do
+    [[ -n "$entry" ]] && printf '%s\n' "$entry"
+  done
+}
+
 ensure_text_file_exists_if_writable() {
   local file_path="$1"
   local parent_dir
@@ -574,6 +628,62 @@ ensure_nodejs_runtime() {
   esac
 
   command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1
+}
+
+ensure_pnpm_runtime() {
+  local pnpm_version
+  local pnpm_log="/tmp/ocs-pnpm-install.log"
+  if [[ "${OCS_ENABLE_PNPM_AUTO_INSTALL:-1}" != "1" ]]; then
+    warn "pnpm auto-install disabled (set OCS_ENABLE_PNPM_AUTO_INSTALL=1 to enable)."
+    return 1
+  fi
+
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm_version="$(pnpm --version 2>/dev/null || true)"
+    info "pnpm already available: ${pnpm_version:-unknown version}."
+    return 0
+  fi
+
+  rm -f "$pnpm_log" >/dev/null 2>&1 || true
+
+  if command -v corepack >/dev/null 2>&1; then
+    info "Enabling pnpm via corepack..."
+    if corepack enable pnpm >>"$pnpm_log" 2>&1; then
+      corepack prepare pnpm@latest --activate >>"$pnpm_log" 2>&1 || true
+    else
+      warn "corepack enable pnpm failed. See $pnpm_log for details."
+    fi
+
+    if command -v pnpm >/dev/null 2>&1; then
+      pnpm_version="$(pnpm --version 2>/dev/null || true)"
+      success "pnpm ${pnpm_version:-available via corepack}."
+      return 0
+    fi
+  fi
+
+  if command -v npm >/dev/null 2>&1; then
+    info "Installing pnpm via npm global install..."
+    if npm install -g pnpm >>"$pnpm_log" 2>&1; then
+      if command -v pnpm >/dev/null 2>&1; then
+        pnpm_version="$(pnpm --version 2>/dev/null || true)"
+        success "pnpm ${pnpm_version:-installed via npm}."
+        return 0
+      fi
+    else
+      warn "npm install -g pnpm failed. See $pnpm_log for details."
+    fi
+  else
+    warn "npm command not available; pnpm auto-install skipped."
+  fi
+
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm_version="$(pnpm --version 2>/dev/null || true)"
+    success "pnpm ${pnpm_version:-available}."
+    return 0
+  fi
+
+  warn "pnpm still unavailable after auto-install attempts. Plugin tests may need pnpm installed manually."
+  return 1
 }
 
 install_opencode_npm_global() {
@@ -820,15 +930,56 @@ ensure_ocs_command() {
 }
 
 ensure_shell_path_priority() {
-  local export_line='export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.bun/bin:$PATH"'
-  local source_line='[ -f "$HOME/.config/opencode/shell/ocs-path.sh" ] && . "$HOME/.config/opencode/shell/ocs-path.sh"'
   local snippet_dir="${HOME}/.config/opencode/shell"
   local snippet_path="${snippet_dir}/ocs-path.sh"
   local profile
   local shell_name="${SHELL##*/}"
+  local base_entries=(
+    "${HOME}/.opencode/bin"
+    "${HOME}/.local/bin"
+    "${HOME}/.local/pipx/bin"
+    "${HOME}/.local/share/uv/tools/bin"
+    "${HOME}/.bun/bin"
+  )
+  local dynamic_entries=()
+  local entry
 
-  export PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+  while IFS= read -r entry; do
+    dynamic_entries+=("$entry")
+  done < <(collect_node_bin_entries)
+
+  local combined_entries=("${base_entries[@]}" "${dynamic_entries[@]}")
+  local -A seen=()
+  local unique_entries=()
+
+  for entry in "${combined_entries[@]}"; do
+    [[ -z "$entry" ]] && continue
+    if [[ -n "${seen[$entry]:-}" ]]; then
+      continue
+    fi
+    seen[$entry]=1
+    unique_entries+=("$entry")
+  done
+
+  local path_prefix=""
+  for entry in "${unique_entries[@]}"; do
+    if [[ -z "$path_prefix" ]]; then
+      path_prefix="$entry"
+    else
+      path_prefix="${path_prefix}:$entry"
+    fi
+  done
+
+  local export_line
+  if [[ -n "$path_prefix" ]]; then
+    export_line="export PATH=\"${path_prefix}:\$PATH\""
+    export PATH="${path_prefix}:${PATH}"
+  else
+    export_line='export PATH="\$PATH"'
+  fi
   hash -r 2>/dev/null || true
+
+  local source_line='[ -f "$HOME/.config/opencode/shell/ocs-path.sh" ] && . "$HOME/.config/opencode/shell/ocs-path.sh"'
 
   mkdir -p "${snippet_dir}" 2>/dev/null || true
   if ! ensure_text_file_exists_if_writable "${snippet_path}"; then
@@ -849,24 +1000,152 @@ ensure_shell_path_priority() {
   fi
 
   local fish_cfg="${HOME}/.config/fish/config.fish"
-  local fish_line='fish_add_path -m $HOME/.opencode/bin $HOME/.local/bin $HOME/.bun/bin'
+  local fish_args=""
+  for entry in "${unique_entries[@]}"; do
+    fish_args="${fish_args} ${entry}"
+  done
+  fish_args="${fish_args# }"
+  local fish_line=""
+  if [[ -n "$fish_args" ]]; then
+    fish_line="fish_add_path -m ${fish_args}"
+  fi
+
   if [[ "${shell_name}" == "fish" || -f "$fish_cfg" ]]; then
     mkdir -p "$(dirname "$fish_cfg")" 2>/dev/null || true
-    if ensure_text_file_exists_if_writable "$fish_cfg"; then
+    if [[ -n "$fish_line" ]] && ensure_text_file_exists_if_writable "$fish_cfg"; then
       if ! grep -Fq "$fish_line" "$fish_cfg"; then
         printf '\n# OCS installer path\n%s\n' "$fish_line" >> "$fish_cfg"
       fi
-    else
+    elif [[ -n "$fish_line" ]]; then
       warn "Cannot write to fish config at ${fish_cfg}."
     fi
   fi
+}
+
+resolve_python_command_for_agents() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' "python"
+    return 0
+  fi
+
+  printf '%s\n' ""
+}
+
+ensure_agent_dependency_runtime() {
+  info "Checking agent runtime dependencies (Python + PATH parity)..."
+
+  local python_cmd
+  python_cmd="$(resolve_python_command_for_agents)"
+
+  if [[ -z "${python_cmd}" ]]; then
+    warn "Python runtime not found. Attempting automatic install..."
+    local pm
+    pm="$(detect_package_manager)"
+
+    case "$pm" in
+      apt)
+        install_packages_auto "$pm" python3 python3-pip python3-venv || true
+        ;;
+      dnf|yum)
+        install_packages_auto "$pm" python3 python3-pip || true
+        ;;
+      pacman)
+        install_packages_auto "$pm" python python-pip || true
+        ;;
+      zypper)
+        install_packages_auto "$pm" python311 python311-pip || install_packages_auto "$pm" python3 python3-pip || true
+        ;;
+      apk)
+        install_packages_auto "$pm" python3 py3-pip || true
+        ;;
+      brew)
+        install_packages_auto "$pm" python || true
+        ;;
+      *)
+        warn "No supported package manager available for Python auto-install."
+        ;;
+    esac
+
+    python_cmd="$(resolve_python_command_for_agents)"
+  fi
+
+  if [[ -n "${python_cmd}" ]]; then
+    local python_version
+    python_version="$("${python_cmd}" --version 2>/dev/null || true)"
+    if [[ -n "${python_version}" ]]; then
+      info "Python runtime ready: ${python_version}"
+    fi
+
+    if ! "${python_cmd}" -m pip --version >/dev/null 2>&1; then
+      warn "pip missing for ${python_cmd}. Attempting ensurepip..."
+      "${python_cmd}" -m ensurepip --upgrade >/dev/null 2>&1 || true
+    fi
+
+    if ! command -v pipx >/dev/null 2>&1; then
+      info "pipx not found. Attempting user install for agent tooling..."
+      "${python_cmd}" -m pip install --user -U pipx >/dev/null 2>&1 || true
+    fi
+  else
+    warn "Python runtime still unavailable. CocoIndex auto-bootstrap may be skipped."
+  fi
+
+  ensure_pnpm_command || true
+
+  export PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${HOME}/.local/pipx/bin:${HOME}/.local/share/uv/tools/bin:${HOME}/.bun/bin:${PATH}"
+  hash -r 2>/dev/null || true
+}
+
+ensure_pnpm_command() {
+  if command -v pnpm >/dev/null 2>&1; then
+    info "pnpm already available."
+    return 0
+  fi
+
+  info "pnpm not found. Bootstrapping pnpm via corepack/npm..."
+  local bootstraped=false
+  if command -v corepack >/dev/null 2>&1; then
+    corepack enable >/tmp/ocs-corepack-enable.err 2>&1 || true
+    if corepack prepare pnpm@latest --activate >/tmp/ocs-corepack-pnpm.err 2>&1; then
+      bootstraped=true
+    else
+      warn "corepack pnpm preparation failed: $(cat /tmp/ocs-corepack-pnpm.err 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ "${bootstraped}" != "true" ]] && command -v npm >/dev/null 2>&1; then
+    info "Attempting npm install -g pnpm..."
+    if npm install -g pnpm >/tmp/ocs-pnpm-npm.err 2>&1; then
+      local npm_prefix
+      npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+      if [[ -n "${npm_prefix}" && -d "${npm_prefix}/bin" ]]; then
+        export PATH="${npm_prefix}/bin:${PATH}"
+      fi
+      hash -r 2>/dev/null || true
+      bootstraped=true
+    else
+      warn "npm install -g pnpm failed: $(cat /tmp/ocs-pnpm-npm.err 2>/dev/null || true)"
+    fi
+  fi
+
+  if command -v pnpm >/dev/null 2>&1; then
+    success "pnpm ready for agent/tooling workflows."
+    return 0
+  fi
+
+  warn "pnpm remains unavailable after auto-bootstrap attempts. Manual install may be required."
+  return 1
 }
 
 ensure_system_command_links() {
   local target_dir="/usr/local/bin"
   local cmd source_path target_path current_target
 
-  for cmd in ocs opencode; do
+  for cmd in ocs opencode ccc; do
     source_path=""
     if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
       source_path="${HOME}/.local/bin/${cmd}"
@@ -1457,6 +1736,12 @@ main() {
     setup_script="${PLUGIN_DIR}/scripts/setup.js"
   fi
 
+  # Ensure current installer shell can resolve user-installed binaries
+  # (e.g. ccc in ~/.local/bin) before running headless setup.
+  ensure_pnpm_runtime
+  ensure_shell_path_priority
+  ensure_agent_dependency_runtime
+
   if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
   else
@@ -1485,7 +1770,6 @@ else
   info "Skipping automatic ocs command installation because OCS_ENABLE_OCS_AUTO_INSTALL=0."
 fi
 
-ensure_shell_path_priority
 ensure_system_command_links
 
 if opencode_works; then
