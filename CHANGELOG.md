@@ -9,15 +9,18 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `HEAD`
 - Added: 6
-- Fixed: 38
+- Fixed: 40
 - Changed: 0
 - Docs: 28
-- Chore/Build/CI: 30
+- Chore/Build/CI: 31
 - Other: 9
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `85a9494` fix(installer): align fallback branch hint to staging v2.2.1
+- `f0b7a2f` fix(installer): call Ensure-PnpmRuntime in staging script
+- `c8a01dc` chore(installer): sync staging v2.2.1 release wave
 - `88e0852` chore(installer): sync staging v2.2.1 release wave
 - `713b982` chore(installer): sync staging v2.2.1 release wave
 - `1ae3c49` chore(installer): sync staging v2.2.1 release wave
