@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$INSTALLER_SOURCE_BRANCH_HINT = "beta"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.3.0"
 $INFERRED_INSTALLER_SOURCE_BRANCH = ""
 
 $invocationLine = $MyInvocation.Line
@@ -348,18 +348,9 @@ function Get-PnpmBinDirectories {
     $paths = @()
     $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
     if ($pnpmCmd) {
-        $pnpmSource = ""
-        if ($pnpmCmd.Source) {
-            $pnpmSource = [string]$pnpmCmd.Source
-        } elseif ($pnpmCmd.Path) {
-            $pnpmSource = [string]$pnpmCmd.Path
-        }
-
-        if ($pnpmSource) {
-            $binDir = Split-Path -Parent $pnpmSource
-            if ($binDir) {
-                $paths += $binDir
-            }
+        $binDir = Split-Path -Parent $pnpmCmd.Source
+        if ($binDir) {
+            $paths += $binDir
         }
     }
     return $paths
