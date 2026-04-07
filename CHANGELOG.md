@@ -9,12 +9,13 @@
 - Fixed: 0
 - Changed: 0
 - Docs: 0
-- Chore/Build/CI: 1
+- Chore/Build/CI: 2
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `317713f` chore(installer): sync staging v2.3.0 release wave
 - `4080e27` chore(installer): sync staging v2.3.0 release wave
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## 2.2.1 - 2026-04-05
