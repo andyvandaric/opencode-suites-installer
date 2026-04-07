@@ -348,9 +348,18 @@ function Get-PnpmBinDirectories {
     $paths = @()
     $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
     if ($pnpmCmd) {
-        $binDir = Split-Path -Parent $pnpmCmd.Source
-        if ($binDir) {
-            $paths += $binDir
+        $pnpmSource = ""
+        if ($pnpmCmd.Source) {
+            $pnpmSource = [string]$pnpmCmd.Source
+        } elseif ($pnpmCmd.Path) {
+            $pnpmSource = [string]$pnpmCmd.Path
+        }
+
+        if ($pnpmSource) {
+            $binDir = Split-Path -Parent $pnpmSource
+            if ($binDir) {
+                $paths += $binDir
+            }
         }
     }
     return $paths
