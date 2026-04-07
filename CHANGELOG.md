@@ -9,12 +9,13 @@
 - Fixed: 5
 - Changed: 0
 - Docs: 2
-- Chore/Build/CI: 12
+- Chore/Build/CI: 13
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `3c4d164` chore(installer): sync scripts from opencode-config-suites
 - `43f9e1f` fix(installer): guard empty pnpm source path on powershell install
 - `ade2214` chore(installer): align beta lane pull defaults
 - `3279009` chore(release): merge staging v2.3.0 into beta
