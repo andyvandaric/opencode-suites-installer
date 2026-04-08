@@ -6,7 +6,7 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 0
-- Fixed: 0
+- Fixed: 1
 - Changed: 0
 - Docs: 0
 - Chore/Build/CI: 5
@@ -15,6 +15,7 @@
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `400923e` fix(installer): backport cross-platform hardening for staging/v2.3.0
 - `5a575ef` chore(installer): sync staging v2.3.0 release wave
 - `57c6cd0` chore(installer): sync staging v2.3.0 release wave
 - `1879639` chore(installer): sync staging v2.3.0 release wave
