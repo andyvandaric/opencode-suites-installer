@@ -6,17 +6,15 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 1
-- Fixed: 7
+- Fixed: 3
 - Changed: 0
 - Docs: 2
-- Chore/Build/CI: 19
+- Chore/Build/CI: 14
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
-- `2448853` fix(readme): point beta install links to beta branch
-- `ff68ea3` fix(installer): backport cross-platform hardening for beta
 - `a8de28a` chore(installer): sync scripts from opencode-config-suites
 - `b41fce3` chore(installer): sync scripts from opencode-config-suites
 - `f7aa8f4` chore(installer): sync scripts from opencode-config-suites
@@ -32,13 +30,6 @@
 - `1879639` chore(installer): sync staging v2.3.0 release wave
 - `317713f` chore(installer): sync staging v2.3.0 release wave
 - `4080e27` chore(installer): sync staging v2.3.0 release wave
-- `600ae17` chore(installer): sync staging v2.2.1 release wave
-- `3b37021` chore(installer): sync staging v2.2.1 release wave
-- `40aeab5` chore(installer): sync staging v2.2.1 release wave
-- `369b21a` chore(installer): sync staging v2.2.1 release wave
-- `3e5b7ac` chore(installer): sync staging v2.2.1 release wave
-- `85a9494` fix(installer): align fallback branch hint to staging v2.2.1
-- `f0b7a2f` fix(installer): call Ensure-PnpmRuntime in staging script
 - `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
 - `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
 - `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
