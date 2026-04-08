@@ -44,7 +44,7 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-INSTALLER_SOURCE_BRANCH_HINT="main"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.3.0"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
 DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
@@ -101,6 +101,27 @@ run_with_privilege() {
   return 127
 }
 
+run_apt_command_with_elevation() {
+  if run_with_privilege "$@"; then
+    return 0
+  fi
+
+  if is_root_user; then
+    return 1
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+
+  warn "apt command needs elevated privileges. Retrying with sudo (password prompt may appear)..."
+  if sudo "$@"; then
+    return 0
+  fi
+
+  return 1
+}
+
 run_with_retries() {
   local attempts="$1"
   shift
@@ -150,13 +171,28 @@ resolve_absolute_path_safe() {
   printf '%s/%s\n' "$(pwd)" "$candidate"
 }
 
+is_legacy_macos_bash() {
+  [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] || return 1
+
+  local bash_major="${BASH_VERSINFO[0]:-0}"
+  [[ "$bash_major" =~ ^[0-9]+$ ]] || bash_major=0
+  (( bash_major > 0 && bash_major < 4 ))
+}
+
+enable_legacy_shell_fallbacks() {
+  if is_legacy_macos_bash; then
+    warn "Detected legacy macOS bash (${BASH_VERSION:-unknown}). Enabling POSIX CocoIndex shim fallback for setup."
+    export OCS_SETUP_FORCE_POSIX_CCC_SHIM=1
+  fi
+}
+
 show_usage() {
   cat <<'EOF'
 Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: inferred from installer URL, fallback: main)
+  --branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.3.0)
   --help, -h      Show this help
 
 Env alternatives:
@@ -254,7 +290,7 @@ install_packages_auto() {
 
   case "$pm" in
     apt)
-      run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update && run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_apt_command_with_elevation env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update && run_with_retries "$dep_retries" run_apt_command_with_elevation env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y "${pkgs[@]}"
       ;;
     dnf)
       run_with_retries "$dep_retries" run_with_privilege dnf install -y "${pkgs[@]}"
@@ -461,75 +497,6 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
-normalize_runtime_plugin_paths() {
-  local config_dir="${HOME}/.config/opencode"
-  local runtime_opencode="${config_dir}/opencode.json"
-
-  [[ -f "${runtime_opencode}" ]] || return 0
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 unavailable; skipping runtime plugin path normalization."
-    return 0
-  fi
-
-  if python3 - "${runtime_opencode}" "${PLUGIN_DIR}" <<'PY'
-import json
-import pathlib
-import sys
-from urllib.parse import quote
-
-runtime_path = pathlib.Path(sys.argv[1])
-plugin_dir = pathlib.Path(sys.argv[2]).resolve()
-
-raw = runtime_path.read_text(encoding="utf-8")
-data = json.loads(raw)
-plugin_field_name = None
-plugins = data.get("plugin")
-if isinstance(plugins, list):
-    plugin_field_name = "plugin"
-else:
-    plugins = data.get("plugins")
-    if isinstance(plugins, list):
-        plugin_field_name = "plugins"
-
-if plugin_field_name is None:
-    raise SystemExit(0)
-
-plugin_dir_url = "file://" + quote(plugin_dir.as_posix().rstrip("/") + "/", safe=":/-._~")
-changed = False
-rewritten = []
-
-for item in plugins:
-    if not isinstance(item, str):
-        rewritten.append(item)
-        continue
-
-    normalized = item
-    lowered = item.lower()
-
-    if "opencode-multi-auth" in lowered:
-        if lowered.startswith("opencode-multi-auth@file:") or "/dist/index.js" in lowered or "plugins/opencode-multi-auth" in lowered:
-            normalized = plugin_dir_url
-
-    if normalized != item:
-        changed = True
-
-    rewritten.append(normalized)
-
-if not changed:
-    raise SystemExit(0)
-
-data[plugin_field_name] = rewritten
-runtime_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-print("normalized")
-PY
-  then
-    info "Normalized runtime plugin path for opencode-multi-auth."
-  else
-    warn "Failed to normalize runtime plugin path; continuing with existing config."
-  fi
-}
-
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
@@ -577,70 +544,6 @@ opencode_works() {
   fi
 
   return 0
-}
-
-is_wsl_environment() {
-  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
-}
-
-ensure_wsl_stable_opencode_shim() {
-  if ! is_wsl_environment; then
-    return 0
-  fi
-
-  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
-  if [[ ! -x "${direct_bin}" ]]; then
-    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
-    return 0
-  fi
-
-  mkdir -p "${HOME}/.local/bin"
-  cat > "${HOME}/.local/bin/opencode" <<EOF
-#!/usr/bin/env bash
-exec "${direct_bin}" "\$@"
-EOF
-  chmod +x "${HOME}/.local/bin/opencode"
-
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
-  hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    info "WSL stable opencode launcher shim installed."
-  else
-    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
-  fi
-}
-
-is_wsl_environment() {
-  [[ -f /proc/version ]] && grep -qiE 'microsoft|wsl' /proc/version
-}
-
-ensure_wsl_stable_opencode_shim() {
-  if ! is_wsl_environment; then
-    return 0
-  fi
-
-  local direct_bin="${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
-  if [[ ! -x "${direct_bin}" ]]; then
-    warn "WSL stable opencode shim skipped: direct binary not found at ${direct_bin}."
-    return 0
-  fi
-
-  mkdir -p "${HOME}/.local/bin"
-  cat > "${HOME}/.local/bin/opencode" <<EOF
-#!/usr/bin/env bash
-exec "${direct_bin}" "\$@"
-EOF
-  chmod +x "${HOME}/.local/bin/opencode"
-
-  export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
-  hash -r 2>/dev/null || true
-
-  if opencode_works; then
-    info "WSL stable opencode launcher shim installed."
-  else
-    warn "WSL stable opencode launcher shim installed, but opencode health check still failed."
-  fi
 }
 
 install_opencode_shim() {
@@ -705,23 +608,23 @@ ensure_opencode_command() {
     return 0
   fi
 
-  warn "opencode command not healthy. Trying bun global install..."
-  if install_opencode_bun_global && opencode_works; then
-    return 0
-  fi
-
-  warn "bun global install did not recover opencode. Installing bunx shim..."
-  if install_opencode_shim && opencode_works; then
-    return 0
-  fi
-
-  warn "bunx shim did not recover opencode. Trying official installer..."
+  warn "opencode command not healthy. Trying official installer..."
   if install_opencode_official && opencode_works; then
     return 0
   fi
 
+  warn "official installer did not recover opencode. Trying bun global install..."
+  if install_opencode_bun_global && opencode_works; then
+    return 0
+  fi
+
+  warn "opencode command not healthy. Installing bunx shim..."
+  if install_opencode_shim && opencode_works; then
+    return 0
+  fi
+
   if [[ "${OCS_ENABLE_NODE_AUTO_INSTALL:-0}" == "1" ]]; then
-    warn "official installer did not recover opencode. Trying Node.js + npm global install..."
+    warn "bunx shim did not recover opencode. Trying Node.js + npm global install..."
     if ensure_nodejs_runtime && install_opencode_npm_global && opencode_works; then
       return 0
     fi
@@ -1082,15 +985,18 @@ ensure_shell_path_priority() {
   done < <(collect_node_bin_entries)
 
   local combined_entries=("${base_entries[@]}" "${dynamic_entries[@]}")
-  local -A seen=()
   local unique_entries=()
 
   for entry in "${combined_entries[@]}"; do
     [[ -z "$entry" ]] && continue
-    if [[ -n "${seen[$entry]:-}" ]]; then
-      continue
-    fi
-    seen[$entry]=1
+    local already_seen=""
+    for existing in "${unique_entries[@]}"; do
+      if [[ "${existing}" == "${entry}" ]]; then
+        already_seen="1"
+        break
+      fi
+    done
+    [[ -n "${already_seen}" ]] && continue
     unique_entries+=("$entry")
   done
 
@@ -1871,6 +1777,7 @@ main() {
 
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
+  enable_legacy_shell_fallbacks
   ensure_pnpm_runtime
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
@@ -1913,14 +1820,6 @@ elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
   warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
     warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
-  fi
-
-  ensure_shell_path_priority
-  ensure_wsl_stable_opencode_shim
-  ensure_system_command_links || true
-
-  if opencode_works; then
-    info "opencode verification passed after recovery link refresh."
   fi
 else
   warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
