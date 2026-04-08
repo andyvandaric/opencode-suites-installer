@@ -9,12 +9,13 @@
 - Fixed: 7
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 15
+- Chore/Build/CI: 16
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `5dc56fd` chore(installer): sync scripts from opencode-config-suites
 - `39ce49e` chore(installer): sync scripts from opencode-config-suites
 - `637bc7b` chore(installer): sync scripts from opencode-config-suites
 - `c37161e` chore(installer): sync scripts from opencode-config-suites
