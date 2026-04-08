@@ -101,6 +101,27 @@ run_with_privilege() {
   return 127
 }
 
+run_apt_command_with_elevation() {
+  if run_with_privilege "$@"; then
+    return 0
+  fi
+
+  if is_root_user; then
+    return 1
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+
+  warn "apt command needs elevated privileges. Retrying with sudo (password prompt may appear)..."
+  if sudo "$@"; then
+    return 0
+  fi
+
+  return 1
+}
+
 run_with_retries() {
   local attempts="$1"
   shift
@@ -148,6 +169,21 @@ resolve_absolute_path_safe() {
   fi
 
   printf '%s/%s\n' "$(pwd)" "$candidate"
+}
+
+is_legacy_macos_bash() {
+  [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] || return 1
+
+  local bash_major="${BASH_VERSINFO[0]:-0}"
+  [[ "$bash_major" =~ ^[0-9]+$ ]] || bash_major=0
+  (( bash_major > 0 && bash_major < 4 ))
+}
+
+enable_legacy_shell_fallbacks() {
+  if is_legacy_macos_bash; then
+    warn "Detected legacy macOS bash (${BASH_VERSION:-unknown}). Enabling POSIX CocoIndex shim fallback for setup."
+    export OCS_SETUP_FORCE_POSIX_CCC_SHIM=1
+  fi
 }
 
 show_usage() {
@@ -254,7 +290,7 @@ install_packages_auto() {
 
   case "$pm" in
     apt)
-      run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update && run_with_retries "$dep_retries" run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y "${pkgs[@]}"
+      run_with_retries "$dep_retries" run_apt_command_with_elevation env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update && run_with_retries "$dep_retries" run_apt_command_with_elevation env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y "${pkgs[@]}"
       ;;
     dnf)
       run_with_retries "$dep_retries" run_with_privilege dnf install -y "${pkgs[@]}"
@@ -949,15 +985,18 @@ ensure_shell_path_priority() {
   done < <(collect_node_bin_entries)
 
   local combined_entries=("${base_entries[@]}" "${dynamic_entries[@]}")
-  local -A seen=()
   local unique_entries=()
 
   for entry in "${combined_entries[@]}"; do
     [[ -z "$entry" ]] && continue
-    if [[ -n "${seen[$entry]:-}" ]]; then
-      continue
-    fi
-    seen[$entry]=1
+    local already_seen=""
+    for existing in "${unique_entries[@]}"; do
+      if [[ "${existing}" == "${entry}" ]]; then
+        already_seen="1"
+        break
+      fi
+    done
+    [[ -n "${already_seen}" ]] && continue
     unique_entries+=("$entry")
   done
 
@@ -1738,6 +1777,7 @@ main() {
 
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
+  enable_legacy_shell_fallbacks
   ensure_pnpm_runtime
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
