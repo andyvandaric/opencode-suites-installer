@@ -6,7 +6,7 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 0
-- Fixed: 0
+- Fixed: 1
 - Changed: 0
 - Docs: 0
 - Chore/Build/CI: 0
@@ -15,7 +15,7 @@
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
-- _No commits detected in this release window._
+- `8b0c6e4` fix(installer): backport cross-platform hardening for staging/v2.2.0
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## 2.2.1 - 2026-04-05
 
