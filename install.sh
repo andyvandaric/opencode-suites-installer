@@ -171,6 +171,21 @@ resolve_absolute_path_safe() {
   printf '%s/%s\n' "$(pwd)" "$candidate"
 }
 
+is_legacy_macos_bash() {
+  [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] || return 1
+
+  local bash_major="${BASH_VERSINFO[0]:-0}"
+  [[ "$bash_major" =~ ^[0-9]+$ ]] || bash_major=0
+  (( bash_major > 0 && bash_major < 4 ))
+}
+
+enable_legacy_shell_fallbacks() {
+  if is_legacy_macos_bash; then
+    warn "Detected legacy macOS bash (${BASH_VERSION:-unknown}). Enabling POSIX CocoIndex shim fallback for setup."
+    export OCS_SETUP_FORCE_POSIX_CCC_SHIM=1
+  fi
+}
+
 show_usage() {
   cat <<'EOF'
 Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
@@ -1762,6 +1777,7 @@ main() {
 
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
+  enable_legacy_shell_fallbacks
   ensure_pnpm_runtime
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
