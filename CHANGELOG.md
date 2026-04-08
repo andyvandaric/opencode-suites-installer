@@ -5,20 +5,35 @@
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
-- Added: 0
-- Fixed: 0
+- Added: 2
+- Fixed: 4
 - Changed: 0
-- Docs: 0
-- Chore/Build/CI: 4
+- Docs: 4
+- Chore/Build/CI: 9
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `081ec86` chore(installer): align main lane pull defaults
+- `be78900` chore(release): merge beta into main for v2.3.0
+- `ade2214` chore(installer): align beta lane pull defaults
+- `3279009` chore(release): merge staging v2.3.0 into beta
+- `5a575ef` chore(installer): sync staging v2.3.0 release wave
 - `57c6cd0` chore(installer): sync staging v2.3.0 release wave
 - `1879639` chore(installer): sync staging v2.3.0 release wave
 - `317713f` chore(installer): sync staging v2.3.0 release wave
 - `4080e27` chore(installer): sync staging v2.3.0 release wave
+- `96c7a7a` fix(installer): harden opencode recovery flow for WSL reinstall
+- `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
+- `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
+- `1f10639` docs(uninstall): add raw one-liner quickstart and README links
+- `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
+- `f436fee` fix(installer): normalize runtime plugin path for OAuth menu
+- `877e5f8` docs: publish uninstall parity contract and smoke checks
+- `ddddea8` feat(uninstall): add safe/purge parity across bash and PowerShell
+- `317d5ce` docs: publish uninstall parity contract and smoke checks
+- `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## 2.2.1 - 2026-04-05
 
