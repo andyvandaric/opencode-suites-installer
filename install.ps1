@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.2.1"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.3.0"
 $INFERRED_INSTALLER_SOURCE_BRANCH = ""
 
 $invocationLine = $MyInvocation.Line
@@ -42,14 +42,58 @@ $DEFAULT_RELEASE_BRANCH = if ($env:OCS_FALLBACK_RELEASE_BRANCH) { $env:OCS_FALLB
 $INSTALLER_DEFAULT_PROFILE = "codex-5.3-token-saver"
 $INSTALLER_DEFAULT_MODE = "performance"
 $ACCESS_LANDING_PAGE = "https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
-$PLUGIN_DIR = "$env:USERPROFILE\.config\opencode\plugins\opencode-multi-auth"
-$TOKEN_FILE = "$env:USERPROFILE\.opencode-suites\.token"
 $script:ResolvedReleaseToken = ""
 $script:ResolvedSourceBranch = $GITHUB_SOURCE_BRANCH
 $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
+
+function Get-SafeEnvValue {
+    param(
+        [string[]]$Names,
+        [System.Environment+SpecialFolder]$FallbackFolder
+    )
+
+    foreach ($name in $Names) {
+        if (-not $name) { continue }
+        $value = [System.Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('FallbackFolder')) {
+        $fallbackPath = [System.Environment]::GetFolderPath($FallbackFolder)
+        if (-not [string]::IsNullOrWhiteSpace($fallbackPath)) {
+            return $fallbackPath
+        }
+    }
+
+    return $null
+}
+
+function Join-SafeEnvPath {
+    param(
+        [string[]]$EnvNames,
+        [string]$RelativePath,
+        [System.Environment+SpecialFolder]$FallbackFolder
+    )
+
+    $rootPath = Get-SafeEnvValue -Names $EnvNames -FallbackFolder:$FallbackFolder
+    if (-not $rootPath) {
+        return $null
+    }
+
+    if (-not $RelativePath) {
+        return $rootPath
+    }
+
+    return Join-Path $rootPath $RelativePath
+}
+
+$PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+$TOKEN_FILE = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode-suites\.token' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
 
 function Resolve-PwshPath {
     $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -58,9 +102,9 @@ function Resolve-PwshPath {
     }
 
     $candidates = @(
-        (Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe"),
-        (Join-Path $env:LOCALAPPDATA "Microsoft\PowerShell\7\pwsh.exe"),
-        (Join-Path $env:USERPROFILE "scoop\shims\pwsh.exe")
+        (Join-SafeEnvPath -EnvNames @("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)") -RelativePath 'PowerShell\7\pwsh.exe' -FallbackFolder ([System.Environment+SpecialFolder]::ProgramFiles)),
+        (Join-SafeEnvPath -EnvNames @("LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME") -RelativePath 'Microsoft\PowerShell\7\pwsh.exe' -FallbackFolder ([System.Environment+SpecialFolder]::LocalApplicationData)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath 'scoop\shims\pwsh.exe' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
     )
 
     foreach ($candidate in $candidates) {
@@ -224,8 +268,8 @@ function Refresh-SessionPath {
     }
 
     $ghBinCandidates = @(
-        (Join-Path $env:ProgramFiles "GitHub CLI"),
-        (Join-Path $env:LOCALAPPDATA "Programs\GitHub CLI")
+        (Join-SafeEnvPath -EnvNames @("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)") -RelativePath 'GitHub CLI' -FallbackFolder ([System.Environment+SpecialFolder]::ProgramFiles)),
+        (Join-SafeEnvPath -EnvNames @("LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME") -RelativePath 'Programs\GitHub CLI' -FallbackFolder ([System.Environment+SpecialFolder]::LocalApplicationData))
     )
 
     foreach ($ghBin in $ghBinCandidates) {
@@ -235,8 +279,8 @@ function Refresh-SessionPath {
     }
 
     $opencodeBinCandidates = @(
-        (Join-Path $env:USERPROFILE ".opencode\bin"),
-        (Join-Path $env:USERPROFILE ".bun\bin")
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
     )
 
     foreach ($opencodeBin in $opencodeBinCandidates) {
@@ -281,15 +325,15 @@ function Add-PathEntryToUserPath {
 
 function Get-PythonPathCandidates {
     $allCandidates = @(
-        (Join-Path $env:USERPROFILE ".local\bin"),
-        (Join-Path $env:USERPROFILE ".local\pipx\bin"),
-        (Join-Path $env:USERPROFILE ".local\share\uv\tools\bin"),
-        (Join-Path $env:APPDATA "Python\Scripts")
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\pipx\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\share\uv\tools\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("APPDATA", "LOCALAPPDATA", "USERPROFILE", "HOME") -RelativePath 'Python\Scripts' -FallbackFolder ([System.Environment+SpecialFolder]::ApplicationData))
     )
 
     $pythonRoots = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Python"),
-        (Join-Path $env:APPDATA "Python")
+        (Join-SafeEnvPath -EnvNames @("LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME") -RelativePath 'Programs\Python' -FallbackFolder ([System.Environment+SpecialFolder]::LocalApplicationData)),
+        (Join-SafeEnvPath -EnvNames @("APPDATA", "LOCALAPPDATA", "USERPROFILE", "HOME") -RelativePath 'Python' -FallbackFolder ([System.Environment+SpecialFolder]::ApplicationData))
     )
 
     foreach ($root in $pythonRoots) {
@@ -358,19 +402,19 @@ function Get-PnpmBinDirectories {
 
 function Ensure-OpencodePathEntries {
     $pathCandidates = @(
-        (Join-Path $env:USERPROFILE ".opencode\bin"),
-        (Join-Path $env:USERPROFILE ".bun\bin"),
-        (Join-Path $env:USERPROFILE ".local\bin"),
-        (Join-Path $env:USERPROFILE ".local\pipx\bin"),
-        (Join-Path $env:USERPROFILE ".local\share\uv\tools\bin")
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\pipx\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\share\uv\tools\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
     )
 
     $pathCandidates += @(
-        (Join-Path $env:USERPROFILE ".node\bin"),
-        (Join-Path $env:USERPROFILE ".npm\bin"),
-        (Join-Path $env:USERPROFILE ".npm-global\bin"),
-        (Join-Path $env:USERPROFILE ".pnpm\bin"),
-        (Join-Path $env:USERPROFILE ".local\share\pnpm\bin")
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.node\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.npm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.npm-global\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.pnpm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\share\pnpm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
     )
 
     $pathCandidates += Get-NodeGlobalPaths
@@ -860,7 +904,7 @@ function Extract-TarGz {
         [switch]$StripFirstComponent
     )
 
-    $systemTarPath = Join-Path $env:SystemRoot "System32\tar.exe"
+    $systemTarPath = Join-SafeEnvPath -EnvNames @("SystemRoot", "windir") -RelativePath 'System32\tar.exe' -FallbackFolder ([System.Environment+SpecialFolder]::Windows)
     if (Test-Path $systemTarPath) {
         $tarCommand = @{ Source = $systemTarPath }
     } else {
@@ -915,7 +959,7 @@ function Test-SHA256Sums {
 }
 
 function Ensure-Bun {
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
@@ -974,7 +1018,8 @@ function Ensure-Bun {
 }
 
 function Test-OcsWorks {
-    $preferredCmd = Join-Path $env:USERPROFILE ".bun\bin\ocs.cmd"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $preferredCmd = if ($bunBin) { Join-Path $bunBin "ocs.cmd" } else { $null }
     $commandToRun = ""
 
     if (Test-Path $preferredCmd) {
@@ -1107,7 +1152,7 @@ function Install-OcsShimFromBundle {
         return $false
     }
 
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $cmdPath = Join-Path $bunBin "ocs.cmd"
@@ -1138,7 +1183,7 @@ function Install-OcsShimFromOpencode {
     $cmdLine = if ($opencodeCmd) { "opencode %*" } else { "bunx opencode-ai %*" }
     $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
 
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $cmdPath = Join-Path $bunBin "ocs.cmd"
@@ -1157,7 +1202,7 @@ function Install-OcsShimFromOpencode {
 }
 
 function Install-OpencodeShimFromBun {
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $bunxExe = Join-Path $bunBin "bunx.exe"
@@ -1219,7 +1264,7 @@ function Ensure-OcsCommand {
         [bool]$IsLocalSource = $false
     )
 
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
@@ -1628,7 +1673,7 @@ function Invoke-AutoSetup {
 function Assert-AntigravityOauthIntegrity {
     param([string]$SetupScript)
 
-    $configDir = Join-Path $env:USERPROFILE ".config\opencode"
+    $configDir = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     $runtimeOpencode = Join-Path $configDir "opencode.json"
     $runtimeAntigravity = Join-Path $configDir "antigravity.json"
     $templateAntigravity = Join-Path $PLUGIN_DIR "backups\antigravity.json.template"
@@ -1726,7 +1771,7 @@ $version = "local-source"
 if ($isLocalSource) {
     $PLUGIN_DIR = Join-Path $rootDir "plugins\opencode-multi-auth"
 } else {
-    $PLUGIN_DIR = Join-Path $env:USERPROFILE ".config\opencode\plugins\opencode-multi-auth"
+    $PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
 }
 
 if ($isLocalSource) {
@@ -1877,7 +1922,7 @@ Write-Output "Bundle source branch used: $($script:ResolvedSourceBranch)"
 Write-Output ""
 Write-Output "Checking global ocs command..."
 if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalSource:$isLocalSource)) {
-    $bunBin = Join-Path $env:USERPROFILE ".bun\bin"
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     Write-Warning "ocs command still unavailable after auto-install attempts."
     Write-Warning "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
     Write-Warning "If needed, add to PATH: $bunBin (and open a new terminal)"
