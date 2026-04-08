@@ -6,15 +6,19 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 1
-- Fixed: 3
+- Fixed: 5
 - Changed: 0
 - Docs: 2
-- Chore/Build/CI: 14
-- Other: 0
+- Chore/Build/CI: 15
+- Other: 1
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `572d4a1` Revert "chore(installer): sync scripts from opencode-config-suites"
+- `4ebf46c` chore(installer): sync scripts from opencode-config-suites
+- `2448853` fix(readme): point beta install links to beta branch
+- `ff68ea3` fix(installer): backport cross-platform hardening for beta
 - `a8de28a` chore(installer): sync scripts from opencode-config-suites
 - `b41fce3` chore(installer): sync scripts from opencode-config-suites
 - `f7aa8f4` chore(installer): sync scripts from opencode-config-suites
