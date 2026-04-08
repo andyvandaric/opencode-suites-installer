@@ -6,7 +6,7 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 2
-- Fixed: 4
+- Fixed: 5
 - Changed: 0
 - Docs: 4
 - Chore/Build/CI: 9
@@ -15,6 +15,7 @@
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `a32e29e` fix(installer): backport cross-platform hardening for main
 - `081ec86` chore(installer): align main lane pull defaults
 - `be78900` chore(release): merge beta into main for v2.3.0
 - `ade2214` chore(installer): align beta lane pull defaults
