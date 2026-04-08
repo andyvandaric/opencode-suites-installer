@@ -1,20 +1,21 @@
-## 2.3.0 - 2026-04-07
-- Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
-- Documented the CocoIndex MPC-ready automation ladder plus CCC extension/skill-governance guidance so installer release notes match the suite’s new operational narrative.
+## 2.3.1 - 2026-04-08
+- Synced installer lane defaults/examples to `staging/v2.3.1` and version pins to `2.3.1` so installer fetches the same staged release wave as source and buyer.
+- Published high-level parity note for the staged asset refresh without exposing internal stack-level release details.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
-- Commit window: `v2.2.1..HEAD`
+- Commit window: `v2.3.0..HEAD`
 - Added: 2
-- Fixed: 9
+- Fixed: 7
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 15
+- Chore/Build/CI: 6
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `463fb94` chore(installer): sync scripts from opencode-config-suites
 - `2bff4f5` fix(installer): align branch hints with staging/v2.3.1 lane
 - `27884f4` chore(installer): sync scripts from opencode-config-suites
 - `93fb853` fix(installer): backport cross-platform hardening for staging/v2.3.1
@@ -23,18 +24,6 @@
 - `be78900` chore(release): merge beta into main for v2.3.0
 - `ade2214` chore(installer): align beta lane pull defaults
 - `3279009` chore(release): merge staging v2.3.0 into beta
-- `5a575ef` chore(installer): sync staging v2.3.0 release wave
-- `57c6cd0` chore(installer): sync staging v2.3.0 release wave
-- `1879639` chore(installer): sync staging v2.3.0 release wave
-- `317713f` chore(installer): sync staging v2.3.0 release wave
-- `4080e27` chore(installer): sync staging v2.3.0 release wave
-- `600ae17` chore(installer): sync staging v2.2.1 release wave
-- `3b37021` chore(installer): sync staging v2.2.1 release wave
-- `40aeab5` chore(installer): sync staging v2.2.1 release wave
-- `369b21a` chore(installer): sync staging v2.2.1 release wave
-- `3e5b7ac` chore(installer): sync staging v2.2.1 release wave
-- `85a9494` fix(installer): align fallback branch hint to staging v2.2.1
-- `f0b7a2f` fix(installer): call Ensure-PnpmRuntime in staging script
 - `96c7a7a` fix(installer): harden opencode recovery flow for WSL reinstall
 - `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
 - `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
@@ -46,6 +35,11 @@
 - `317d5ce` docs: publish uninstall parity contract and smoke checks
 - `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
 <!-- OCS_COMMIT_COVERAGE_END -->
+## 2.3.0 - 2026-04-07
+
+- Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
+- Documented the CocoIndex MPC-ready automation ladder plus CCC extension/skill-governance guidance so installer release notes match the suite’s new operational narrative.
+
 ## 2.2.1 - 2026-04-05
 
 - Synced installer lane defaults/examples to `staging/v2.2.1` and version pins to `2.2.1` across Bash/PowerShell quick-install commands.
