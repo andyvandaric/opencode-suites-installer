@@ -181,7 +181,7 @@ is_legacy_macos_bash() {
 
 enable_legacy_shell_fallbacks() {
   if is_legacy_macos_bash; then
-    warn "Detected legacy macOS bash (${BASH_VERSION:-unknown}). Enabling POSIX CocoIndex shim fallback for setup."
+    info "Detected legacy macOS bash (${BASH_VERSION:-unknown}). Enabling POSIX CocoIndex shim fallback for setup."
     export OCS_SETUP_FORCE_POSIX_CCC_SHIM=1
   fi
 }
@@ -984,13 +984,13 @@ ensure_shell_path_priority() {
     dynamic_entries+=("$entry")
   done < <(collect_node_bin_entries)
 
-  local combined_entries=("${base_entries[@]}" "${dynamic_entries[@]}")
+  local combined_entries=("${base_entries[@]-}" "${dynamic_entries[@]-}")
   local unique_entries=()
 
   for entry in "${combined_entries[@]}"; do
     [[ -z "$entry" ]] && continue
     local already_seen=""
-    for existing in "${unique_entries[@]}"; do
+    for existing in "${unique_entries[@]-}"; do
       if [[ "${existing}" == "${entry}" ]]; then
         already_seen="1"
         break
@@ -1001,7 +1001,7 @@ ensure_shell_path_priority() {
   done
 
   local path_prefix=""
-  for entry in "${unique_entries[@]}"; do
+  for entry in "${unique_entries[@]-}"; do
     if [[ -z "$path_prefix" ]]; then
       path_prefix="$entry"
     else
@@ -1040,7 +1040,7 @@ ensure_shell_path_priority() {
 
   local fish_cfg="${HOME}/.config/fish/config.fish"
   local fish_args=""
-  for entry in "${unique_entries[@]}"; do
+  for entry in "${unique_entries[@]-}"; do
     fish_args="${fish_args} ${entry}"
   done
   fish_args="${fish_args# }"
@@ -1210,8 +1210,6 @@ ensure_system_command_links() {
       ln -sfn "${source_path}" "${target_path}" || true
     elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
       :
-    else
-      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
     fi
   done
 
