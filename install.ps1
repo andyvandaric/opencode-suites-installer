@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $GITHUB_SOURCE_REPO = "andyvandaric/andyvand-opencode-config"
-$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.3.0"
+$INSTALLER_SOURCE_BRANCH_HINT = "staging/v2.3.1"
 $INFERRED_INSTALLER_SOURCE_BRANCH = ""
 
 $invocationLine = $MyInvocation.Line
@@ -48,194 +48,6 @@ $TMP_DIR = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
     "ocs-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 )
-$script:PathResolutionRunId = [System.Guid]::NewGuid().ToString('N')
-$script:PathResolutionDiagnosticFile = [System.IO.Path]::Combine($TMP_DIR, 'diagnostics', "path-resolution-$($script:PathResolutionRunId).log")
-
-function Is-EnvPathSafe {
-    param([string]$Value)
-
-    if (-not $Value) {
-        return $false
-    }
-
-    $trimmed = $Value.Trim()
-    if ([string]::IsNullOrWhiteSpace($trimmed)) {
-        return $false
-    }
-
-    if (-not [System.IO.Path]::IsPathRooted($trimmed)) {
-        return $false
-    }
-
-    if ($trimmed -match '[\*\?]') {
-        return $false
-    }
-
-    return $true
-}
-
-function Get-EnvFallbackCandidatePath {
-    param(
-        [string]$RelativePath,
-        [System.Environment+SpecialFolder]$FallbackFolder
-    )
-
-    $basePath = [System.Environment]::GetFolderPath($FallbackFolder)
-    if (-not [string]::IsNullOrWhiteSpace($basePath)) {
-        $basePath = $basePath.Trim()
-        if ($RelativePath) {
-            return Join-Path $basePath $RelativePath
-        }
-        return $basePath
-    }
-
-    return $null
-}
-
-function Determine-PathResolutionReason {
-    param(
-        [string]$PrimaryPath,
-        [string]$FallbackPath
-    )
-
-    $primary = if ($PrimaryPath) { $PrimaryPath.Trim() } else { '' }
-    $fallback = if ($FallbackPath) { $FallbackPath.Trim() } else { '' }
-    $systemRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Windows)
-
-    if ($primary) {
-        if ($primary -match '[\*\?]') {
-            return 'E_FALLBACK_INVALID'
-        }
-        if ($primary -match 'PolicyDefinitions|GroupPolicy') {
-            return 'E_POLICY_BLOCKED'
-        }
-        if ($systemRoot -and $primary.StartsWith($systemRoot, [System.StringComparison]::InvariantCultureIgnoreCase)) {
-            return 'E_HOME_NOT_WRITABLE'
-        }
-        if (-not (Is-EnvPathSafe $primary)) {
-            return 'E_FALLBACK_INVALID'
-        }
-        return 'E_FALLBACK_INVALID'
-    }
-
-    if ($fallback) {
-        if ($fallback -match '[\*\?]') {
-            return 'E_FALLBACK_INVALID'
-        }
-        if ($fallback -match 'PolicyDefinitions|GroupPolicy') {
-            return 'E_POLICY_BLOCKED'
-        }
-        if ($systemRoot -and $fallback.StartsWith($systemRoot, [System.StringComparison]::InvariantCultureIgnoreCase)) {
-            return 'E_HOME_NOT_WRITABLE'
-        }
-        if (-not (Is-EnvPathSafe $fallback)) {
-            return 'E_FALLBACK_INVALID'
-        }
-        return 'E_HOME_EMPTY'
-    }
-
-    return 'E_HOME_UNRESOLVED'
-}
-
-function Get-ShortReasonForPathCode {
-    param([string]$ReasonCode)
-
-    switch ($ReasonCode) {
-        'E_HOME_EMPTY' { return 'Home environment variables resolved to an empty or missing value while fallback is available.' }
-        'E_HOME_UNRESOLVED' { return 'Unable to resolve a valid home or fallback path for installer artifacts.' }
-        'E_HOME_NOT_WRITABLE' { return 'Resolved fallback path is located in a system area that is not user-writable.' }
-        'E_FALLBACK_INVALID' { return 'Fallback path contains invalid, wildcard, or unsafe characters.' }
-        'E_POLICY_BLOCKED' { return 'Resolved path appears to be managed by Windows policy and cannot be trusted.' }
-        default { return 'Home path resolution guard blocked an unsafe path.' }
-    }
-}
-
-function Emit-PathResolutionDiagnostic {
-    param(
-        [string]$Context,
-        [string]$ReasonCode,
-        [string]$PrimaryPath,
-        [string]$FallbackPath,
-        [string]$ShortReason
-    )
-
-    $psVersion = $PSVersionTable.PSVersion.ToString()
-    $hostName = [System.Environment]::MachineName
-    $runId = $script:PathResolutionRunId
-    $diagFile = $script:PathResolutionDiagnosticFile
-    $shortReasonValue = if ($ShortReason) { $ShortReason } else { Get-ShortReasonForPathCode -ReasonCode $ReasonCode }
-    $primaryDisplay = if ([string]::IsNullOrWhiteSpace($PrimaryPath)) { '<missing>' } else { $PrimaryPath.Trim() }
-    $fallbackDisplay = if ([string]::IsNullOrWhiteSpace($FallbackPath)) { '<missing>' } else { $FallbackPath.Trim() }
-
-    $payload = @{
-        marker = '[OCS_INSTALLER_PATH_RESOLUTION_FAILED]'
-        reasonCode = $ReasonCode
-        shortReason = "${Context}: $shortReasonValue"
-        primaryPath = $primaryDisplay
-        fallbackPath = $fallbackDisplay
-        host = $hostName
-        psVersion = $psVersion
-        runId = $runId
-        diagnosticFilePath = $diagFile
-        context = $Context
-        timestamp = (Get-Date).ToString('o')
-        envSnapshot = @{
-            USERPROFILE = $env:USERPROFILE
-            HOME = $env:HOME
-        }
-    }
-
-    $diagDir = Split-Path $diagFile -Parent
-    if (-not (Test-Path $diagDir)) {
-        New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
-    }
-
-    $payload | ConvertTo-Json -Depth 5 | Set-Content -Path $diagFile -Encoding UTF8
-
-    $fieldStrings = @(
-        "reasonCode=$ReasonCode",
-        "shortReason=$($payload.shortReason)",
-        "primaryPath=$primaryDisplay",
-        "fallbackPath=$fallbackDisplay",
-        "host=$hostName",
-        "psVersion=$psVersion",
-        "runId=$runId",
-        "diagnosticFilePath=$diagFile"
-    )
-
-    Write-Error -Message "[OCS_INSTALLER_PATH_RESOLUTION_FAILED] $($fieldStrings -join '; ')" -ErrorAction Continue
-    Write-Error -Message "Actions: 1) Verify USERPROFILE/HOME 2) Ensure fallback path is writable 3) Rerun with OCS_USER_HOME override 4) Attach diagnostic file for support: $diagFile" -ErrorAction Continue
-}
-
-function Ensure-EnvPathValue {
-    param(
-        [string]$Value,
-        [string]$Context,
-        [string]$FallbackHint = '',
-        [string]$FallbackPath = '',
-        [switch]$Fail
-    )
-
-    $isSafe = Is-EnvPathSafe $Value
-    $reasonCode = Determine-PathResolutionReason -PrimaryPath $Value -FallbackPath $FallbackPath
-    $restrictedReasons = @('E_HOME_NOT_WRITABLE', 'E_POLICY_BLOCKED', 'E_FALLBACK_INVALID')
-
-    if ($isSafe -and (-not ($restrictedReasons -contains $reasonCode))) {
-        return $true
-    }
-
-    $detail = if ($FallbackHint) { " ($FallbackHint)" } else { '' }
-    $message = "Hybrid path guard: $Context resolved to an empty or unsafe path.$detail Please verify USERPROFILE/HOME or the fallback folder."
-
-    if ($Fail) {
-        Write-Error -Message $message -ErrorAction Continue
-        Emit-PathResolutionDiagnostic -Context $Context -ReasonCode $reasonCode -PrimaryPath $Value -FallbackPath $FallbackPath -ShortReason (Get-ShortReasonForPathCode -ReasonCode $reasonCode)
-    } else {
-        Write-Warning $message
-    }
-
-    return $false
-}
 
 function Get-SafeEnvValue {
     param(
@@ -269,7 +81,7 @@ function Join-SafeEnvPath {
     )
 
     $rootPath = Get-SafeEnvValue -Names $EnvNames -FallbackFolder:$FallbackFolder
-    if (-not (Is-EnvPathSafe $rootPath)) {
+    if (-not $rootPath) {
         return $null
     }
 
@@ -282,12 +94,6 @@ function Join-SafeEnvPath {
 
 $PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
 $TOKEN_FILE = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode-suites\.token' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-
-$tokenFallbackHint = 'env: USERPROFILE/HOME; fallback: UserProfile special folder'
-$tokenFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.opencode-suites\.token' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-if (-not (Ensure-EnvPathValue -Value $TOKEN_FILE -Context 'token cache file path' -FallbackHint $tokenFallbackHint -FallbackPath $tokenFallbackPath -Fail)) {
-    exit 1
-}
 
 function Resolve-PwshPath {
     $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -851,10 +657,6 @@ function Save-TokenFile {
 
     if (-not $Token) { return }
 
-    if (-not (Ensure-EnvPathValue -Value $TOKEN_FILE -Context 'token cache file path' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder')) {
-        return
-    }
-
     try {
         $tokenDir = Split-Path -Parent $TOKEN_FILE
         if ($tokenDir -and (-not (Test-Path $tokenDir))) {
@@ -883,8 +685,7 @@ function Resolve-Token {
         return $env:GITHUB_TOKEN.Trim()
     }
 
-    $tokenFileAvailable = Is-EnvPathSafe $TOKEN_FILE
-    if ((-not $SkipTokenCache) -and $tokenFileAvailable -and (Test-Path $TOKEN_FILE)) {
+    if ((-not $SkipTokenCache) -and (Test-Path $TOKEN_FILE)) {
         try {
             $cachedToken = (Get-Content -Path $TOKEN_FILE -Raw -Encoding UTF8).Trim()
             if ($cachedToken) {
@@ -1352,9 +1153,6 @@ function Install-OcsShimFromBundle {
     }
 
     $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    if (-not (Ensure-EnvPathValue -Value $bunBin -Context 'bun shim target directory' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder')) {
-        return $false
-    }
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $cmdPath = Join-Path $bunBin "ocs.cmd"
@@ -1386,9 +1184,6 @@ function Install-OcsShimFromOpencode {
     $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
 
     $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    if (-not (Ensure-EnvPathValue -Value $bunBin -Context 'bun shim directory (opencode)' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder')) {
-        return $false
-    }
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $cmdPath = Join-Path $bunBin "ocs.cmd"
@@ -1408,9 +1203,6 @@ function Install-OcsShimFromOpencode {
 
 function Install-OpencodeShimFromBun {
     $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    if (-not (Ensure-EnvPathValue -Value $bunBin -Context 'bun shim directory (opencode fallback)' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder')) {
-        return $false
-    }
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $bunxExe = Join-Path $bunBin "bunx.exe"
@@ -1882,10 +1674,6 @@ function Assert-AntigravityOauthIntegrity {
     param([string]$SetupScript)
 
     $configDir = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    $configFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    if (-not (Ensure-EnvPathValue -Value $configDir -Context 'opencode config directory' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath $configFallbackPath -Fail)) {
-        throw "Installer cannot continue without a valid opencode config directory."
-    }
     $runtimeOpencode = Join-Path $configDir "opencode.json"
     $runtimeAntigravity = Join-Path $configDir "antigravity.json"
     $templateAntigravity = Join-Path $PLUGIN_DIR "backups\antigravity.json.template"
@@ -1985,17 +1773,6 @@ if ($isLocalSource) {
 } else {
     $PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
 }
-
-    $pluginContext = if ($isLocalSource) { 'local workspace plugin directory' } else { 'env-derived plugin directory' }
-    $pluginFallbackHint = if ($isLocalSource) { 'local workspace path' } else { 'env: USERPROFILE/HOME; fallback: UserProfile special folder' }
-    if (-not $isLocalSource) {
-        $pluginFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    } else {
-        $pluginFallbackPath = ''
-    }
-    if (-not (Ensure-EnvPathValue -Value $PLUGIN_DIR -Context $pluginContext -FallbackHint $pluginFallbackHint -FallbackPath $pluginFallbackPath -Fail)) {
-        exit 1
-    }
 
 if ($isLocalSource) {
     Write-Output "Detected local plugin source. Skipping download."
