@@ -2,10 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $script:Yes = $false
 $script:DryRun = $false
-$script:NoBackup = $false
-$script:BackupDir = ""
 $script:Step = 0
-$script:TotalSteps = 9
+$script:TotalSteps = 8
 
 function Write-Info([string]$Message) { Write-Host "  $Message" }
 function Write-Warn([string]$Message) { Write-Host "WARN  $Message" -ForegroundColor Yellow }
@@ -26,8 +24,6 @@ Usage: uninstall.ps1 [options]
 Options:
   -Yes                  Non-interactive confirmation
   -DryRun               Print actions without mutating filesystem
-  -NoBackup             Skip backup archive creation
-  -BackupDir <path>     Backup output directory
   -Help                 Show this help
 
 Environment:
@@ -59,24 +55,6 @@ function Parse-Arguments {
       }
       '^(-dryrun|-dry-run|--dry-run)$' {
         $script:DryRun = $true
-        $index += 1
-        continue
-      }
-      '^(-nobackup|-no-backup|--no-backup)$' {
-        $script:NoBackup = $true
-        $index += 1
-        continue
-      }
-      '^(-backupdir|-backup-dir|--backup-dir)$' {
-        if ($index + 1 -ge $Arguments.Count) {
-          Fail-Arg "Missing value for -BackupDir"
-        }
-        $script:BackupDir = $Arguments[$index + 1]
-        $index += 2
-        continue
-      }
-      '^(-backupdir:|-backup-dir:|--backup-dir=)(.+)$' {
-        $script:BackupDir = $matches[2]
         $index += 1
         continue
       }
@@ -205,54 +183,6 @@ function Stop-RelatedProcesses {
   }
 }
 
-function Create-Backup {
-  param([string]$HomeDir)
-
-  if ($script:NoBackup) { return }
-
-  $sources = @(
-    (Join-Path $HomeDir ".config\opencode"),
-    (Join-Path $HomeDir ".opencode"),
-    (Join-Path $HomeDir ".opencode-suites"),
-    (Join-Path $HomeDir ".cache\opencode"),
-    (Join-Path $HomeDir ".local\share\opencode")
-  ) | Where-Object { Test-Path -LiteralPath $_ }
-
-  if ($sources.Count -eq 0) {
-    Write-Info "No directories found for backup."
-    return
-  }
-
-  $backupDir = $script:BackupDir
-  if (-not $backupDir) {
-    $backupDir = Join-Path $HomeDir ".opencode-suites-uninstall-backups"
-  }
-
-  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $archive = Join-Path $backupDir "ocs-uninstall-backup-$timestamp.zip"
-  Write-Info "Creating backup archive: $archive"
-
-  Invoke-Run -Preview "Compress-Archive -> $archive" -Action {
-    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-    Compress-Archive -Path $sources -DestinationPath $archive -CompressionLevel Optimal -Force
-  }
-
-  if (-not $script:DryRun) {
-    if (-not (Test-Path -LiteralPath $archive)) {
-      Fail-Fatal "Backup archive not found after create: $archive"
-    }
-    $existingArchives = @(Get-ChildItem -LiteralPath $backupDir -Filter "ocs-uninstall-backup-*.zip" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
-    if ($existingArchives.Count -gt 2) {
-      $staleArchives = @($existingArchives | Select-Object -Skip 2)
-      foreach ($stale in $staleArchives) {
-        Write-Info "Prune old backup $($stale.FullName)"
-        Remove-Item -LiteralPath $stale.FullName -Force -ErrorAction SilentlyContinue
-      }
-    }
-    Write-Success "Backup created: $archive"
-  }
-}
-
 function Uninstall-GlobalPackages {
   if (Get-Command bun -ErrorAction SilentlyContinue) {
     foreach ($pkg in @("opencode-ai", "@opencode-ai/opencode")) {
@@ -330,9 +260,6 @@ $homeDir = Resolve-HomeDirectory
 
 Next-Step "Confirm uninstall plan"
 Confirm-Flow $homeDir
-
-Next-Step "Create backup"
-Create-Backup $homeDir
 
 Next-Step "Stop related processes"
 Stop-RelatedProcesses

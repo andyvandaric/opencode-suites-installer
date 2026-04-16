@@ -7,10 +7,8 @@ EXIT_ARG=2
 
 YES_MODE=0
 DRY_RUN=0
-NO_BACKUP=0
-BACKUP_DIR=""
 STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=8
 
 info() {
   printf '  %s\n' "$*"
@@ -41,8 +39,6 @@ Usage: uninstall.sh [options]
 Options:
   --yes, -y            Non-interactive confirmation
   --dry-run            Print actions without mutating filesystem
-  --no-backup          Skip backup archive creation
-  --backup-dir <path>  Backup output directory
   --help, -h           Show this help
 
 Environment:
@@ -64,15 +60,6 @@ parse_args() {
       --dry-run)
         DRY_RUN=1
         shift
-        ;;
-      --no-backup)
-        NO_BACKUP=1
-        shift
-        ;;
-      --backup-dir)
-        [ "$#" -ge 2 ] || fail_arg "Missing value for --backup-dir"
-        BACKUP_DIR="$2"
-        shift 2
         ;;
       --help|-h)
         show_usage
@@ -205,66 +192,6 @@ remove_system_link_if_installer_managed() {
   esac
 }
 
-create_backup() {
-  [ "$NO_BACKUP" -eq 0 ] || return 0
-
-  sources=""
-  for candidate in \
-    "$HOME/.config/opencode" \
-    "$HOME/.opencode" \
-    "$HOME/.opencode-suites" \
-    "$HOME/.cache/opencode" \
-    "$HOME/.local/share/opencode"
-  do
-    if [ -e "$candidate" ]; then
-      sources="${sources}
-$candidate"
-    fi
-  done
-
-  if [ -z "$sources" ]; then
-    info "No directories found for backup."
-    return 0
-  fi
-
-  if [ -z "$BACKUP_DIR" ]; then
-    BACKUP_DIR="$HOME/.opencode-suites-uninstall-backups"
-  fi
-
-  timestamp="$(date +%Y%m%d-%H%M%S)"
-  archive="${BACKUP_DIR}/ocs-uninstall-backup-${timestamp}.tar.gz"
-  info "Creating backup archive: $archive"
-
-  run_cmd mkdir -p "$BACKUP_DIR"
-  if [ "$DRY_RUN" -eq 1 ]; then
-    info "[dry-run] tar -czf $archive ..."
-  else
-    old_ifs="${IFS}"
-    IFS='
-'
-    set -- $sources
-    IFS="$old_ifs"
-    tar -czf "$archive" "$@" || fail_fatal "Backup creation failed"
-    if command -v ls >/dev/null 2>&1; then
-      old_ifs="${IFS}"
-      IFS='
-'
-      set -- $(ls -1t "$BACKUP_DIR"/ocs-uninstall-backup-*.tar.gz 2>/dev/null || true)
-      IFS="$old_ifs"
-      archive_count=$#
-      if [ "$archive_count" -gt 2 ]; then
-        shift 2
-        for stale in "$@"; do
-          [ -n "$stale" ] || continue
-          info "Prune old backup $stale"
-          rm -f "$stale" 2>/dev/null || true
-        done
-      fi
-    fi
-    success "Backup created: $archive"
-  fi
-}
-
 kill_related_processes() {
   if ! command -v pkill >/dev/null 2>&1; then
     warn "pkill not found; skip process cleanup"
@@ -369,9 +296,6 @@ export HOME
 
 next_step "Confirm uninstall plan"
 confirm_uninstall
-
-next_step "Create backup"
-create_backup
 
 next_step "Stop related processes"
 kill_related_processes
