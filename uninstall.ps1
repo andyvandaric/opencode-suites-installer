@@ -241,6 +241,14 @@ function Create-Backup {
     if (-not (Test-Path -LiteralPath $archive)) {
       Fail-Fatal "Backup archive not found after create: $archive"
     }
+    $existingArchives = @(Get-ChildItem -LiteralPath $backupDir -Filter "ocs-uninstall-backup-*.zip" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    if ($existingArchives.Count -gt 2) {
+      $staleArchives = @($existingArchives | Select-Object -Skip 2)
+      foreach ($stale in $staleArchives) {
+        Write-Info "Prune old backup $($stale.FullName)"
+        Remove-Item -LiteralPath $stale.FullName -Force -ErrorAction SilentlyContinue
+      }
+    }
     Write-Success "Backup created: $archive"
   }
 }

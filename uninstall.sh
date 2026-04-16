@@ -245,6 +245,22 @@ $candidate"
     set -- $sources
     IFS="$old_ifs"
     tar -czf "$archive" "$@" || fail_fatal "Backup creation failed"
+    if command -v ls >/dev/null 2>&1; then
+      old_ifs="${IFS}"
+      IFS='
+'
+      set -- $(ls -1t "$BACKUP_DIR"/ocs-uninstall-backup-*.tar.gz 2>/dev/null || true)
+      IFS="$old_ifs"
+      archive_count=$#
+      if [ "$archive_count" -gt 2 ]; then
+        shift 2
+        for stale in "$@"; do
+          [ -n "$stale" ] || continue
+          info "Prune old backup $stale"
+          rm -f "$stale" 2>/dev/null || true
+        done
+      fi
+    fi
     success "Backup created: $archive"
   fi
 }
