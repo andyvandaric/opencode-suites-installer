@@ -71,7 +71,7 @@ Recommended daily profile:
  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
 ```
 
-`pwsh` works too. Uninstall now removes the full `~/.config/opencode/` directory by default.
+`pwsh` works too. Uninstall now removes `~/.config/opencode/` except `~/.config/opencode/auth/`, which is preserved.
 
 ## Need full technical details?
 
