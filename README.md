@@ -59,17 +59,19 @@ Recommended daily profile:
 
 ## Uninstall
 
-### macOS / Linux
+### macOS / Linux / zsh
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.sh | bash
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.sh | sh
 ```
 
-### Windows (PowerShell 7)
+### Windows (Windows PowerShell 5.1+ or PowerShell 7)
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
+ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
 ```
+
+`pwsh` works too. Uninstall now removes the full `~/.config/opencode/` directory by default.
 
 ## Need full technical details?
 
