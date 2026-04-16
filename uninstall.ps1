@@ -147,6 +147,26 @@ function Remove-PathIfExists([string]$Path) {
   }
 }
 
+function Cleanup-OpencodeConfig([string]$HomeDir) {
+  $configDir = Join-Path $HomeDir ".config\opencode"
+  $authDir = Join-Path $configDir "auth"
+  if (-not (Test-Path -LiteralPath $configDir)) { return }
+
+  if (-not (Test-Path -LiteralPath $authDir)) {
+    Remove-PathIfExists $configDir
+    return
+  }
+
+  Write-Info "PRESERVE $authDir"
+  $entries = Get-ChildItem -LiteralPath $configDir -Force -ErrorAction SilentlyContinue
+  foreach ($entry in $entries) {
+    if ($entry.FullName -eq $authDir) {
+      continue
+    }
+    Remove-PathIfExists $entry.FullName
+  }
+}
+
 function Remove-InstallerManagedSymlink([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return }
 
@@ -254,13 +274,16 @@ function Show-Plan([string]$HomeDir) {
 
   Write-Host ""
   Write-Host "Will remove:"
-  Write-Host "  - ~/.config/opencode (full purge)"
+  Write-Host "  - ~/.config/opencode except ~/.config/opencode/auth"
   Write-Host "  - ~/.opencode"
   Write-Host "  - ~/.opencode-suites"
   Write-Host "  - ~/.cache/opencode"
   Write-Host "  - ~/.local/share/opencode"
   Write-Host "  - local shims and installer-managed links"
   Write-Host "  - global package links (best effort)"
+  Write-Host ""
+  Write-Host "Will preserve:"
+  Write-Host "  - ~/.config/opencode/auth"
 }
 
 function Confirm-Flow([string]$HomeDir) {
@@ -269,7 +292,7 @@ function Confirm-Flow([string]$HomeDir) {
   if ($script:Yes) { return }
 
   Write-Host ""
-  Write-Host "This removes the entire ~/.config/opencode directory."
+  Write-Host "This removes ~/.config/opencode except the auth directory."
   $answer = Read-Host "Continue? [y/N]"
   if ($answer -notin @("y", "Y", "yes", "YES")) {
     Write-Info "Cancelled."
@@ -327,8 +350,8 @@ Remove-PathIfExists (Join-Path $homeDir ".opencode-suites")
 Remove-PathIfExists (Join-Path $homeDir ".cache\opencode")
 Remove-PathIfExists (Join-Path $homeDir ".local\share\opencode")
 
-Next-Step "Remove ~/.config/opencode"
-Remove-PathIfExists (Join-Path $homeDir ".config\opencode")
+Next-Step "Clean ~/.config/opencode (preserve auth)"
+Cleanup-OpencodeConfig $homeDir
 
 Next-Step "Verify command/path state"
 Verify-CommandState

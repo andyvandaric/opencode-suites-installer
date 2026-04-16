@@ -149,6 +149,31 @@ remove_path_if_exists() {
   run_cmd rm -rf "$path"
 }
 
+cleanup_opencode_config() {
+  config_dir="$HOME/.config/opencode"
+  auth_dir="$config_dir/auth"
+
+  if [ ! -e "$config_dir" ]; then
+    return 0
+  fi
+
+  if [ ! -e "$auth_dir" ]; then
+    remove_path_if_exists "$config_dir"
+    return 0
+  fi
+
+  info "PRESERVE $auth_dir"
+  for entry in "$config_dir"/* "$config_dir"/.[!.]* "$config_dir"/..?*; do
+    if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
+      continue
+    fi
+    if [ "$entry" = "$auth_dir" ]; then
+      continue
+    fi
+    remove_path_if_exists "$entry"
+  done
+}
+
 remove_system_link_if_installer_managed() {
   link_path="$1"
   if [ ! -e "$link_path" ] && [ ! -L "$link_path" ]; then
@@ -270,13 +295,16 @@ print_plan() {
   cat <<'EOF'
 
 Will remove:
-  - ~/.config/opencode (full purge)
+  - ~/.config/opencode except ~/.config/opencode/auth
   - ~/.opencode
   - ~/.opencode-suites
   - ~/.cache/opencode
   - ~/.local/share/opencode
   - local shims and installer-managed links
   - global package links (best effort)
+
+Will preserve:
+  - ~/.config/opencode/auth
 EOF
 }
 
@@ -287,7 +315,7 @@ confirm_uninstall() {
     return 0
   fi
 
-  printf '\nThis removes the entire ~/.config/opencode directory.\n'
+  printf '\nThis removes ~/.config/opencode except the auth directory.\n'
   printf 'Continue? [y/N]\n'
   answer=""
   read -r answer || true
@@ -353,8 +381,8 @@ remove_path_if_exists "$HOME/.opencode-suites"
 remove_path_if_exists "$HOME/.cache/opencode"
 remove_path_if_exists "$HOME/.local/share/opencode"
 
-next_step "Remove ~/.config/opencode"
-remove_path_if_exists "$HOME/.config/opencode"
+next_step "Clean ~/.config/opencode (preserve auth)"
+cleanup_opencode_config
 
 hash -r 2>/dev/null || true
 

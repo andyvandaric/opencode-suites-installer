@@ -89,13 +89,13 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File $tmp -ExaApiKey "EXA_KEY_HERE" -Pr
 1. `bash uninstall.sh --mode safe --dry-run`
 2. Confirm dry-run prints deterministic steps and does not mutate files.
 3. `sh uninstall.sh --yes`
-4. Confirm `~/.config/opencode` is removed.
+4. Confirm `~/.config/opencode/auth` remains and other `~/.config/opencode` contents are removed.
 
 ### Windows (Windows PowerShell 5.1+ or PowerShell 7)
 
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -DryRun`
 2. `powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -Yes`
-3. Validate full config removal behavior.
+3. Validate `~/.config/opencode/auth` is preserved while the rest of `~/.config/opencode` is removed.
 
 ## Manual OAuth Probe (if you skip `--probe-oauth`)
 
