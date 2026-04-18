@@ -143,24 +143,6 @@ run_with_retries() {
   return 1
 }
 
-first_non_empty_output_line() {
-  local raw="${1:-}"
-  local line trimmed
-  while IFS= read -r line; do
-    trimmed="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    if [[ -z "$trimmed" ]]; then
-      continue
-    fi
-    if [[ "$trimmed" == "undefined" || "$trimmed" == "null" ]]; then
-      continue
-    fi
-    printf '%s\n' "$trimmed"
-    return 0
-  done <<< "$raw"
-
-  return 1
-}
-
 resolve_absolute_path_safe() {
   local candidate="$1"
   if [[ -z "$candidate" ]]; then
@@ -469,9 +451,8 @@ collect_node_bin_entries() {
   local bin_dir
 
   if command -v npm >/dev/null 2>&1; then
-    prefix="$(first_non_empty_output_line "$(npm config get prefix 2>/dev/null || true)" || true)"
+    prefix="$(npm config get prefix 2>/dev/null || true)"
     if [[ -n "$prefix" ]]; then
-      entries+=("${prefix}")
       entries+=("${prefix}/bin")
     fi
     bin_dir="$(resolve_binary_dir npm 2>/dev/null || true)"
@@ -481,9 +462,8 @@ collect_node_bin_entries() {
   fi
 
   if command -v pnpm >/dev/null 2>&1; then
-    prefix="$(first_non_empty_output_line "$(pnpm config get prefix 2>/dev/null || true)" || true)"
+    prefix="$(pnpm config get prefix 2>/dev/null || true)"
     if [[ -n "$prefix" ]]; then
-      entries+=("${prefix}")
       entries+=("${prefix}/bin")
     fi
     bin_dir="$(resolve_binary_dir pnpm 2>/dev/null || true)"
@@ -517,57 +497,6 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
-test_multi_auth_runtime_plugin_presence() {
-  local config_dir="$1"
-  local runtime_opencode="${config_dir}/opencode.json"
-  local node_modules_package="${config_dir}/node_modules/opencode-multi-auth/package.json"
-  local bundled_package="${config_dir}/plugins/opencode-multi-auth/package.json"
-
-  if [[ -f "${node_modules_package}" ]]; then
-    MULTI_AUTH_PLUGIN_LOCATION="${node_modules_package}"
-    return 0
-  fi
-
-  if [[ -f "${bundled_package}" ]]; then
-    MULTI_AUTH_PLUGIN_LOCATION="${bundled_package}"
-    return 0
-  fi
-
-  if [[ -f "${runtime_opencode}" ]] && grep -Eq 'opencode-multi-auth|plugins/opencode-multi-auth|plugins\\opencode-multi-auth' "${runtime_opencode}"; then
-    MULTI_AUTH_PLUGIN_LOCATION="${runtime_opencode}"
-    return 0
-  fi
-
-  MULTI_AUTH_PLUGIN_LOCATION="${node_modules_package}"
-  return 1
-}
-
-refresh_target_config_plugin_dependencies() {
-  local config_dir="$1"
-  local max_attempts="${2:-3}"
-  local package_json_path="${config_dir}/package.json"
-
-  [[ -f "${package_json_path}" ]] || return 1
-
-  local attempt
-  for (( attempt=1; attempt<=max_attempts; attempt++ )); do
-    info "[OK] Installing plugin dependencies (attempt ${attempt}/${max_attempts})"
-    local log_file="/tmp/ocs-plugin-deps-refresh.log"
-    if (cd "${config_dir}" && bun install --no-progress --network-concurrency=16 --registry "https://registry.npmjs.org/" >"${log_file}" 2>&1); then
-      return 0
-    fi
-
-    if (( attempt < max_attempts )); then
-      local tail_message
-      tail_message="$(tail -n 6 "${log_file}" 2>/dev/null | tr '\n' '|' | sed 's/|$//')"
-      [[ -n "${tail_message}" ]] && warn "Plugin dependency refresh failed (attempt ${attempt}/${max_attempts}): ${tail_message}"
-      sleep "$(( attempt ))"
-    fi
-  done
-
-  return 1
-}
-
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
@@ -597,27 +526,13 @@ ensure_antigravity_oauth_integrity() {
     fi
   fi
 
-  if [[ ! -f "${runtime_antigravity}" ]]; then
-    warn "Final Antigravity OAuth integrity check warning: antigravity.json is missing."
-    return 1
-  fi
+  [[ -f "${runtime_antigravity}" ]] || error "Final Antigravity OAuth integrity check failed: antigravity.json is missing."
 
   if [[ -f "${runtime_opencode}" ]] && grep -Eq 'file:///.*dist/index\.js|plugins/.*/dist/index\.js' "${runtime_opencode}"; then
-    warn "Final Antigravity OAuth integrity check warning: runtime config still references a raw dist/index.js plugin path."
-    return 1
-  fi
-
-  if ! test_multi_auth_runtime_plugin_presence "${config_dir}"; then
-    info "Refreshing target node_modules for registry plugin fallback..."
-    refresh_target_config_plugin_dependencies "${config_dir}" 3 || true
-    test_multi_auth_runtime_plugin_presence "${config_dir}" || {
-      warn "Final Antigravity OAuth integrity check warning: registry plugin package is missing at ${MULTI_AUTH_PLUGIN_LOCATION}"
-      return 1
-    }
+    error "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
   fi
 
   success "Antigravity OAuth integrity check passed."
-  return 0
 }
 
 opencode_works() {
@@ -628,140 +543,6 @@ opencode_works() {
     return 0
   fi
 
-  return 0
-}
-
-mcp_config_has_entry() {
-  local config_path="$1"
-  local mcp_name="$2"
-  [[ -f "${config_path}" ]] || return 1
-  grep -Eq "\"${mcp_name}\"[[:space:]]*:" "${config_path}"
-}
-
-ensure_github_mcp_session_token() {
-  if [[ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
-    return 0
-  fi
-
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    export GITHUB_PERSONAL_ACCESS_TOKEN="${GITHUB_TOKEN}"
-    info "Session GitHub MCP token sourced from GITHUB_TOKEN."
-    return 0
-  fi
-
-  if [[ -n "${GH_TOKEN:-}" ]]; then
-    export GITHUB_PERSONAL_ACCESS_TOKEN="${GH_TOKEN}"
-    info "Session GitHub MCP token sourced from GH_TOKEN."
-    return 0
-  fi
-
-  if ! command -v gh >/dev/null 2>&1; then
-    warn "GitHub MCP: gh CLI not found and GITHUB_PERSONAL_ACCESS_TOKEN is unset."
-    return 1
-  fi
-
-  if ! gh auth status >/dev/null 2>&1; then
-    warn "GitHub MCP: gh CLI is not authenticated yet. Run: gh auth login"
-    return 1
-  fi
-
-  local gh_token=""
-  gh_token="$(gh auth token 2>/dev/null | tr -d '\r\n')"
-  if [[ -z "${gh_token}" ]]; then
-    warn "GitHub MCP: gh auth token is empty. Run: gh auth refresh -h github.com -s repo"
-    return 1
-  fi
-
-  export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
-  info "Session GitHub MCP token sourced from gh auth token."
-  return 0
-}
-
-run_post_install_mcp_health_checks() {
-  info "Running post-install MCP readiness checks..."
-  local strict_health="${1:-0}"
-  local all_healthy=1
-
-  local config_path="${HOME}/.config/opencode/opencode.json"
-  local has_github=0
-  local has_time=0
-  local has_cocoindex=0
-
-  if [[ ! -f "${config_path}" ]]; then
-    warn "MCP config not found at ${config_path}"
-  else
-    mcp_config_has_entry "${config_path}" "github" && has_github=1
-    mcp_config_has_entry "${config_path}" "time" && has_time=1
-    mcp_config_has_entry "${config_path}" "cocoindex-code" && has_cocoindex=1
-    info "MCP config probe: github=${has_github} time=${has_time} cocoindex-code=${has_cocoindex}"
-  fi
-
-  if (( has_github == 1 || has_time == 1 )); then
-    if command -v npx >/dev/null 2>&1; then
-      info "npx command is available for GitHub/time MCP launchers."
-    else
-      warn "npx command is missing; GitHub/time MCP local servers may fail to start."
-      ensure_nodejs_runtime >/dev/null 2>&1 || true
-      hash -r 2>/dev/null || true
-      if command -v npx >/dev/null 2>&1; then
-        info "npx command recovered after Node.js runtime bootstrap."
-      else
-        all_healthy=0
-      fi
-    fi
-  fi
-
-  if (( has_cocoindex == 1 )); then
-    if command -v ccc >/dev/null 2>&1 && ccc --version >/dev/null 2>&1; then
-      info "ccc command is available for cocoindex-code MCP."
-    else
-      warn "ccc command is missing; cocoindex-code MCP may show not connected."
-      all_healthy=0
-    fi
-  fi
-
-  if (( has_github == 1 )); then
-    ensure_github_mcp_session_token || all_healthy=0
-  fi
-
-  if ! command -v opencode >/dev/null 2>&1; then
-    warn "Skipping MCP live probe because opencode command is unavailable."
-    if [[ "${strict_health}" == "1" ]]; then
-      return 1
-    fi
-    return 0
-  fi
-
-  local mcp_output=""
-  if mcp_output="$(opencode mcp list 2>&1)"; then
-    info "opencode mcp list probe executed."
-    if printf '%s\n' "${mcp_output}" | grep -Eiq 'github.*(not connected|disconnected|error|failed)'; then
-      warn "GitHub MCP appears not connected. Ensure gh auth + token env are ready."
-      all_healthy=0
-    fi
-    if printf '%s\n' "${mcp_output}" | grep -Eiq '(cocoindex[- ]code).*(not connected|disconnected|error|failed)'; then
-      warn "cocoindex-code MCP appears not connected. Ensure Python + ccc runtime are ready."
-      all_healthy=0
-    fi
-    if printf '%s\n' "${mcp_output}" | grep -Eiq '(^|[[:space:]])time([[:space:]]|$).*(not connected|disconnected|error|failed)'; then
-      warn "time MCP appears not connected. Ensure npx and npm registry access are available."
-      all_healthy=0
-    fi
-  else
-    warn "opencode mcp list probe failed. Run manually after reopening shell."
-    all_healthy=0
-  fi
-
-  if (( all_healthy == 1 )); then
-    info "Post-install MCP health checks passed."
-    return 0
-  fi
-
-  if [[ "${strict_health}" == "1" ]]; then
-    return 1
-  fi
-
-  warn "Post-install MCP health checks completed with warnings. Run: opencode mcp list"
   return 0
 }
 
@@ -951,7 +732,7 @@ install_opencode_npm_global() {
   fi
 
   local npm_prefix
-  npm_prefix="$(first_non_empty_output_line "$(npm config get prefix 2>/dev/null || true)" || true)"
+  npm_prefix="$(npm config get prefix 2>/dev/null || true)"
   if [[ -n "$npm_prefix" && -d "$npm_prefix/bin" ]]; then
     export PATH="$npm_prefix/bin:${PATH}"
   fi
@@ -1461,7 +1242,7 @@ ensure_pnpm_command() {
     info "Attempting npm install -g pnpm..."
     if npm install -g pnpm >/tmp/ocs-pnpm-npm.err 2>&1; then
       local npm_prefix
-      npm_prefix="$(first_non_empty_output_line "$(npm config get prefix 2>/dev/null || true)" || true)"
+      npm_prefix="$(npm config get prefix 2>/dev/null || true)"
       if [[ -n "${npm_prefix}" && -d "${npm_prefix}/bin" ]]; then
         export PATH="${npm_prefix}/bin:${PATH}"
       fi
@@ -2117,22 +1898,18 @@ if opencode_works; then
   info "opencode verification passed."
 elif install_opencode_shim && opencode_works; then
   info "opencode shim installed and verification passed."
-else
-  warn "opencode command not healthy. Attempting automatic cross-platform recovery..."
+elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
+  warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
   if ! ensure_opencode_command; then
-    warn "opencode command is still unavailable after recovery attempts."
-    info "Manual check: opencode --version"
+    warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
   fi
+else
+  warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
+  info "Manual check: opencode --version"
+  info "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
 fi
 
-if ! ensure_antigravity_oauth_integrity "${setup_script}"; then
-  warn "Installer completed with OAuth integrity warnings. Continue with manual check: opencode auth login"
-fi
-
-strict_mcp_health="${OCS_INSTALLER_STRICT_HEALTH:-0}"
-if ! run_post_install_mcp_health_checks "${strict_mcp_health}"; then
-  error "Post-install MCP health checks failed in strict mode. Resolve issues and rerun installer."
-fi
+ensure_antigravity_oauth_integrity "${setup_script}"
 
   echo ""
   echo "   Next steps:"
@@ -2140,18 +1917,12 @@ fi
   echo "   2. Create EXA API key: https://dashboard.exa.ai/api-keys"
   echo "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
   echo "   4. Verify Exa MCP: ocs exa check"
-  if opencode_works; then
-    echo "   5. Keep GitHub MCP green: gh auth login"
-    echo "      Then export token: export GITHUB_PERSONAL_ACCESS_TOKEN=\"\$(gh auth token)\""
-    echo "   6. Verify MCP status: opencode mcp list"
-    echo "   7. Configure preferences: ocs prefs"
-    echo "   8. Verify runtime: opencode auth login"
-    echo "   9. Start coding!"
-  else
-    echo "   5. Fix opencode command first: reopen terminal and run opencode --version"
-    echo "   6. If still missing, ensure PATH includes ${HOME}/.bun/bin"
-    echo "   7. Then verify MCP status: opencode mcp list"
-  fi
+  echo "   5. Keep GitHub MCP green: gh auth login"
+  echo "      Then export token: export GITHUB_PERSONAL_ACCESS_TOKEN=\"\$(gh auth token)\""
+  echo "   6. Verify MCP status: opencode mcp list"
+  echo "   7. Configure preferences: ocs prefs"
+  echo "   8. Verify runtime: opencode auth login"
+  echo "   9. Start coding!"
   echo ""
 }
 
