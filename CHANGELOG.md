@@ -9,12 +9,19 @@
 - Fixed: 7
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 32
-- Other: 1
+- Chore/Build/CI: 33
+- Other: 7
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `8f38caf` Align staging installer fallback branch with staging/v2.3.1
+- `0cc865e` Fix Windows installer crash on malformed npm prefix output
+- `1cb0838` Remove backup creation from uninstall scripts
+- `fa1eec5` Retain auth files and cap uninstall backups
+- `320befd` Preserve auth files during installer uninstall
+- `797bcf6` Remove stale OCS runtime state during uninstall
+- `34d6986` chore(installer): sync scripts from opencode-config-suites
 - `d70d5c7` chore(installer): sync scripts from opencode-config-suites
 - `b43d083` chore(installer): sync scripts from opencode-config-suites
 - `7aad12f` chore(installer): sync scripts from opencode-config-suites
