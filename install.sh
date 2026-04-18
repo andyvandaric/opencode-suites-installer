@@ -1736,6 +1736,24 @@ install_bun() {
   success "Bun $(bun --version) installed successfully"
 }
 
+cleanup_runtime_plugins_dir() {
+  local plugins_root="${HOME}/.config/opencode/plugins"
+  local purge_plugins="${OCS_INSTALLER_PURGE_PLUGINS:-1}"
+
+  if [[ "${purge_plugins}" != "1" ]]; then
+    info "Skipping plugin directory purge because OCS_INSTALLER_PURGE_PLUGINS=${purge_plugins}"
+    return 0
+  fi
+
+  if [[ -d "${plugins_root}" ]]; then
+    warn "Removing existing plugin directory to avoid stale plugin manager conflicts: ${plugins_root}"
+    rm -rf "${plugins_root}"
+  fi
+
+  mkdir -p "${plugins_root}"
+  success "Plugin directory reset complete: ${plugins_root}"
+}
+
 main() {
   parse_cli_args "$@"
   resolve_release_branch_config
@@ -1745,6 +1763,7 @@ main() {
   echo "────────────────────────────────────────"
 
   ensure_shell_dependencies
+  cleanup_runtime_plugins_dir
 
   # Bun version check
   if ! command -v bun &>/dev/null; then

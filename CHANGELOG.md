@@ -6,15 +6,17 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.3.0..HEAD`
 - Added: 2
-- Fixed: 7
+- Fixed: 8
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 33
+- Chore/Build/CI: 34
 - Other: 7
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `294e55d` fix(uninstall): preserve OpenAI and Antigravity account json files
+- `a9c9224` chore(installer): sync scripts from opencode-config-suites
 - `8f38caf` Align staging installer fallback branch with staging/v2.3.1
 - `0cc865e` Fix Windows installer crash on malformed npm prefix output
 - `1cb0838` Remove backup creation from uninstall scripts

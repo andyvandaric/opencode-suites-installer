@@ -1943,6 +1943,28 @@ function Assert-AntigravityOauthIntegrity {
     Write-Output "Antigravity OAuth integrity check passed."
 }
 
+function Reset-RuntimePluginsDirectory {
+    $purgePlugins = $env:OCS_INSTALLER_PURGE_PLUGINS
+    if ([string]::IsNullOrWhiteSpace($purgePlugins)) {
+        $purgePlugins = "1"
+    }
+
+    if ($purgePlugins -ne "1") {
+        Write-Output "Skipping plugin directory purge because OCS_INSTALLER_PURGE_PLUGINS=$purgePlugins"
+        return
+    }
+
+    $pluginsRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+
+    if (Test-Path $pluginsRoot) {
+        Write-Warning "Removing existing plugin directory to avoid stale plugin manager conflicts: $pluginsRoot"
+        Remove-Item -Path $pluginsRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    New-Item -ItemType Directory -Path $pluginsRoot -Force | Out-Null
+    Write-Output "Plugin directory reset complete: $pluginsRoot"
+}
+
 Write-Output ""
 Write-Output "opencode-multi-auth - Plugin Installer"
 Write-Output "--------------------------------------"
@@ -1954,6 +1976,7 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 Ensure-OpencodePathEntries
+Reset-RuntimePluginsDirectory
 Ensure-PnpmRuntime | Out-Null
 Ensure-PythonRuntimeForAgents | Out-Null
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
