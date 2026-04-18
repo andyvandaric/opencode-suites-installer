@@ -139,6 +139,7 @@ remove_path_if_exists() {
 cleanup_opencode_config() {
   config_dir="$HOME/.config/opencode"
   auth_dir="$config_dir/auth"
+  preserved_json_files="antigravity-accounts.json openai-accounts.json openai-session-state.json"
 
   if [ ! -e "$config_dir" ]; then
     return 0
@@ -157,6 +158,15 @@ cleanup_opencode_config() {
     if [ "$entry" = "$auth_dir" ]; then
       continue
     fi
+
+    entry_name="$(basename "$entry")"
+    for preserve_name in $preserved_json_files; do
+      if [ "$entry_name" = "$preserve_name" ]; then
+        info "PRESERVE $entry"
+        continue 2
+      fi
+    done
+
     remove_path_if_exists "$entry"
   done
 }
@@ -238,7 +248,7 @@ print_plan() {
   cat <<'EOF'
 
 Will remove:
-  - ~/.config/opencode except ~/.config/opencode/auth
+  - ~/.config/opencode except ~/.config/opencode/auth and account/session JSON files
   - ~/.opencode
   - ~/.opencode-suites
   - ~/.cache/opencode
@@ -248,6 +258,9 @@ Will remove:
 
 Will preserve:
   - ~/.config/opencode/auth
+  - ~/.config/opencode/antigravity-accounts.json
+  - ~/.config/opencode/openai-accounts.json
+  - ~/.config/opencode/openai-session-state.json
 EOF
 }
 

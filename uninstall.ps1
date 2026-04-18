@@ -128,6 +128,7 @@ function Remove-PathIfExists([string]$Path) {
 function Cleanup-OpencodeConfig([string]$HomeDir) {
   $configDir = Join-Path $HomeDir ".config\opencode"
   $authDir = Join-Path $configDir "auth"
+  $preserveJsonFiles = @("antigravity-accounts.json", "openai-accounts.json", "openai-session-state.json")
   if (-not (Test-Path -LiteralPath $configDir)) { return }
 
   if (-not (Test-Path -LiteralPath $authDir)) {
@@ -141,6 +142,12 @@ function Cleanup-OpencodeConfig([string]$HomeDir) {
     if ($entry.FullName -eq $authDir) {
       continue
     }
+
+    if ($preserveJsonFiles -contains $entry.Name) {
+      Write-Info "PRESERVE $($entry.FullName)"
+      continue
+    }
+
     Remove-PathIfExists $entry.FullName
   }
 }
@@ -212,7 +219,7 @@ function Show-Plan([string]$HomeDir) {
 
   Write-Host ""
   Write-Host "Will remove:"
-  Write-Host "  - ~/.config/opencode except ~/.config/opencode/auth"
+  Write-Host "  - ~/.config/opencode except ~/.config/opencode/auth and account/session JSON files"
   Write-Host "  - ~/.opencode"
   Write-Host "  - ~/.opencode-suites"
   Write-Host "  - ~/.cache/opencode"
@@ -222,6 +229,9 @@ function Show-Plan([string]$HomeDir) {
   Write-Host ""
   Write-Host "Will preserve:"
   Write-Host "  - ~/.config/opencode/auth"
+  Write-Host "  - ~/.config/opencode/antigravity-accounts.json"
+  Write-Host "  - ~/.config/opencode/openai-accounts.json"
+  Write-Host "  - ~/.config/opencode/openai-session-state.json"
 }
 
 function Confirm-Flow([string]$HomeDir) {
