@@ -1,20 +1,22 @@
-## 2.3.0 - 2026-04-07
-- Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
-- Documented the CocoIndex MPC-ready automation ladder plus CCC extension/skill-governance guidance so installer release notes match the suite’s new operational narrative.
+## 2.3.1 - 2026-04-08
+- Synced installer lane defaults/examples to `staging/v2.3.1` and version pins to `2.3.1` so installer fetches the same staged release wave as source and buyer.
+- Published high-level parity note for the staged asset refresh without exposing internal stack-level release details.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
-- Commit window: `v2.2.1..HEAD`
+- Commit window: `v2.3.0..HEAD`
 - Added: 1
-- Fixed: 5
+- Fixed: 6
 - Changed: 0
 - Docs: 2
-- Chore/Build/CI: 15
-- Other: 1
+- Chore/Build/CI: 10
+- Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `b05bcf0` Fix Windows installer crash on malformed npm prefix output
+- `2c2ec11` fix(installer): align branch hints with beta lane
 - `572d4a1` Revert "chore(installer): sync scripts from opencode-config-suites"
 - `4ebf46c` chore(installer): sync scripts from opencode-config-suites
 - `2448853` fix(readme): point beta install links to beta branch
@@ -29,17 +31,17 @@
 - `43f9e1f` fix(installer): guard empty pnpm source path on powershell install
 - `ade2214` chore(installer): align beta lane pull defaults
 - `3279009` chore(release): merge staging v2.3.0 into beta
-- `5a575ef` chore(installer): sync staging v2.3.0 release wave
-- `57c6cd0` chore(installer): sync staging v2.3.0 release wave
-- `1879639` chore(installer): sync staging v2.3.0 release wave
-- `317713f` chore(installer): sync staging v2.3.0 release wave
-- `4080e27` chore(installer): sync staging v2.3.0 release wave
 - `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
 - `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
 - `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
 - `317d5ce` docs: publish uninstall parity contract and smoke checks
 - `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
 <!-- OCS_COMMIT_COVERAGE_END -->
+## 2.3.0 - 2026-04-07
+
+- Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
+- Documented the CocoIndex MPC-ready automation ladder plus CCC extension/skill-governance guidance so installer release notes match the suite’s new operational narrative.
+
 ## 2.2.1 - 2026-04-05
 
 - Synced installer lane defaults/examples to `staging/v2.2.1` and version pins to `2.2.1` across Bash/PowerShell quick-install commands.
