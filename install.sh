@@ -865,19 +865,101 @@ install_ocs_shim_from_bundle() {
 
 cat > "${bun_bin}/ocs" <<EOF
 #!/usr/bin/env bash
-if [[ -x "$bun_exec" ]]; then
-  exec "$bun_exec" "$ocs_js" "\$@"
+set -e
+
+BUN_EXEC="$bun_exec"
+[[ -x "\${BUN_EXEC}" ]] || BUN_EXEC="bun"
+
+resolve_windows_ocs_entry() {
+  local cmd_path
+  while IFS= read -r cmd_path; do
+    [[ -f "\${cmd_path}" ]] || continue
+    local line
+    line=\$(sed -n '2p' "\${cmd_path}" 2>/dev/null || true)
+    [[ -n "\${line}" ]] || continue
+    local win_path
+    win_path=\$(printf '%s' "\${line}" | sed -n 's/^bun "\\(.*\\)" %\\*$/\\1/p')
+    [[ -n "\${win_path}" ]] || continue
+    local wsl_path
+    wsl_path=\$(wslpath -u "\${win_path}" 2>/dev/null || true)
+    if [[ -n "\${wsl_path}" && -f "\${wsl_path}" ]]; then
+      printf '%s\n' "\${wsl_path}"
+      return 0
+    fi
+  done < <(find /mnt/c/Users -maxdepth 3 -type f -path '*/.bun/bin/ocs.cmd' 2>/dev/null)
+  return 1
+}
+
+CANDIDATES=(
+  "$ocs_js"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
+  "$HOME/.config/opencode/bin/ocs.cjs"
+  "$HOME/.config/opencode/bin/ocs.js"
+)
+
+for candidate in "\${CANDIDATES[@]}"; do
+  if [[ -f "\${candidate}" ]]; then
+    exec "\${BUN_EXEC}" "\${candidate}" "\$@"
+  fi
+done
+
+if win_entry=\$(resolve_windows_ocs_entry); then
+  exec "\${BUN_EXEC}" "\${win_entry}" "\$@"
 fi
-exec bun "$ocs_js" "\$@"
+
+echo "error: cannot resolve ocs entrypoint (checked local config and Windows bun launcher)" >&2
+exit 1
 EOF
   chmod +x "${bun_bin}/ocs"
 
 cat > "${local_bin}/ocs" <<EOF
 #!/usr/bin/env bash
-if [[ -x "$bun_exec" ]]; then
-  exec "$bun_exec" "$ocs_js" "\$@"
+set -e
+
+BUN_EXEC="$bun_exec"
+[[ -x "\${BUN_EXEC}" ]] || BUN_EXEC="bun"
+
+resolve_windows_ocs_entry() {
+  local cmd_path
+  while IFS= read -r cmd_path; do
+    [[ -f "\${cmd_path}" ]] || continue
+    local line
+    line=\$(sed -n '2p' "\${cmd_path}" 2>/dev/null || true)
+    [[ -n "\${line}" ]] || continue
+    local win_path
+    win_path=\$(printf '%s' "\${line}" | sed -n 's/^bun "\\(.*\\)" %\\*$/\\1/p')
+    [[ -n "\${win_path}" ]] || continue
+    local wsl_path
+    wsl_path=\$(wslpath -u "\${win_path}" 2>/dev/null || true)
+    if [[ -n "\${wsl_path}" && -f "\${wsl_path}" ]]; then
+      printf '%s\n' "\${wsl_path}"
+      return 0
+    fi
+  done < <(find /mnt/c/Users -maxdepth 3 -type f -path '*/.bun/bin/ocs.cmd' 2>/dev/null)
+  return 1
+}
+
+CANDIDATES=(
+  "$ocs_js"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
+  "$HOME/.config/opencode/bin/ocs.cjs"
+  "$HOME/.config/opencode/bin/ocs.js"
+)
+
+for candidate in "\${CANDIDATES[@]}"; do
+  if [[ -f "\${candidate}" ]]; then
+    exec "\${BUN_EXEC}" "\${candidate}" "\$@"
+  fi
+done
+
+if win_entry=\$(resolve_windows_ocs_entry); then
+  exec "\${BUN_EXEC}" "\${win_entry}" "\$@"
 fi
-exec bun "$ocs_js" "\$@"
+
+echo "error: cannot resolve ocs entrypoint (checked local config and Windows bun launcher)" >&2
+exit 1
 EOF
   chmod +x "${local_bin}/ocs"
 
