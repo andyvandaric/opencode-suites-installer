@@ -22,7 +22,7 @@ OCS is built for people who want to code faster with AI without wasting time on 
 Install specific version:
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.sh | bash -s -- --version 2.3.1
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.sh | bash -s -- --version 2.3.0
 ```
 
 ### Windows (PowerShell 7)
@@ -34,7 +34,7 @@ Install specific version:
 Install specific version:
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.1"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.ps1 | iex'
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
@@ -59,19 +59,17 @@ Recommended daily profile:
 
 ## Uninstall
 
-### macOS / Linux / zsh
+### macOS / Linux
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.sh | sh
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.sh | bash
 ```
 
-### Windows (Windows PowerShell 5.1+ or PowerShell 7)
+### Windows (PowerShell 7)
 
 ```powershell
- powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
 ```
-
-`pwsh` works too. Uninstall now removes `~/.config/opencode/` except `~/.config/opencode/auth/`, which is preserved.
 
 ## Need full technical details?
 
