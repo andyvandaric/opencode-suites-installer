@@ -578,8 +578,16 @@ function Get-NodeGlobalPaths {
         return $paths
     }
 
+    if (-not [System.IO.Path]::IsPathRooted($normalized)) {
+        return $paths
+    }
+
     $paths += $normalized
-    $paths += (Join-Path -Path $normalized -ChildPath "bin")
+    try {
+        $paths += (Join-Path -Path $normalized -ChildPath "bin")
+    } catch {
+        # Ignore malformed npm prefix output (e.g. "Unknown command: ...")
+    }
     return $paths
 }
 
