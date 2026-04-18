@@ -9,12 +9,14 @@
 - Fixed: 6
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 4
+- Chore/Build/CI: 6
 - Other: 1
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `0ef806c` chore(installer): align main setup and MCP readiness with staging
+- `f8fc3f1` chore(installer): sync scripts from opencode-config-suites
 - `bbc34d4` Fix Windows installer crash on malformed npm prefix output
 - `ad98be3` fix(installer): align branch hints with main lane
 - `a32e29e` fix(installer): backport cross-platform hardening for main
