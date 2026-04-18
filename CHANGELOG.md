@@ -9,12 +9,13 @@
 - Fixed: 6
 - Changed: 0
 - Docs: 4
-- Chore/Build/CI: 6
+- Chore/Build/CI: 7
 - Other: 1
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `1d30e3b` chore(installer): sync scripts from opencode-config-suites
 - `0ef806c` chore(installer): align main setup and MCP readiness with staging
 - `f8fc3f1` chore(installer): sync scripts from opencode-config-suites
 - `bbc34d4` Fix Windows installer crash on malformed npm prefix output
