@@ -565,10 +565,10 @@ function Get-NodeGlobalPaths {
     try {
         $prefix = & npm config get prefix 2>$null
     } catch {
-        $prefix = ""
+        $prefix = $null
     }
 
-    $prefix = $prefix.Trim()
+    $prefix = Get-FirstNonEmptyCommandOutputLine -Output $prefix
     if (-not $prefix) {
         return $paths
     }
@@ -579,17 +579,50 @@ function Get-NodeGlobalPaths {
     }
 
     $paths += $normalized
-    $paths += (Join-Path $normalized 'bin')
+    $paths += (Join-Path -Path $normalized -ChildPath "bin")
     return $paths
+}
+
+function Get-FirstNonEmptyCommandOutputLine {
+    param($Output)
+
+    if ($null -eq $Output) {
+        return $null
+    }
+
+    foreach ($line in @($Output)) {
+        if ($null -eq $line) {
+            continue
+        }
+
+        $trimmed = "$line".Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        if ($trimmed -eq "undefined" -or $trimmed -eq "null") {
+            continue
+        }
+
+        return $trimmed
+    }
+
+    return $null
 }
 
 function Get-PnpmBinDirectories {
     $paths = @()
     $pnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
     if ($pnpmCmd) {
-        $binDir = Split-Path -Parent $pnpmCmd.Source
-        if ($binDir) {
-            $paths += $binDir
+        $pnpmSource = $pnpmCmd.Path
+        if ([string]::IsNullOrWhiteSpace($pnpmSource)) {
+            $pnpmSource = $pnpmCmd.Source
+        }
+        if (-not [string]::IsNullOrWhiteSpace($pnpmSource)) {
+            $binDir = Split-Path -Parent $pnpmSource -ErrorAction SilentlyContinue
+            if ($binDir) {
+                $paths += $binDir
+            }
         }
     }
     return $paths
@@ -599,6 +632,8 @@ function Ensure-OpencodePathEntries {
     $pathCandidates = @(
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("LOCALAPPDATA", "USERPROFILE", "HOME") -RelativePath 'bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::LocalApplicationData)),
+        (Join-SafeEnvPath -EnvNames @("LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME") -RelativePath 'Microsoft\WinGet\Links' -FallbackFolder ([System.Environment+SpecialFolder]::LocalApplicationData)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\pipx\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\share\uv\tools\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
@@ -607,6 +642,7 @@ function Ensure-OpencodePathEntries {
     $pathCandidates += @(
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.node\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.npm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
+        (Join-SafeEnvPath -EnvNames @("APPDATA", "USERPROFILE", "HOME") -RelativePath 'npm' -FallbackFolder ([System.Environment+SpecialFolder]::ApplicationData)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.npm-global\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.pnpm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)),
         (Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.local\share\pnpm\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile))
@@ -750,15 +786,20 @@ function Ensure-PnpmRuntime {
     $npmPrefix = $null
     if (Get-Command npm -ErrorAction SilentlyContinue) {
         try {
-            $npmPrefix = (& npm config get prefix 2>$null).Trim()
+            $npmPrefix = Get-FirstNonEmptyCommandOutputLine -Output (& npm config get prefix 2>$null)
         } catch {
             $npmPrefix = $null
         }
     }
 
     if ($npmPrefix) {
-        $npmBin = Join-Path $npmPrefix 'bin'
-        Add-PathEntryToUserPath -PathEntry $npmBin
+        $npmPrefix = $npmPrefix.TrimEnd('\', '/')
+        if ($npmPrefix) {
+            $npmBin = Join-Path -Path $npmPrefix -ChildPath "bin"
+            Add-PathEntryToUserPath -PathEntry $npmBin
+        } else {
+            Write-Warning "npm prefix resolved empty after normalization; skipping npm bin PATH injection."
+        }
     }
 
     Refresh-SessionPath
@@ -1222,7 +1263,11 @@ function Test-OcsWorks {
     $preferredCmd = if ($bunBin) { Join-Path $bunBin "ocs.cmd" } else { $null }
     $commandToRun = ""
 
-    if (Test-Path $preferredCmd) {
+    if ([string]::IsNullOrWhiteSpace($preferredCmd)) {
+        $preferredCmd = $null
+    }
+
+    if ($preferredCmd -and (Test-Path -LiteralPath $preferredCmd)) {
         $commandToRun = $preferredCmd
     } else {
         $resolved = Get-Command ocs -ErrorAction SilentlyContinue
@@ -1238,6 +1283,16 @@ function Test-OcsWorks {
     }
 
     & $commandToRun --help *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    $resolvedByName = Get-Command ocs -ErrorAction SilentlyContinue
+    if (-not $resolvedByName) {
+        return $false
+    }
+
+    & ocs --version *> $null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
@@ -1435,7 +1490,412 @@ function Install-OpencodeShimFromBun {
     Add-PathEntryToUserPath -PathEntry $bunBin
     Refresh-SessionPath
 
-    return (Test-Path $cmdPath)
+    return (Test-OpencodeWorks)
+}
+
+function Install-OpencodeFromBunGlobal {
+    if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    $maxAttempts = 3
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $lastOutput = ""
+        try {
+            $bunOutput = & bun add -g opencode-ai@latest 2>&1
+            if ($bunOutput) {
+                $lastOutput = ($bunOutput | Out-String).Trim()
+            }
+
+            if ($LASTEXITCODE -eq 0) {
+                Ensure-OpencodePathEntries
+                Refresh-SessionPath
+                return (Test-OpencodeWorks)
+            }
+        } catch {
+            $lastOutput = $_.Exception.Message
+        }
+
+        if ($attempt -lt $maxAttempts) {
+            if ($lastOutput) {
+                Write-Warning "bun add -g opencode-ai failed (attempt $attempt/$maxAttempts): $lastOutput"
+            }
+            Start-Sleep -Milliseconds (700 * $attempt)
+        }
+    }
+
+    return $false
+}
+
+function Ensure-OpencodeCommand {
+    Ensure-OpencodePathEntries
+    Refresh-SessionPath
+
+    if (Test-OpencodeWorks) {
+        return $true
+    }
+
+    if (Install-OpencodeShimFromBun) {
+        return $true
+    }
+
+    if (Install-OpencodeFromBunGlobal) {
+        return $true
+    }
+
+    return $false
+}
+
+function Test-OpencodeWorks {
+    $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $opencodeCommand) {
+        return $false
+    }
+
+    $commandPath = $opencodeCommand.Source
+    if (-not $commandPath -or -not (Test-Path $commandPath)) {
+        return $false
+    }
+
+    try {
+        & $commandPath --version *> $null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+
+        & $commandPath --help *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
+function Invoke-OpencodeMcpListWithRetry {
+    param([int]$MaxAttempts = 3)
+
+    $attemptOutput = ""
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $result = & opencode mcp list 2>&1
+            $attemptOutput = if ($result) { ($result | Out-String).Trim() } else { "" }
+            if ($LASTEXITCODE -eq 0) {
+                return @{
+                    Success = $true
+                    Output = $attemptOutput
+                    Attempts = $attempt
+                }
+            }
+        } catch {
+            $attemptOutput = $_.Exception.Message
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Seconds ([Math]::Pow(2, $attempt))
+        }
+    }
+
+    return @{
+        Success = $false
+        Output = $attemptOutput
+        Attempts = $MaxAttempts
+    }
+}
+
+function Test-McpServerConfigured {
+    param(
+        [string]$ConfigPath,
+        [string[]]$ServerNames
+    )
+
+    if (-not (Test-Path $ConfigPath)) {
+        return $false
+    }
+
+    try {
+        $config = Get-Content -Raw -Path $ConfigPath -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        return $false
+    }
+
+    $mcpContainer = $null
+    if ($config.PSObject.Properties.Name -contains "mcp") {
+        $mcpContainer = $config.mcp
+    } elseif ($config.PSObject.Properties.Name -contains "mcpServers") {
+        $mcpContainer = $config.mcpServers
+    }
+
+    if (-not $mcpContainer) {
+        return $false
+    }
+
+    foreach ($candidateName in $ServerNames) {
+        foreach ($property in $mcpContainer.PSObject.Properties) {
+            if ($property.Name -ieq $candidateName) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Get-McpServerStatusFromOutput {
+    param(
+        [string]$Output,
+        [string[]]$ServerNames
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Output)) {
+        return "missing"
+    }
+
+    $matchedLines = @()
+    $lines = $Output -split "(\r?\n)"
+    foreach ($line in $lines) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        foreach ($serverName in $ServerNames) {
+            if ($line -match "(?i)\b$([regex]::Escape($serverName))\b") {
+                $matchedLines += $line
+                break
+            }
+        }
+    }
+
+    if ($matchedLines.Count -eq 0) {
+        return "missing"
+    }
+
+    foreach ($line in $matchedLines) {
+        if ($line -match "(?i)not connected|disconnected|inactive|error|failed|missing|unavailable|stopped") {
+            return "disconnected"
+        }
+    }
+
+    foreach ($line in $matchedLines) {
+        if ($line -match "(?i)connected|active|healthy|running|enabled|ok|ready") {
+            return "connected"
+        }
+    }
+
+    return "present"
+}
+
+function Invoke-PostInstallMcpHealthChecks {
+    param([bool]$Strict = $false)
+
+    Write-Output "Running post-install MCP health checks..."
+    Ensure-OpencodePathEntries
+
+    if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
+        Write-Warning "Skipping MCP health checks because opencode command is unavailable in current session."
+        return (-not $Strict)
+    }
+
+    $configDir = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath ".config\opencode" -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $configPath = if ($configDir) { Join-Path $configDir "opencode.json" } else { "" }
+    $mcpListResult = Invoke-OpencodeMcpListWithRetry -MaxAttempts 3
+    if (-not $mcpListResult.Success) {
+        Write-Warning "Unable to run 'opencode mcp list' after $($mcpListResult.Attempts) attempts."
+        if ($mcpListResult.Output) {
+            Write-Warning "Last opencode mcp list output: $($mcpListResult.Output)"
+        }
+        return (-not $Strict)
+    }
+
+    $checks = @(
+        @{ Label = "time"; Names = @("time") },
+        @{ Label = "github"; Names = @("github") },
+        @{ Label = "cocoindex"; Names = @("cocoindex-code", "cocoindex") }
+    )
+
+    $allHealthy = $true
+    foreach ($check in $checks) {
+        $configured = Test-McpServerConfigured -ConfigPath $configPath -ServerNames $check.Names
+        $runtimeStatus = Get-McpServerStatusFromOutput -Output $mcpListResult.Output -ServerNames $check.Names
+
+        if (-not $configured) {
+            Write-Warning "MCP '$($check.Label)' is not present in opencode.json."
+            $allHealthy = $false
+            continue
+        }
+
+        switch ($runtimeStatus) {
+            "connected" {
+                Write-Output "MCP '$($check.Label)' is connected."
+            }
+            "present" {
+                Write-Warning "MCP '$($check.Label)' appears in list output, but status is unclear."
+                $allHealthy = $false
+            }
+            "disconnected" {
+                Write-Warning "MCP '$($check.Label)' appears disconnected in 'opencode mcp list'."
+                $allHealthy = $false
+            }
+            default {
+                Write-Warning "MCP '$($check.Label)' was not found in 'opencode mcp list'."
+                $allHealthy = $false
+            }
+        }
+    }
+
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        & gh auth status -h github.com *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "GitHub CLI auth is not active. Run: gh auth login"
+            $allHealthy = $false
+        }
+    } else {
+        Write-Warning "GitHub CLI not found; github MCP checks may remain degraded."
+        $allHealthy = $false
+    }
+
+    if ($allHealthy) {
+        Write-Output "Post-install MCP health checks passed."
+        return $true
+    }
+
+    Write-Warning "Post-install MCP health checks completed with warnings. Run: opencode mcp list"
+    return (-not $Strict)
+}
+
+function Get-ConfiguredMcpServerNames {
+    param([string]$ConfigPath)
+
+    if (-not $ConfigPath -or (-not (Test-Path $ConfigPath))) {
+        return @()
+    }
+
+    try {
+        $config = Get-Content -Raw -Path $ConfigPath -Encoding UTF8 | ConvertFrom-Json
+        if ($config -and $config.mcp) {
+            return @($config.mcp.PSObject.Properties.Name)
+        }
+        if ($config -and $config.mcpServers) {
+            return @($config.mcpServers.PSObject.Properties.Name)
+        }
+    } catch {
+        Write-Warning "Could not parse MCP config at ${ConfigPath}: $($_.Exception.Message)"
+    }
+
+    return @()
+}
+
+function Ensure-GitHubMcpSessionToken {
+    if ($env:GITHUB_PERSONAL_ACCESS_TOKEN) {
+        return $true
+    }
+
+    if ($env:GITHUB_TOKEN) {
+        $env:GITHUB_PERSONAL_ACCESS_TOKEN = $env:GITHUB_TOKEN
+        Write-Output "Session GitHub MCP token sourced from GITHUB_TOKEN."
+        return $true
+    }
+
+    if ($env:GH_TOKEN) {
+        $env:GITHUB_PERSONAL_ACCESS_TOKEN = $env:GH_TOKEN
+        Write-Output "Session GitHub MCP token sourced from GH_TOKEN."
+        return $true
+    }
+
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Warning "GitHub MCP: gh CLI not found and GITHUB_PERSONAL_ACCESS_TOKEN is unset."
+        return $false
+    }
+
+    try {
+        & gh auth status 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "GitHub MCP: gh CLI is not authenticated yet. Run: gh auth login"
+            return $false
+        }
+    } catch {
+        Write-Warning "GitHub MCP: unable to read gh auth status."
+        return $false
+    }
+
+    $ghToken = $null
+    try {
+        $ghToken = Get-FirstNonEmptyCommandOutputLine -Output (& gh auth token 2>$null)
+    } catch {
+        $ghToken = $null
+    }
+
+    if (-not $ghToken) {
+        Write-Warning "GitHub MCP: gh auth token is empty. Run: gh auth refresh -h github.com --scopes repo"
+        return $false
+    }
+
+    $env:GITHUB_PERSONAL_ACCESS_TOKEN = $ghToken
+    Write-Output "Session GitHub MCP token sourced from gh auth token."
+    return $true
+}
+
+function Invoke-PostInstallMcpHealthCheck {
+    Write-Output "Running post-install MCP readiness checks..."
+
+    $configDir = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $configPath = if ($configDir) { Join-Path $configDir "opencode.json" } else { "" }
+    $mcpNames = Get-ConfiguredMcpServerNames -ConfigPath $configPath
+    $hasGitHubMcp = $mcpNames -contains "github"
+    $hasTimeMcp = $mcpNames -contains "time"
+    $hasCocoIndexMcp = $mcpNames -contains "cocoindex-code"
+
+    if (-not (Test-Path $configPath)) {
+        Write-Warning "MCP config not found at $configPath"
+    } elseif ($mcpNames.Count -eq 0) {
+        Write-Warning "MCP config is present but no MCP servers are registered."
+    } else {
+        Write-Output "Configured MCP servers: $($mcpNames -join ', ')"
+    }
+
+    if ($hasGitHubMcp -or $hasTimeMcp) {
+        if (Get-Command npx -ErrorAction SilentlyContinue) {
+            Write-Output "npx command is available for GitHub/time MCP launchers."
+        } else {
+            Write-Warning "npx command is missing; GitHub/time MCP local servers may fail to start."
+        }
+    }
+
+    if ($hasCocoIndexMcp) {
+        if (Get-Command ccc -ErrorAction SilentlyContinue) {
+            Write-Output "ccc command is available for cocoindex-code MCP."
+        } else {
+            Write-Warning "ccc command is missing; cocoindex-code MCP may show not connected."
+        }
+    }
+
+    if ($hasGitHubMcp) {
+        [void](Ensure-GitHubMcpSessionToken)
+    }
+
+    if (-not (Test-OpencodeWorks)) {
+        Write-Warning "Skipping MCP live probe because opencode command is unavailable."
+        return
+    }
+
+    try {
+        $mcpListOutput = & opencode mcp list 2>&1
+        $mcpListText = if ($mcpListOutput) { ($mcpListOutput | Out-String) } else { "" }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "opencode mcp list probe executed."
+            if ($mcpListText -match "(?im)github.*(not connected|disconnected|error|failed)") {
+                Write-Warning "GitHub MCP appears not connected. Ensure gh auth + token env are ready."
+            }
+            if ($mcpListText -match "(?im)cocoindex[- ]code.*(not connected|disconnected|error|failed)") {
+                Write-Warning "cocoindex-code MCP appears not connected. Ensure Python + ccc runtime are ready."
+            }
+            if ($mcpListText -match "(?im)\btime\b.*(not connected|disconnected|error|failed)") {
+                Write-Warning "time MCP appears not connected. Ensure npx and npm registry access are available."
+            }
+        } else {
+            Write-Warning "opencode mcp list probe failed. Run manually after reopening shell."
+        }
+    } catch {
+        Write-Warning "Could not run opencode mcp list probe: $($_.Exception.Message)"
+    }
 }
 
 function Install-OcsFromPrivateRepo {
@@ -1879,6 +2339,91 @@ function Invoke-AutoSetup {
     }
 }
 
+function Test-MultiAuthRuntimePluginPresence {
+    param([string]$ConfigDir)
+
+    $nodeModulesPackage = Join-Path $ConfigDir "node_modules\opencode-multi-auth\package.json"
+    $bundledPackage = Join-Path $ConfigDir "plugins\opencode-multi-auth\package.json"
+    $runtimeOpencode = Join-Path $ConfigDir "opencode.json"
+
+    if (Test-Path $nodeModulesPackage) {
+        return @{
+            Exists = $true
+            Location = $nodeModulesPackage
+        }
+    }
+
+    if (Test-Path $bundledPackage) {
+        return @{
+            Exists = $true
+            Location = $bundledPackage
+        }
+    }
+
+    if (Test-Path $runtimeOpencode) {
+        try {
+            $runtimeContent = Get-Content -Raw -Path $runtimeOpencode -Encoding UTF8
+            if ($runtimeContent -match "opencode-multi-auth|plugins/opencode-multi-auth|plugins\\opencode-multi-auth") {
+                return @{
+                    Exists = $true
+                    Location = $runtimeOpencode
+                }
+            }
+        } catch {
+            # ignore unreadable runtime config
+        }
+    }
+
+    return @{
+        Exists = $false
+        Location = $nodeModulesPackage
+    }
+}
+
+function Refresh-TargetConfigPluginDependencies {
+    param(
+        [string]$ConfigDir,
+        [int]$MaxAttempts = 3
+    )
+
+    $packageJsonPath = Join-Path $ConfigDir "package.json"
+    if (-not (Test-Path $packageJsonPath)) {
+        return $false
+    }
+
+    Push-Location $ConfigDir
+    try {
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            Write-Output "[OK] Installing plugin dependencies (attempt $attempt/$MaxAttempts)"
+            $lastOutput = ""
+
+            try {
+                $bunOutput = & bun install --no-progress --network-concurrency=16 --registry "https://registry.npmjs.org/" 2>&1
+                if ($bunOutput) {
+                    $lastOutput = ($bunOutput | Out-String).Trim()
+                }
+                if ($LASTEXITCODE -eq 0) {
+                    return $true
+                }
+            } catch {
+                $lastOutput = $_.Exception.Message
+            }
+
+            if ($attempt -lt $MaxAttempts) {
+                if ($lastOutput) {
+                    $tail = ($lastOutput -split "`r?`n" | Where-Object { $_ -and $_.Trim() -ne "" } | Select-Object -Last 6) -join " | "
+                    Write-Warning "Plugin dependency refresh failed (attempt $attempt/$MaxAttempts): $tail"
+                }
+                Start-Sleep -Milliseconds (900 * $attempt)
+            }
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return $false
+}
+
 function Assert-AntigravityOauthIntegrity {
     param([string]$SetupScript)
 
@@ -1930,17 +2475,32 @@ function Assert-AntigravityOauthIntegrity {
     }
 
     if (-not (Test-Path $runtimeAntigravity)) {
-        throw "Final Antigravity OAuth integrity check failed: antigravity.json is missing."
+        Write-Warning "Final Antigravity OAuth integrity check warning: antigravity.json is missing."
+        return $false
     }
 
     if (Test-Path $runtimeOpencode) {
         $runtimeContent = Get-Content -Raw -Path $runtimeOpencode -Encoding UTF8
         if ($runtimeContent -match 'file:///.*dist/index\.js|plugins/.*/dist/index\.js') {
-            throw "Final Antigravity OAuth integrity check failed: runtime config still references a raw dist/index.js plugin path."
+            Write-Warning "Final Antigravity OAuth integrity check warning: runtime config still references a raw dist/index.js plugin path."
+            return $false
         }
     }
 
+    $pluginStatus = Test-MultiAuthRuntimePluginPresence -ConfigDir $configDir
+    if (-not $pluginStatus.Exists) {
+        Write-Output "Refreshing target node_modules for registry plugin fallback..."
+        [void](Refresh-TargetConfigPluginDependencies -ConfigDir $configDir -MaxAttempts 3)
+        $pluginStatus = Test-MultiAuthRuntimePluginPresence -ConfigDir $configDir
+    }
+
+    if (-not $pluginStatus.Exists) {
+        Write-Warning "Final Antigravity OAuth integrity check warning: registry plugin package is missing at $($pluginStatus.Location)"
+        return $false
+    }
+
     Write-Output "Antigravity OAuth integrity check passed."
+    return $true
 }
 
 Write-Output ""
@@ -2133,7 +2693,11 @@ Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
-Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
+$oauthIntegrityOk = Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
+if (-not $oauthIntegrityOk) {
+    Write-Warning "Installer completed with OAuth integrity warnings. Continue with manual check: opencode auth login"
+}
+
 Ensure-OpencodePathEntries
 
 if (Test-Path $TMP_DIR) {
@@ -2154,19 +2718,22 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
 Write-Output ""
 Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
-$opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-if (-not $opencodeCommand) {
-    if (Install-OpencodeShimFromBun) {
-        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-    }
-}
+$opencodeHealthy = Ensure-OpencodeCommand
 
-if ($opencodeCommand) {
+if ($opencodeHealthy) {
     Write-Output "opencode verification passed."
 } else {
-    Write-Warning "opencode command not found. Skipping heavy auto-recovery to avoid long waits."
+    Write-Warning "opencode command still unavailable after auto-recovery attempts."
     Write-Output "Manual check: opencode --version"
 }
+
+$strictMcpHealth = (($env:OCS_INSTALLER_STRICT_HEALTH ?? "0") -eq "1")
+$mcpHealthOk = Invoke-PostInstallMcpHealthChecks -Strict:$strictMcpHealth
+if ((-not $mcpHealthOk) -and $strictMcpHealth) {
+    Write-Error "Post-install MCP health checks failed in strict mode. Resolve issues and rerun installer."
+    exit 1
+}
+
 Write-Output ""
 Write-Output "   Next steps:"
 Write-Output "   1. Configure profile globally: ocs setup:profile"
@@ -2175,11 +2742,19 @@ Write-Output "   3. Setup Exa MCP: ocs exa setup --api-key <YOUR_EXA_API_KEY>"
 Write-Output "      If script policy blocks, use: ocs.cmd exa setup --api-key <YOUR_EXA_API_KEY>"
 Write-Output "   4. Verify Exa MCP: ocs exa check"
 Write-Output "      If script policy blocks, use: ocs.cmd exa check"
-Write-Output "   5. Keep GitHub MCP green: gh auth login"
-Write-Output "      Then set token env: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = gh auth token"
-Write-Output "   6. Verify MCP status: opencode mcp list"
-Write-Output "   7. Configure preferences: ocs prefs"
-Write-Output "   8. Add account via: opencode auth login"
-Write-Output "   9. Running Opencode via web UI:"
-Write-Output "      opencode web --port 8089"
+if ($opencodeHealthy) {
+    Write-Output "   5. Keep GitHub MCP green: gh auth login"
+    Write-Output "      Then set token env: `$env:GITHUB_PERSONAL_ACCESS_TOKEN = (gh auth token)"
+    Write-Output "   6. Verify MCP status: opencode mcp list"
+    Write-Output "   7. Configure preferences: ocs prefs"
+    Write-Output "   8. Add account via: opencode auth login"
+    Write-Output "   9. Running Opencode via web UI:"
+    Write-Output "      opencode web --port 8089"
+} else {
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    Write-Output "   5. Fix opencode command first: reopen terminal and verify opencode --version"
+    Write-Output "   6. If still missing, ensure PATH includes: $bunBin"
+    Write-Output "   7. Then verify MCP status: opencode mcp list"
+}
 Write-Output ""
+
