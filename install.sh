@@ -44,7 +44,7 @@ fi
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
-INSTALLER_SOURCE_BRANCH_HINT="beta"
+INSTALLER_SOURCE_BRANCH_HINT="staging/v2.3.1"
 GITHUB_SOURCE_BRANCH="${OCS_RELEASE_BRANCH:-}"
 DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
