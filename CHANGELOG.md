@@ -9,12 +9,14 @@
 - Fixed: 6
 - Changed: 0
 - Docs: 2
-- Chore/Build/CI: 10
+- Chore/Build/CI: 12
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `4db8d2c` chore(installer): align beta setup and MCP readiness with staging
+- `d746b2f` chore(installer): sync scripts from opencode-config-suites
 - `b05bcf0` Fix Windows installer crash on malformed npm prefix output
 - `2c2ec11` fix(installer): align branch hints with beta lane
 - `572d4a1` Revert "chore(installer): sync scripts from opencode-config-suites"
