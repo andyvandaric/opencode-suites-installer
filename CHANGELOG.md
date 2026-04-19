@@ -2,6 +2,8 @@
 - Synced installer branch resolution so version-pinned installs default to `staging/v2.3.1` when branch is not explicitly provided.
 - Aligned Bash and PowerShell installer fallback behavior to the same lane/version selection logic for consistent WSL/Windows outcomes.
 - Captured the local WSL verification gate used for this wave (rebuild tarball, isolated reinstall smoke, and doctor/runtime proof) before lane propagation.
+- Synced installer lane defaults/examples to `staging/v2.3.1` and version pins to `2.3.1` so installer fetches the same staged release wave as source and buyer.
+- Published high-level parity note for the staged asset refresh without exposing internal stack-level release details.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
@@ -10,12 +12,13 @@
 - Fixed: 9
 - Changed: 0
 - Docs: 3
-- Chore/Build/CI: 16
+- Chore/Build/CI: 17
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `c29b7a0` chore(installer): sync scripts from opencode-config-suites
 - `05e9d1e` chore(installer): sync scripts from opencode-config-suites
 - `32f4119` docs: update installer README URLs
 - `3caacd5` fix: default installer branch to main
