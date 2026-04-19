@@ -1896,7 +1896,9 @@ function Assert-AntigravityOauthIntegrity {
         New-Item -ItemType Directory -Force $configDir | Out-Null
     }
 
-    if ((-not (Test-Path $runtimeAntigravity)) -and (Test-Path $templateAntigravity)) {
+    if (Test-Path $runtimeAntigravity) {
+        Write-Output "Existing Antigravity storage detected. Preserving current account state."
+    } elseif (Test-Path $templateAntigravity) {
         Copy-Item -Path $templateAntigravity -Destination $runtimeAntigravity -Force
         $needsRepair = $true
     }

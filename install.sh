@@ -509,7 +509,9 @@ ensure_antigravity_oauth_integrity() {
 
   mkdir -p "${config_dir}" 2>/dev/null || true
 
-  if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
+  if [[ -f "${runtime_antigravity}" ]]; then
+    info "Existing Antigravity storage detected. Preserving current account state."
+  elif [[ -f "${template_antigravity}" ]]; then
     cp "${template_antigravity}" "${runtime_antigravity}"
     needs_repair=1
   fi
