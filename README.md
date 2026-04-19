@@ -16,25 +16,25 @@ OCS is built for people who want to code faster with AI without wasting time on 
 ### macOS / Linux
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.sh | bash
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash
 ```
 
 Install specific version:
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.sh | bash -s -- --version 2.3.1
+ OCS_VERSION=2.3.1 OCS_BRANCH=staging/v2.3.1 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.ps1 | iex"
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex"
 ```
 
 Install specific version:
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.1"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.ps1 | iex'
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.1"; $env:OCS_BRANCH = "staging/v2.3.1"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
@@ -62,13 +62,13 @@ Recommended daily profile:
 ### macOS / Linux
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.sh | bash
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.sh | bash
 ```
 
 ### Windows (PowerShell 7)
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/uninstall.ps1 | iex"
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/uninstall.ps1 | iex"
 ```
 
 ## Need full technical details?
