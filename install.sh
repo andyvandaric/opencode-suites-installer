@@ -177,7 +177,7 @@ Usage: install.sh [--version <x.y.z>] [--branch <name>] [--help]
 
 Options:
   --version, -v   Install specific bundle version (example: 2.0.15)
-  --branch        Override source branch (default: inferred from installer URL, fallback: staging/v2.3.0)
+  --branch        Override source branch (default: inferred from installer URL, fallback: main)
   --help, -h      Show this help
 
 Env alternatives:
