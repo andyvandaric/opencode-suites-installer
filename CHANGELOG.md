@@ -9,15 +9,17 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.3.0..HEAD`
 - Added: 1
-- Fixed: 11
+- Fixed: 12
 - Changed: 0
 - Docs: 3
-- Chore/Build/CI: 19
+- Chore/Build/CI: 20
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `da8dd7e` fix(installer): remove empty Join-Path bin on Windows prefix resolution
+- `5aab538` chore(installer): sync scripts from opencode-config-suites
 - `e563066` fix(uninstall): centralize protected entries and main-oriented reinstall hints
 - `4283653` chore(installer): sync scripts from opencode-config-suites
 - `31ecb58` fix(installer): default latest flow to main branch assets
