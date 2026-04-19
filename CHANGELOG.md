@@ -12,12 +12,13 @@
 - Fixed: 12
 - Changed: 0
 - Docs: 3
-- Chore/Build/CI: 20
+- Chore/Build/CI: 21
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `5e1ec68` chore(installer): sync scripts from opencode-config-suites
 - `da8dd7e` fix(installer): remove empty Join-Path bin on Windows prefix resolution
 - `5aab538` chore(installer): sync scripts from opencode-config-suites
 - `e563066` fix(uninstall): centralize protected entries and main-oriented reinstall hints
