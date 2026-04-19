@@ -842,14 +842,16 @@ install_ocs_shim_from_bundle() {
   local ocs_js=""
   local candidate
   local candidates=(
+    "${root_path}/bin/ocs.cjs"
+    "${root_path}/bin/ocs.js"
     "${plugin_path}/bin/ocs.cjs"
     "${plugin_path}/bin/ocs.js"
   )
 
-  if [[ -n "$root_path" ]]; then
-    candidates+=(
-      "${root_path}/bin/ocs.cjs"
-      "${root_path}/bin/ocs.js"
+  if [[ -z "$root_path" ]]; then
+    candidates=(
+      "${plugin_path}/bin/ocs.cjs"
+      "${plugin_path}/bin/ocs.js"
     )
   fi
 
@@ -896,10 +898,10 @@ resolve_windows_ocs_entry() {
 
 CANDIDATES=(
   "$ocs_js"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
   "$HOME/.config/opencode/bin/ocs.cjs"
   "$HOME/.config/opencode/bin/ocs.js"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
 )
 
 for candidate in "\${CANDIDATES[@]}"; do
@@ -946,10 +948,10 @@ resolve_windows_ocs_entry() {
 
 CANDIDATES=(
   "$ocs_js"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
   "$HOME/.config/opencode/bin/ocs.cjs"
   "$HOME/.config/opencode/bin/ocs.js"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
+  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
 )
 
 for candidate in "\${CANDIDATES[@]}"; do

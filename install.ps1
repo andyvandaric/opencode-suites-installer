@@ -1338,13 +1338,13 @@ function Install-OcsShimFromBundle {
     $baseAbsPath = Resolve-AbsolutePathSafe -BasePath $null -Candidate $BasePath
 
     $candidatePaths = @()
-    if ($pluginAbsPath) {
-        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.cjs")
-        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.js")
-    }
     if ($baseAbsPath) {
         $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.cjs")
         $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.js")
+    }
+    if ($pluginAbsPath) {
+        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.cjs")
+        $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.js")
     }
 
     $ocsJs = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
