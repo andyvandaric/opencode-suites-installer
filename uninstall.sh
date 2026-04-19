@@ -9,6 +9,7 @@ YES_MODE=0
 DRY_RUN=0
 STEP=0
 TOTAL_STEPS=8
+PROTECTED_CONFIG_ENTRIES="auth antigravity.json antigravity-accounts.json openai-accounts.json openai-session-state.json"
 
 info() {
   printf '  %s\n' "$*"
@@ -136,10 +137,20 @@ remove_path_if_exists() {
   run_cmd rm -rf "$path"
 }
 
+is_protected_config_entry() {
+  entry_name="$1"
+  for protected_name in $PROTECTED_CONFIG_ENTRIES; do
+    if [ "$entry_name" = "$protected_name" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 cleanup_opencode_config() {
   config_dir="$HOME/.config/opencode"
   auth_dir="$config_dir/auth"
-  preserved_json_files="antigravity-accounts.json openai-accounts.json openai-session-state.json"
 
   if [ ! -e "$config_dir" ]; then
     return 0
@@ -160,12 +171,10 @@ cleanup_opencode_config() {
     fi
 
     entry_name="$(basename "$entry")"
-    for preserve_name in $preserved_json_files; do
-      if [ "$entry_name" = "$preserve_name" ]; then
-        info "PRESERVE $entry"
-        continue 2
-      fi
-    done
+    if is_protected_config_entry "$entry_name"; then
+      info "PRESERVE $entry"
+      continue
+    fi
 
     remove_path_if_exists "$entry"
   done
@@ -248,7 +257,7 @@ print_plan() {
   cat <<'EOF'
 
 Will remove:
-  - ~/.config/opencode except ~/.config/opencode/auth and account/session JSON files
+  - ~/.config/opencode except protected auth/account/session files
   - ~/.opencode
   - ~/.opencode-suites
   - ~/.cache/opencode
@@ -257,11 +266,11 @@ Will remove:
   - global package links (best effort)
 
 Will preserve:
-  - ~/.config/opencode/auth
-  - ~/.config/opencode/antigravity-accounts.json
-  - ~/.config/opencode/openai-accounts.json
-  - ~/.config/opencode/openai-session-state.json
 EOF
+
+  for protected_name in $PROTECTED_CONFIG_ENTRIES; do
+    printf '  - ~/.config/opencode/%s\n' "$protected_name"
+  done
 }
 
 confirm_uninstall() {
@@ -271,7 +280,7 @@ confirm_uninstall() {
     return 0
   fi
 
-  printf '\nThis removes ~/.config/opencode except the auth directory.\n'
+  printf '\nThis removes ~/.config/opencode except protected auth/account/session files.\n'
   printf 'Continue? [y/N]\n'
   answer=""
   read -r answer || true
@@ -346,7 +355,8 @@ success "Uninstall flow completed."
 cat <<'EOF'
 
 Next step (clean-room reinstall test):
-  sh -c 'curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.sh | sh'
+  sh -c 'curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | sh'
 EOF
 
 exit "$EXIT_OK"
+

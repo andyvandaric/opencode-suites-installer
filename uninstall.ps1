@@ -4,6 +4,7 @@ $script:Yes = $false
 $script:DryRun = $false
 $script:Step = 0
 $script:TotalSteps = 8
+$script:ProtectedConfigEntries = @("auth", "antigravity.json", "antigravity-accounts.json", "openai-accounts.json", "openai-session-state.json")
 
 function Write-Info([string]$Message) { Write-Host "  $Message" }
 function Write-Warn([string]$Message) { Write-Host "WARN  $Message" -ForegroundColor Yellow }
@@ -125,10 +126,13 @@ function Remove-PathIfExists([string]$Path) {
   }
 }
 
+function Test-IsProtectedConfigEntry([string]$Name) {
+  return $script:ProtectedConfigEntries -contains $Name
+}
+
 function Cleanup-OpencodeConfig([string]$HomeDir) {
   $configDir = Join-Path $HomeDir ".config\opencode"
   $authDir = Join-Path $configDir "auth"
-  $preserveJsonFiles = @("antigravity-accounts.json", "openai-accounts.json", "openai-session-state.json")
   if (-not (Test-Path -LiteralPath $configDir)) { return }
 
   if (-not (Test-Path -LiteralPath $authDir)) {
@@ -139,11 +143,7 @@ function Cleanup-OpencodeConfig([string]$HomeDir) {
   Write-Info "PRESERVE $authDir"
   $entries = Get-ChildItem -LiteralPath $configDir -Force -ErrorAction SilentlyContinue
   foreach ($entry in $entries) {
-    if ($entry.FullName -eq $authDir) {
-      continue
-    }
-
-    if ($preserveJsonFiles -contains $entry.Name) {
+    if (Test-IsProtectedConfigEntry $entry.Name) {
       Write-Info "PRESERVE $($entry.FullName)"
       continue
     }
@@ -219,7 +219,7 @@ function Show-Plan([string]$HomeDir) {
 
   Write-Host ""
   Write-Host "Will remove:"
-  Write-Host "  - ~/.config/opencode except ~/.config/opencode/auth and account/session JSON files"
+  Write-Host "  - ~/.config/opencode except protected auth/account/session files"
   Write-Host "  - ~/.opencode"
   Write-Host "  - ~/.opencode-suites"
   Write-Host "  - ~/.cache/opencode"
@@ -228,10 +228,9 @@ function Show-Plan([string]$HomeDir) {
   Write-Host "  - global package links (best effort)"
   Write-Host ""
   Write-Host "Will preserve:"
-  Write-Host "  - ~/.config/opencode/auth"
-  Write-Host "  - ~/.config/opencode/antigravity-accounts.json"
-  Write-Host "  - ~/.config/opencode/openai-accounts.json"
-  Write-Host "  - ~/.config/opencode/openai-session-state.json"
+  foreach ($entry in $script:ProtectedConfigEntries) {
+    Write-Host "  - ~/.config/opencode/$entry"
+  }
 }
 
 function Confirm-Flow([string]$HomeDir) {
@@ -240,7 +239,7 @@ function Confirm-Flow([string]$HomeDir) {
   if ($script:Yes) { return }
 
   Write-Host ""
-  Write-Host "This removes ~/.config/opencode except the auth directory."
+  Write-Host "This removes ~/.config/opencode except protected auth/account/session files."
   $answer = Read-Host "Continue? [y/N]"
   if ($answer -notin @("y", "Y", "yes", "YES")) {
     Write-Info "Cancelled."
@@ -304,6 +303,7 @@ Verify-CommandState
 Write-Success "Uninstall flow completed."
 Write-Host ""
 Write-Host "Next step (clean-room reinstall test):"
-Write-Host '  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/staging/v2.3.1/install.ps1 | iex"'
+Write-Host '  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex"'
 
 exit 0
+
