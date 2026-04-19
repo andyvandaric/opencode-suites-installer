@@ -22,7 +22,7 @@ OCS is built for people who want to code faster with AI without wasting time on 
 Install specific version:
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.1
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.0
 ```
 
 ### Windows (PowerShell 7)
