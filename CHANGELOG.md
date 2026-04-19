@@ -9,15 +9,17 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.3.0..HEAD`
 - Added: 1
-- Fixed: 9
+- Fixed: 10
 - Changed: 0
 - Docs: 3
-- Chore/Build/CI: 17
+- Chore/Build/CI: 18
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `31ecb58` fix(installer): default latest flow to main branch assets
+- `1ea77a7` chore(installer): sync scripts from opencode-config-suites
 - `c29b7a0` chore(installer): sync scripts from opencode-config-suites
 - `05e9d1e` chore(installer): sync scripts from opencode-config-suites
 - `32f4119` docs: update installer README URLs
