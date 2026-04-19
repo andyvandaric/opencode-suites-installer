@@ -1,23 +1,22 @@
-## 2.3.1 - 2026-04-19
-- Synced installer branch resolution so version-pinned installs default to `staging/v2.3.1` when branch is not explicitly provided.
-- Aligned Bash and PowerShell installer fallback behavior to the same lane/version selection logic for consistent WSL/Windows outcomes.
-- Captured the local WSL verification gate used for this wave (rebuild tarball, isolated reinstall smoke, and doctor/runtime proof) before lane propagation.
-- Synced installer lane defaults/examples to `staging/v2.3.1` and version pins to `2.3.1` so installer fetches the same staged release wave as source and buyer.
-- Published high-level parity note for the staged asset refresh without exposing internal stack-level release details.
+## 2.3.2 - 2026-04-20
+- Added support for the `GPT-OSS 120B (Medium)` model and released the `gpt-oss-120b-lead` optimized Antigravity profile.
+- Matured skill architecture by extracting CocoIndex background-indexing instructions into a centralized `ocs-cocoindex-gate` skill.
+- Improved schema sanitization in the multi-auth plugin to bypass strict Protobuf backend errors on MCP numeric constraints.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
-- Commit window: `v2.3.0..HEAD`
-- Added: 1
-- Fixed: 12
+- Commit window: `v2.3.1..HEAD`
+- Added: 0
+- Fixed: 10
 - Changed: 0
-- Docs: 3
-- Chore/Build/CI: 25
+- Docs: 1
+- Chore/Build/CI: 24
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `e411e5d` chore(installer): sync scripts from opencode-config-suites
 - `a0c4fc0` chore(installer): sync scripts from opencode-config-suites
 - `a8900db` chore(installer): sync scripts from opencode-config-suites
 - `a7cc4db` chore(installer): sync scripts from opencode-config-suites
@@ -54,14 +53,15 @@
 - `7e39976` chore(installer): sync scripts from opencode-config-suites
 - `3c4d164` chore(installer): sync scripts from opencode-config-suites
 - `43f9e1f` fix(installer): guard empty pnpm source path on powershell install
-- `ade2214` chore(installer): align beta lane pull defaults
-- `3279009` chore(release): merge staging v2.3.0 into beta
-- `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
-- `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
-- `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
-- `317d5ce` docs: publish uninstall parity contract and smoke checks
-- `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
 <!-- OCS_COMMIT_COVERAGE_END -->
+## 2.3.1 - 2026-04-19
+
+- Synced installer branch resolution so version-pinned installs default to `staging/v2.3.1` when branch is not explicitly provided.
+- Aligned Bash and PowerShell installer fallback behavior to the same lane/version selection logic for consistent WSL/Windows outcomes.
+- Captured the local WSL verification gate used for this wave (rebuild tarball, isolated reinstall smoke, and doctor/runtime proof) before lane propagation.
+- Synced installer lane defaults/examples to `staging/v2.3.1` and version pins to `2.3.1` so installer fetches the same staged release wave as source and buyer.
+- Published high-level parity note for the staged asset refresh without exposing internal stack-level release details.
+
 ## 2.3.0 - 2026-04-07
 
 - Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
