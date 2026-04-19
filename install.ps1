@@ -579,7 +579,7 @@ function Get-NodeGlobalPaths {
     }
 
     $paths += $normalized
-    $paths += (Join-Path $normalized 'bin')
+
     return $paths
 }
 
@@ -2208,3 +2208,5 @@ Write-Output "   8. Add account via: opencode auth login"
 Write-Output "   9. Running Opencode via web UI:"
 Write-Output "      opencode web --port 8089"
 Write-Output ""
+
+
