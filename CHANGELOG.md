@@ -1,3 +1,9 @@
+## 2.3.1 - 2026-04-19
+
+- Synced installer branch resolution so version-pinned installs default to `staging/v2.3.1` when branch is not explicitly provided.
+- Aligned Bash and PowerShell installer fallback behavior to the same lane/version selection logic for consistent WSL/Windows outcomes.
+- Captured the local WSL verification gate used for this wave (rebuild tarball, isolated reinstall smoke, and doctor/runtime proof) before lane propagation.
+
 ## 2.3.0 - 2026-04-07
 - Synced installer lane defaults/examples to `staging/v2.3.0` and version pins to `2.3.0` across Bash/PowerShell quick-install commands so the public installer mirrors the new CocoIndex/CCC governance wave.
 - Documented the CocoIndex MPC-ready automation ladder plus CCC extension/skill-governance guidance so installer release notes match the suite’s new operational narrative.
@@ -6,15 +12,19 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v2.2.1..HEAD`
 - Added: 1
-- Fixed: 7
+- Fixed: 9
 - Changed: 0
-- Docs: 2
-- Chore/Build/CI: 19
+- Docs: 3
+- Chore/Build/CI: 20
 - Other: 2
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `32f4119` docs: update installer README URLs
+- `3caacd5` fix: default installer branch to main
+- `178dd7c` fix(docs): update installer README to v2.3.1
+- `7423ed8` chore(installer): sync beta v2.3.1 release wave
 - `fe09f8b` fix(uninstall): preserve OpenAI and Antigravity account json files
 - `0b0ae17` chore(installer): align beta install and uninstall scripts with staging
 - `c602c12` chore(installer): sync scripts from opencode-config-suites
