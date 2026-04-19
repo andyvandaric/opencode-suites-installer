@@ -1,6 +1,7 @@
-## [2.3.3] - 2026-04-20
-- Fix tool invocation stability issues for Google Gemini and Antigravity models.
-- Allow generic OpenCode API wrapper tools to work properly with Antigravity models.
+## [2.3.4] - 2026-04-20
+- Improved multi-agent orchestration by adding the `gemini-3.1-pro-gpt-oss` profile, perfectly balancing Gemini 3.1 Pro for deep reasoning and GPT-OSS 120B for fast execution.
+- Extracted and enhanced `ocs-cocoindex-gate` skill to better manage multi-file background code search and semantic retrieval.
+- Expanded domain intelligence in `ocs-delegation-gate` for advanced agent-to-agent delegation routing.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
@@ -9,12 +10,13 @@
 - Fixed: 52
 - Changed: 0
 - Docs: 31
-- Chore/Build/CI: 73
+- Chore/Build/CI: 74
 - Other: 11
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `8191f3b` chore(installer): sync staging v2.3.3 release wave
 - `dc4c970` chore(installer): sync staging v2.3.3 release wave
 - `a9fa83f` chore(installer): sync staging v2.3.3 release wave
 - `c71ddab` chore(installer): sync scripts from opencode-config-suites
@@ -190,6 +192,11 @@
 - `cd19031` Add public installer scripts for release artifacts
 - `7518562` Initial commit
 <!-- OCS_COMMIT_COVERAGE_END -->
+## [2.3.3] - 2026-04-20
+
+- Fix tool invocation stability issues for Google Gemini and Antigravity models.
+- Allow generic OpenCode API wrapper tools to work properly with Antigravity models.
+
 ## 2.3.2 - 2026-04-20
 
 - Added support for the `GPT-OSS 120B (Medium)` model and released the `gpt-oss-120b-lead` optimized Antigravity profile.
