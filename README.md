@@ -22,7 +22,7 @@ OCS is built for people who want to code faster with AI without wasting time on 
 Install specific version:
 
 ```bash
- curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.1
+ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.4
 ```
 
 ### Windows (PowerShell 7)
@@ -34,7 +34,7 @@ Install specific version:
 Install specific version:
 
 ```powershell
- pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.1"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
+ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.4"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
