@@ -10,12 +10,13 @@
 - Fixed: 52
 - Changed: 0
 - Docs: 31
-- Chore/Build/CI: 76
+- Chore/Build/CI: 77
 - Other: 11
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `8a31941` chore(installer): sync scripts from opencode-config-suites
 - `2ef77a8` chore(installer): sync scripts from opencode-config-suites
 - `e465aa8` chore(installer): sync scripts from opencode-config-suites
 - `8191f3b` chore(installer): sync staging v2.3.3 release wave
