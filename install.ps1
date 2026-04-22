@@ -1184,18 +1184,26 @@ function Ensure-Bun {
         $bunInstallerPath = Join-Path $TMP_DIR "bun-install.ps1"
         Invoke-WebRequest -Uri "https://bun.sh/install.ps1" -UseBasicParsing -OutFile $bunInstallerPath -ErrorAction Stop
 
-        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-            & pwsh -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
-        } else {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $bunInstallerPath
+        # Detect whether curl.exe is available — fresh Windows installs may not have it.
+        # Bun's official installer uses curl.exe by default but falls back to Invoke-RestMethod.
+        # However, when curl.exe is completely absent, PowerShell throws a terminating error
+        # that bypasses the fallback. Passing -DownloadWithoutCurl skips curl.exe entirely.
+        $hasCurl = [bool](Get-Command curl.exe -ErrorAction SilentlyContinue)
+        $bunInstallerArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $bunInstallerPath)
+        if (-not $hasCurl) {
+            $bunInstallerArgs += '-DownloadWithoutCurl'
+            Write-Output "   curl.exe not found — using PowerShell native download for Bun installer."
         }
+
+        $shellCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+        & $shellCmd @bunInstallerArgs
 
         if ($LASTEXITCODE -ne 0) {
             throw "Bun installer exited with code $LASTEXITCODE"
         }
     } catch {
         Write-Error "Failed to auto-install Bun: $($_.Exception.Message)"
-        Write-Error "Install Bun manually at https://bun.sh and retry."
+        Write-Error "Install Bun manually: irm bun.sh/install.ps1 -OutFile install-bun.ps1; .\install-bun.ps1 -DownloadWithoutCurl"
         exit 1
     }
 
