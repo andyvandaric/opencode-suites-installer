@@ -10,13 +10,13 @@
 - Fixed: 0
 - Changed: 0
 - Docs: 0
-- Chore/Build/CI: 0
+- Chore/Build/CI: 1
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
-- _No commits detected in this release window._
+- `403925c` chore(installer): sync scripts from opencode-config-suites
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## [2.3.4] - 2026-04-20
 
