@@ -236,7 +236,7 @@ resolve_release_branch_config() {
     if [[ -n "$detected_branch" ]]; then
       GITHUB_SOURCE_BRANCH="$detected_branch"
     elif [[ -n "${REQUESTED_VERSION}" ]]; then
-      GITHUB_SOURCE_BRANCH="staging/v${REQUESTED_VERSION}"
+      GITHUB_SOURCE_BRANCH="main"
     else
       GITHUB_SOURCE_BRANCH="${INSTALLER_SOURCE_BRANCH_HINT}"
     fi
