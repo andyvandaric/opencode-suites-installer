@@ -1,24 +1,196 @@
-## [2.3.4] - 2026-04-20
+## [2.3.5] - 2026-04-20
 - Improved multi-agent orchestration by adding the `gemini-3.1-pro-gpt-oss` profile, perfectly balancing Gemini 3.1 Pro for deep reasoning and GPT-OSS 120B for fast execution.
 - Extracted and enhanced `ocs-cocoindex-gate` skill to better manage multi-file background code search and semantic retrieval.
 - Expanded domain intelligence in `ocs-delegation-gate` for advanced agent-to-agent delegation routing.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
-- Commit window: `v2.3.4..HEAD`
-- Added: 0
-- Fixed: 0
+- Commit window: `HEAD`
+- Added: 7
+- Fixed: 52
 - Changed: 0
-- Docs: 0
-- Chore/Build/CI: 1
-- Other: 0
+- Docs: 31
+- Chore/Build/CI: 72
+- Other: 11
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `6cfdd9d` chore(installer): sync scripts from opencode-config-suites
 - `403925c` chore(installer): sync scripts from opencode-config-suites
+- `2f5eeb7` chore(installer): sync final v2.3.4 release wave
+- `2c2ac70` chore(installer): sync final v2.3.4 release wave
+- `1df5dc1` chore(installer): sync scripts from opencode-config-suites
+- `e411e5d` chore(installer): sync scripts from opencode-config-suites
+- `a0c4fc0` chore(installer): sync scripts from opencode-config-suites
+- `a8900db` chore(installer): sync scripts from opencode-config-suites
+- `a7cc4db` chore(installer): sync scripts from opencode-config-suites
+- `9316cbd` chore(installer): sync scripts from opencode-config-suites
+- `5e1ec68` chore(installer): sync scripts from opencode-config-suites
+- `da8dd7e` fix(installer): remove empty Join-Path bin on Windows prefix resolution
+- `5aab538` chore(installer): sync scripts from opencode-config-suites
+- `e563066` fix(uninstall): centralize protected entries and main-oriented reinstall hints
+- `4283653` chore(installer): sync scripts from opencode-config-suites
+- `31ecb58` fix(installer): default latest flow to main branch assets
+- `1ea77a7` chore(installer): sync scripts from opencode-config-suites
+- `c29b7a0` chore(installer): sync scripts from opencode-config-suites
+- `05e9d1e` chore(installer): sync scripts from opencode-config-suites
+- `32f4119` docs: update installer README URLs
+- `3caacd5` fix: default installer branch to main
+- `178dd7c` fix(docs): update installer README to v2.3.1
+- `7423ed8` chore(installer): sync beta v2.3.1 release wave
+- `fe09f8b` fix(uninstall): preserve OpenAI and Antigravity account json files
+- `0b0ae17` chore(installer): align beta install and uninstall scripts with staging
+- `c602c12` chore(installer): sync scripts from opencode-config-suites
+- `4db8d2c` chore(installer): align beta setup and MCP readiness with staging
+- `d746b2f` chore(installer): sync scripts from opencode-config-suites
+- `b05bcf0` Fix Windows installer crash on malformed npm prefix output
+- `2c2ec11` fix(installer): align branch hints with beta lane
+- `572d4a1` Revert "chore(installer): sync scripts from opencode-config-suites"
+- `4ebf46c` chore(installer): sync scripts from opencode-config-suites
+- `2448853` fix(readme): point beta install links to beta branch
+- `ff68ea3` fix(installer): backport cross-platform hardening for beta
+- `a8de28a` chore(installer): sync scripts from opencode-config-suites
+- `b41fce3` chore(installer): sync scripts from opencode-config-suites
+- `f7aa8f4` chore(installer): sync scripts from opencode-config-suites
+- `f986b9c` chore(installer): sync scripts from opencode-config-suites
+- `f91d3f4` chore(installer): sync scripts from opencode-config-suites
+- `7e39976` chore(installer): sync scripts from opencode-config-suites
+- `3c4d164` chore(installer): sync scripts from opencode-config-suites
+- `43f9e1f` fix(installer): guard empty pnpm source path on powershell install
+- `ade2214` chore(installer): align beta lane pull defaults
+- `3279009` chore(release): merge staging v2.3.0 into beta
+- `5a575ef` chore(installer): sync staging v2.3.0 release wave
+- `57c6cd0` chore(installer): sync staging v2.3.0 release wave
+- `1879639` chore(installer): sync staging v2.3.0 release wave
+- `317713f` chore(installer): sync staging v2.3.0 release wave
+- `4080e27` chore(installer): sync staging v2.3.0 release wave
+- `600ae17` chore(installer): sync staging v2.2.1 release wave
+- `3b37021` chore(installer): sync staging v2.2.1 release wave
+- `40aeab5` chore(installer): sync staging v2.2.1 release wave
+- `369b21a` chore(installer): sync staging v2.2.1 release wave
+- `3e5b7ac` chore(installer): sync staging v2.2.1 release wave
+- `85a9494` fix(installer): align fallback branch hint to staging v2.2.1
+- `f0b7a2f` fix(installer): call Ensure-PnpmRuntime in staging script
+- `c8a01dc` chore(installer): sync staging v2.2.1 release wave
+- `88e0852` chore(installer): sync staging v2.2.1 release wave
+- `713b982` chore(installer): sync staging v2.2.1 release wave
+- `1ae3c49` chore(installer): sync staging v2.2.1 release wave
+- `1fca48b` chore(installer): sync staging v2.2.1 release wave
+- `dcf50e6` chore(installer): sync staging v2.2.1 release wave
+- `f66e382` chore(installer): sync staging v2.2.0 release wave
+- `cb4f644` chore(installer): sync staging v2.2.0 release wave
+- `6b01de5` chore(installer): sync staging v2.2.0 release wave
+- `63c2533` chore(installer): sync staging v2.2.0 release wave
+- `cb8052d` chore(installer): sync staging v2.2.0 release wave
+- `36f1942` chore(installer): sync staging v2.2.0 release wave
+- `c368b60` chore(installer): sync staging v2.2.0 release wave
+- `7dcc4a9` docs(readme): simplify installer page for conversions
+- `7e25762` chore(installer): sync staging v2.2.0 release wave
+- `ac45974` fix(installer): harden opencode recovery flow for WSL reinstall
+- `7a41dd9` fix(installer): harden opencode recovery flow for WSL reinstall
+- `affd411` docs(uninstall): add raw one-liner quickstart and README links
+- `ba5ac47` docs(uninstall): add raw one-liner quickstart and README links
+- `1ec522c` fix(installer): normalize runtime plugin path for OAuth menu
+- `4f5918e` fix(installer): normalize runtime plugin path for OAuth menu
+- `317d5ce` docs: publish uninstall parity contract and smoke checks
+- `21b36de` feat(uninstall): add safe/purge parity across bash and PowerShell
+- `99176d6` docs: publish uninstall parity contract and smoke checks
+- `8e4c155` feat(uninstall): add safe/purge parity across bash and PowerShell
+- `6006228` chore(installer): sync scripts from opencode-config-suites
+- `72df281` chore(installer): sync scripts from opencode-config-suites
+- `dbdc078` chore(installer): sync scripts from opencode-config-suites
+- `978efb3` chore(installer): sync scripts from opencode-config-suites
+- `b10cbfa` chore(installer): sync scripts from opencode-config-suites
+- `5ec3fc2` chore(installer): align staging docs and branch hints to v2.1.14
+- `e23b6e5` chore(installer): sync scripts from opencode-config-suites
+- `a682e07` chore(installer): sync scripts from opencode-config-suites
+- `63f2c05` chore(installer): sync scripts from opencode-config-suites
+- `315913a` chore(installer): sync scripts from opencode-config-suites
+- `99266c8` docs(changelog): note OCS skills sync rollout
+- `9b2c1c4` fix(installer): preserve hidden bundle directories
+- `be9f66d` docs(changelog): note auth menu activation fix
+- `3e6746f` docs(changelog): note realtime quota check update
+- `5d29eaa` docs(changelog): note exa schema compatibility update
+- `e2422c0` docs(changelog): document installer lane resolution fix
+- `7cbf454` fix(installer): infer source lane and align fallback branch
+- `0cddd62` docs(readme): pin staging installer quickstart paths
+- `ed66f03` docs(installer): sync exa onboarding and full changelog chain
+- `5c3bc45` chore(installer): sync staging v2.1.13 release wave
+- `8a58433` chore(staging): bump installer defaults to v2.1.13 lane
+- `5ac7376` fix(installer): detect bun reliably in non-interactive shells
+- `93283d7` fix(installer): route staging lane to staging buyer branch
+- `f1b10a1` docs(installer): correct main as default branch in help text
+- `b1e41f5` fix(installer): default main branch for bundle source
+- `4634cc4` fix(installer): force /dev/tty for interactive setup fallback
+- `d6e3371` fix(installer): harden headless fallback and WSL launcher path
+- `4cad036` fix(smoke): enforce antigravity oauth runtime prompt checks
+- `7077225` docs(release): bump beta docs and changelog to v2.1.12
+- `dd4cc7d` fix(installer): restore mac parity and harden auth fallback checks
+- `f14283f` chore(beta): rewire beta channel to beta sources
+- `694c847` docs(readme): point private rollout commands to feat branch
+- `510f8f8` feat(installer): align EXA/MCP flow for v2.1.11
+- `8ad4c5a` docs(changelog): add missing v2.1.9 continuity entry
+- `c825a94` docs(readme): pin installer examples to v2.1.10
+- `5991fa1` feat(smoke): add strict CI smoke mode and update changelog
+- `eb6d4df` feat(smoke): add cross-platform smoke scripts and wrappers
+- `acec59e` Merge branch 'feat/buyer-setup-smoke' into beta
+- `051225c` feat(installer): add Windows ocs policy Quick Fix and OS-aware next steps with Exa guidance
+- `47780fc` fix(installer): show Exa setup steps in post-install guidance
+- `057d5a8` docs(release): sync installer feat line to v2.1.9
+- `d746a28` docs(changelog): add installer 2.1.8 auth-hotfix notes
+- `d6df29f` docs(changelog): add installer 2.1.8 auth-hotfix notes
+- `3197f92` docs(changelog): sync installer entries through 2.1.7
+- `abd2cb1` fix(installer): default feat profile to token-saver
+- `60172b5` chore(installer): align beta defaults with buyer beta branch
+- `6516f40` docs(installer): update buyer branch references to generalized name
+- `18f2639` chore(installer): rename buyer setup default branch
+- `e587414` docs(installer): clarify script usage and progress claims
+- `a7c1ece` fix(installer): make backup script macos-bash compatible
+- `e81aadb` docs(installer): refresh quick start and 2.1.4 hardening notes
+- `627eb41` feat(installer): add backup restore and uninstall utilities
+- `859ac01` fix(installer): harden oauth rebuild and runtime checks
+- `9a86c64` docs(installer): clarify antigravity oauth first-run behavior
+- `ea69a55` chore(installer): remove legacy install-plugin scripts
+- `4cd2f8c` docs(readme): add macos oauth artifact recovery steps
+- `dd36668` fix(installer): repair missing oauth plugin artifacts
+- `2a43794` docs(readme): refresh install lanes and codex profile guidance
+- `04e14a6` fix(installer): add powershell progress execution hardening
+- `17585f8` fix(installer): harden opencode recovery on feat setup lane
+- `7de7b61` fix(installer): reduce non-fatal PATH warning noise
+- `d0f9d58` fix(installer): default source branch to feat buyer 2.1.4
+- `a4a8857` fix(installer): block non-Windows usage in install.ps1
+- `51bb408` docs(installer): switch quick install commands to install scripts
+- `4f83862` fix(installer): add install.sh and install.ps1 entrypoints
+- `8c7ccbb` docs(installer): point quick install to feat branch
+- `b832d73` docs(installer): add feat branch install commands
+- `8246422` fix(installer): sync public scripts for v2 release
+- `dda4309` fix(installer): default to codex hybrid performance
+- `d399216` chore(installer): refine next-steps guidance text
+- `970e054` fix(installer): enforce bun-only dependency retries
+- `738b8ae` fix(installer): harden dependency install retries and fallback
+- `a125ab4` fix(installer): resolve relative plugin path during bun install
+- `4cacfa4` fix(installer): continue in current shell when pwsh relaunch fails
+- `82d4d12` fix(installer): harden ps7 relaunch and bun retry diagnostics
+- `ceb635f` fix(installer): normalize COMSPEC before setup execution
+- `95eb9d5` fix(installer): avoid false local-source detection and use plugin setup path
+- `0d4764f` fix(installer): prefer system tar.exe and normalize extraction paths
+- `e4a423f` fix(installer): make windows tar extraction fail-fast and compatible
+- `334fa1a` fix(installer): prevent token output pollution and enforce access gate
+- `a28e0ac` fix(installer): avoid false handoff short-circuit in ps5
+- `ab31a30` fix(installer): keep terminal open after pwsh handoff
+- `58c731f` fix(installer): persist bun path and improve access-denied flow
+- `cfccf04` fix(installer): add resilient token and gh dependency fallbacks
+- `f2bdf46` Use gh web login and access gate in installer
+- `a9db53e` Auto-relaunch installer in PowerShell 7
+- `63de817` Fix PowerShell installer IEX compatibility
+- `703791b` Harden installer scripts for auto Bun and setup
+- `0b0eeb2` Handle missing SHA256SUMS asset in bash installer
+- `75fd5dd` Fix bash installer token resolution output
+- `cd19031` Add public installer scripts for release artifacts
+- `7518562` Initial commit
 <!-- OCS_COMMIT_COVERAGE_END -->
-## [2.3.4] - 2026-04-20
+## [2.3.5] - 2026-04-20
 
 - Renamed and optimized the `gemini-3.1-pro-gpt-oss` profile for better role mapping and resource efficiency.
 - Improved skill intelligence with dedicated validation and governance gates for safer agent execution.
