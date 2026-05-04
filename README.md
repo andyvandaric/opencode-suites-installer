@@ -23,7 +23,7 @@ gh auth login -h github.com -w
 ```
 
 - Windows: install PowerShell 7 first: https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.6
-- macOS: update Bash to the latest version first, even if you launch the installer from zsh.
+- macOS: default zsh is supported. If you intentionally run the installer from legacy `/bin/bash` and Bun bootstrap fails, upgrade Bash or install Bun manually first.
 
 ### macOS / Linux
 
@@ -34,7 +34,7 @@ gh auth login -h github.com -w
 Install specific version:
 
 ```bash
-  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.6
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 3.0.0
 ```
 
 ### Windows (PowerShell 7)
@@ -46,7 +46,7 @@ Install specific version:
 Install specific version:
 
 ```powershell
-  pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.6"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.0.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.

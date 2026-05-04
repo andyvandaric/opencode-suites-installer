@@ -389,41 +389,86 @@ ocs_works() {
 }
 
 resolve_primary_shell_profile() {
-  local shell_name="${SHELL##*/}"
+  local profile
+  profile="$(resolve_primary_shell_profiles | head -1)"
+  printf '%s\n' "${profile}"
+}
+
+resolve_shell_name() {
+  local shell_path="${OCS_INSTALLER_SHELL_PATH:-${SHELL:-}}"
+  local shell_name="${shell_path##*/}"
+
+  if [[ -z "${shell_name}" || "${shell_name}" == "${shell_path}" ]]; then
+    shell_name="sh"
+  fi
+
+  printf '%s\n' "${shell_name}"
+}
+
+append_unique_value() {
+  local value="$1"
+  shift
+  local existing
+
+  for existing in "$@"; do
+    if [[ "${existing}" == "${value}" ]]; then
+      return 1
+    fi
+  done
+
+  printf '%s\n' "${value}"
+  return 0
+}
+
+normalize_path_entry() {
+  local entry="$1"
+
+  while [[ "${entry}" == */ && "${entry}" != "/" ]]; do
+    entry="${entry%/}"
+  done
+
+  printf '%s\n' "${entry}"
+}
+
+resolve_primary_shell_profiles() {
+  local shell_name
+  shell_name="$(resolve_shell_name)"
   local candidate
+  local candidates=()
+  local selected=()
 
   case "${shell_name}" in
     zsh)
-      for candidate in "${HOME}/.zprofile" "${HOME}/.zshrc"; do
-        if [[ -f "${candidate}" ]]; then
-          printf '%s\n' "${candidate}"
-          return 0
-        fi
-      done
-      printf '%s\n' "${HOME}/.zprofile"
+      candidates=("${HOME}/.zprofile" "${HOME}/.zshrc")
       ;;
     bash)
-      for candidate in "${HOME}/.bash_profile" "${HOME}/.profile" "${HOME}/.bashrc"; do
-        if [[ -f "${candidate}" ]]; then
-          printf '%s\n' "${candidate}"
-          return 0
-        fi
-      done
-      printf '%s\n' "${HOME}/.profile"
+      candidates=("${HOME}/.bash_profile" "${HOME}/.profile")
+      if [[ -f "${HOME}/.bashrc" ]]; then
+        candidates+=("${HOME}/.bashrc")
+      fi
       ;;
     fish)
-      printf '%s\n' ""
+      candidates=()
       ;;
     *)
-      for candidate in "${HOME}/.profile" "${HOME}/.bash_profile" "${HOME}/.zprofile"; do
-        if [[ -f "${candidate}" ]]; then
-          printf '%s\n' "${candidate}"
-          return 0
-        fi
-      done
-      printf '%s\n' "${HOME}/.profile"
+      candidates=("${HOME}/.profile")
       ;;
   esac
+
+  for candidate in "${candidates[@]}"; do
+    [[ -n "${candidate}" ]] || continue
+    if append_unique_value "${candidate}" "${selected[@]}" >/dev/null; then
+      selected+=("${candidate}")
+    fi
+  done
+
+  printf '%s\n' "${selected[@]}"
+}
+
+profile_contains_ocs_path_source() {
+  local profile="$1"
+  [[ -f "${profile}" ]] || return 1
+  grep -Fq 'ocs-path.sh' "${profile}"
 }
 
 resolve_binary_dir() {
@@ -478,6 +523,66 @@ collect_node_bin_entries() {
   for entry in "${entries[@]}"; do
     [[ -n "$entry" ]] && printf '%s\n' "$entry"
   done
+}
+
+resolve_native_user_home() {
+  if [[ -n "${OCS_NATIVE_USER_HOME:-}" ]]; then
+    printf '%s\n' "${OCS_NATIVE_USER_HOME}"
+    return 0
+  fi
+
+  printf '%s\n' "${HOME}"
+}
+
+collect_node_manager_bin_entries() {
+  local native_home
+  native_home="$(resolve_native_user_home)"
+  local candidates=(
+    "${native_home}/.volta/bin"
+  )
+
+  local nvm_glob
+  for nvm_glob in "${native_home}"/.nvm/versions/node/*/bin; do
+    [[ -d "${nvm_glob}" ]] || continue
+    candidates+=("${nvm_glob}")
+  done
+
+  local entry
+  for entry in "${candidates[@]}"; do
+    [[ -d "${entry}" ]] || continue
+    printf '%s\n' "${entry}"
+  done
+}
+
+ensure_node_runtime_paths() {
+  local entries=()
+  local entry
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    entries+=("${entry}")
+  done < <(collect_node_manager_bin_entries)
+
+  local path_prefix=""
+  for entry in "${entries[@]}"; do
+    entry="$(normalize_path_entry "${entry}")"
+    [[ -n "${entry}" ]] || continue
+    case ":${PATH}:" in
+      *":${entry}:"*)
+        continue
+        ;;
+    esac
+
+    if [[ -z "${path_prefix}" ]]; then
+      path_prefix="${entry}"
+    else
+      path_prefix="${path_prefix}:${entry}"
+    fi
+  done
+
+  if [[ -n "${path_prefix}" ]]; then
+    export PATH="${path_prefix}:${PATH}"
+    hash -r 2>/dev/null || true
+  fi
 }
 
 ensure_text_file_exists_if_writable() {
@@ -671,6 +776,8 @@ ensure_nodejs_runtime() {
 }
 
 ensure_pnpm_runtime() {
+  ensure_node_runtime_paths
+
   local pnpm_version
   local pnpm_log="/tmp/ocs-pnpm-install.log"
   if [[ "${OCS_ENABLE_PNPM_AUTO_INSTALL:-1}" != "1" ]]; then
@@ -1057,7 +1164,9 @@ ensure_shell_path_priority() {
   local snippet_dir="${HOME}/.config/opencode/shell"
   local snippet_path="${snippet_dir}/ocs-path.sh"
   local profile
-  local shell_name="${SHELL##*/}"
+  local shell_name
+  shell_name="$(resolve_shell_name)"
+  local profile
   local base_entries=(
     "${HOME}/.opencode/bin"
     "${HOME}/.local/bin"
@@ -1076,6 +1185,8 @@ ensure_shell_path_priority() {
   local unique_entries=()
 
   for entry in "${combined_entries[@]}"; do
+    [[ -z "$entry" ]] && continue
+    entry="$(normalize_path_entry "$entry")"
     [[ -z "$entry" ]] && continue
     local already_seen=""
     for existing in "${unique_entries[@]}"; do
@@ -1115,16 +1226,16 @@ ensure_shell_path_priority() {
     printf '# OCS installer path\n%s\n' "${export_line}" > "${snippet_path}"
   fi
 
-  profile="$(resolve_primary_shell_profile)"
-  if [[ -n "${profile}" ]]; then
+  while IFS= read -r profile; do
+    [[ -n "${profile}" ]] || continue
     if ensure_text_file_exists_if_writable "${profile}"; then
-      if ! grep -Fq "${source_line}" "${profile}"; then
+      if ! profile_contains_ocs_path_source "${profile}"; then
         printf '\n# OCS installer path\n%s\n' "${source_line}" >> "${profile}"
       fi
     else
       warn "Cannot write to shell profile ${profile}. Current-session PATH is active, but persistence was skipped."
     fi
-  fi
+  done < <(resolve_primary_shell_profiles)
 
   local fish_cfg="${HOME}/.config/fish/config.fish"
   local fish_args=""
@@ -1165,6 +1276,8 @@ resolve_python_command_for_agents() {
 
 ensure_agent_dependency_runtime() {
   info "Checking agent runtime dependencies (Python + PATH parity)..."
+
+  ensure_node_runtime_paths
 
   local python_cmd
   python_cmd="$(resolve_python_command_for_agents)"
@@ -1954,4 +2067,6 @@ ensure_antigravity_oauth_integrity "${setup_script}"
   echo ""
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
