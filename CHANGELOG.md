@@ -1,7 +1,9 @@
-## [2.3.6] - 2026-05-04
-- Switched the public release wave fully to the `main` lane and aligned pinned install commands to `2.3.6`.
-- Shipped a cleaner built-in skill bundle and safer cross-platform setup/runtime defaults for Windows, Linux, macOS, and WSL users.
-- Added managed compression controls so installs keep DCP as the default path while exposing explicit RTK/Caveman routing policy.
+## [3.0.0] - 2026-05-05
+- Switched the public release wave fully to the `main` lane and aligned pinned install commands to `3.0.0`.
+- Shipped the redesigned buyer-facing built-in skill bundle, including `ocs-technical-copy-seo`, `ocs-product-marketing-context`, and `ocs-seo-audit`.
+- Added native-first RTK and Caveman bootstrap so installer-managed adjunct runtime dependencies reconcile into OpenCode target state instead of staying policy-only.
+- Hardened setup/runtime defaults for Windows, WSL, macOS, and Linux-host users, especially around shell profile persistence, PATH recovery, and noninteractive runtime bootstrap.
+- Kept DCP as the default compact path while exposing explicit RTK/Caveman routing policy through the managed compression control plane.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
@@ -10,12 +12,13 @@
 - Fixed: 52
 - Changed: 0
 - Docs: 31
-- Chore/Build/CI: 74
+- Chore/Build/CI: 75
 - Other: 11
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `329f5f4` chore(installer): sync scripts from opencode-config-suites
 - `5f6abbb` chore(installer): sync scripts from opencode-config-suites
 - `37896a6` chore(installer): sync scripts from opencode-config-suites
 - `6cfdd9d` chore(installer): sync scripts from opencode-config-suites
