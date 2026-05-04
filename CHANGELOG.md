@@ -1,7 +1,7 @@
-## [2.3.5] - 2026-04-20
-- Improved multi-agent orchestration by adding the `gemini-3.1-pro-gpt-oss` profile, perfectly balancing Gemini 3.1 Pro for deep reasoning and GPT-OSS 120B for fast execution.
-- Extracted and enhanced `ocs-cocoindex-gate` skill to better manage multi-file background code search and semantic retrieval.
-- Expanded domain intelligence in `ocs-delegation-gate` for advanced agent-to-agent delegation routing.
+## [2.3.6] - 2026-05-04
+- Switched the public release wave fully to the `main` lane and aligned pinned install commands to `2.3.6`.
+- Shipped a cleaner built-in skill bundle and safer cross-platform setup/runtime defaults for Windows, Linux, macOS, and WSL users.
+- Added managed compression controls so installs keep DCP as the default path while exposing explicit RTK/Caveman routing policy.
 
 ### Automated Release Summary
 <!-- OCS_AUTO_SUMMARY_START -->
@@ -10,12 +10,13 @@
 - Fixed: 52
 - Changed: 0
 - Docs: 31
-- Chore/Build/CI: 73
+- Chore/Build/CI: 74
 - Other: 11
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `5f6abbb` chore(installer): sync scripts from opencode-config-suites
 - `37896a6` chore(installer): sync scripts from opencode-config-suites
 - `6cfdd9d` chore(installer): sync scripts from opencode-config-suites
 - `403925c` chore(installer): sync scripts from opencode-config-suites
@@ -191,6 +192,12 @@
 - `cd19031` Add public installer scripts for release artifacts
 - `7518562` Initial commit
 <!-- OCS_COMMIT_COVERAGE_END -->
+## [2.3.5] - 2026-04-20
+
+- Improved multi-agent orchestration by adding the `gemini-3.1-pro-gpt-oss` profile, perfectly balancing Gemini 3.1 Pro for deep reasoning and GPT-OSS 120B for fast execution.
+- Extracted and enhanced `ocs-cocoindex-gate` skill to better manage multi-file background code search and semantic retrieval.
+- Expanded domain intelligence in `ocs-delegation-gate` for advanced agent-to-agent delegation routing.
+
 ## [2.3.5] - 2026-04-20
 
 - Renamed and optimized the `gemini-3.1-pro-gpt-oss` profile for better role mapping and resource efficiency.

@@ -13,6 +13,18 @@ OCS is built for people who want to code faster with AI without wasting time on 
 
 ## Quick Install
 
+### Prerequisites
+
+- Install GitHub CLI first: https://cli.github.com/
+- Authenticate GitHub CLI before running the installer:
+
+```bash
+gh auth login -h github.com -w
+```
+
+- Windows: install PowerShell 7 first: https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.6
+- macOS: update Bash to the latest version first, even if you launch the installer from zsh.
+
 ### macOS / Linux
 
 ```bash
@@ -22,7 +34,7 @@ OCS is built for people who want to code faster with AI without wasting time on 
 Install specific version:
 
 ```bash
-  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.5
+  curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 2.3.6
 ```
 
 ### Windows (PowerShell 7)
@@ -34,17 +46,49 @@ Install specific version:
 Install specific version:
 
 ```powershell
-  pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.5"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
+  pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "2.3.6"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
 
-## After Install (60 seconds)
+## After Install (2 minutes)
 
 ```bash
 opencode auth login
-ocs setup profile
 ```
+
+Default recommended path: **OpenAI -> Chatgpt browser**.
+
+Then complete the runtime checks:
+
+1. Create EXA API key: https://dashboard.exa.ai/api-keys
+
+Windows (PowerShell 7):
+
+```powershell
+ocs exa setup --api-key <YOUR_EXA_API_KEY>
+ocs exa check
+opencode mcp list
+opencode --port 78617
+# if you prefer web UI
+opencode web --port 8089
+```
+
+macOS / Linux:
+
+```bash
+ocs exa setup --api-key <YOUR_EXA_API_KEY>
+ocs exa check
+opencode mcp list
+opencode --port 78617
+# if you prefer web UI
+opencode web --port 8089
+```
+
+Optional later:
+
+- Change from the default ChatGPT/Codex profile: `ocs setup:profile`
+- GitHub MCP starts from GitHub CLI install/auth docs: https://cli.github.com/
 
 Recommended daily profile:
 
@@ -54,8 +98,9 @@ Recommended daily profile:
 
 ## Runtime Recommendation
 
-1. **Primary:** OpenCode VSCode Extension by SST (best stability for long sessions)
-2. **Secondary:** Web UI (`opencode web --port 8089`)
+1. **Default:** Terminal mode (`opencode --port 78617`)
+2. **Optional:** Web UI (`opencode web --port 8089`)
+3. **Editor option:** OpenCode VSCode Extension by SST
 
 ## Uninstall
 
