@@ -624,6 +624,106 @@ function Ensure-OpencodePathEntries {
     Refresh-SessionPath
 }
 
+function Find-CavemanSkillSource {
+    $homeRoot = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::UserProfile) }
+
+    $candidates = @(
+        (Join-Path $homeRoot '.agents\skills\caveman'),
+        (Join-Path $homeRoot '.claude\plugins\marketplaces\caveman\skills\caveman'),
+        (Join-Path $homeRoot '.claude\plugins\marketplaces\caveman\plugins\caveman\skills\caveman')
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path (Join-Path $candidate 'SKILL.md')) {
+            return $candidate
+        }
+    }
+
+    $cacheRoot = Join-Path $homeRoot '.claude\plugins\cache\caveman\caveman'
+    if (Test-Path $cacheRoot) {
+        Get-ChildItem -Path $cacheRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $nested = @(
+                (Join-Path $_.FullName 'skills\caveman'),
+                (Join-Path $_.FullName 'plugins\caveman\skills\caveman')
+            )
+            foreach ($candidate in $nested) {
+                if (Test-Path (Join-Path $candidate 'SKILL.md')) {
+                    return $candidate
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Sync-CavemanSkillMarker {
+    $skillsRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\skills' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $targetDir = Join-Path $skillsRoot 'caveman'
+    $targetMarker = Join-Path $targetDir 'SKILL.md'
+    if (Test-Path $targetMarker) {
+        return $true
+    }
+
+    $sourceDir = Find-CavemanSkillSource
+    if (-not $sourceDir) {
+        return $false
+    }
+
+    New-Item -ItemType Directory -Force -Path $skillsRoot | Out-Null
+    if (Test-Path $targetDir) {
+        Remove-Item -Path $targetDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Copy-Item -Path $sourceDir -Destination $targetDir -Recurse -Force
+    return (Test-Path $targetMarker)
+}
+
+function Ensure-AdjunctRuntimeReady {
+    $nativeBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    if ($nativeBin) {
+        Add-PathEntryToUserPath -PathEntry $nativeBin
+        Refresh-SessionPath
+    }
+
+    $configRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $rtkPlugin = Join-Path $configRoot 'plugins\rtk.ts'
+    $cavemanMarker = Join-Path $configRoot 'skills\caveman\SKILL.md'
+
+    if (-not (Test-Path $cavemanMarker)) {
+        if (Sync-CavemanSkillMarker) {
+            Write-Output "Synced Caveman skill into target OpenCode skills dir: $(Split-Path -Parent $cavemanMarker)"
+        }
+    }
+
+    $rtkReady = $false
+    if ((Get-Command rtk -ErrorAction SilentlyContinue) -and (Test-Path $rtkPlugin)) {
+        try {
+            & rtk --version *> $null
+            & rtk init --show *> $null
+            & rtk gain *> $null
+            if ($LASTEXITCODE -eq 0) {
+                $rtkReady = $true
+            }
+        } catch {
+            $rtkReady = $false
+        }
+    }
+
+    if ($rtkReady) {
+        Write-Output 'RTK runtime verification passed.'
+    } else {
+        Write-Warning "RTK runtime is not fully ready yet. Expected PATH entry: $nativeBin"
+        Write-Output 'Verify manually: rtk --version ; rtk init --show ; rtk gain'
+    }
+
+    if (Test-Path $cavemanMarker) {
+        Write-Output 'Caveman skill marker present after install.'
+    } else {
+        Write-Warning "Caveman skill marker missing after install: $cavemanMarker"
+        Write-Output 'Verify manually: npx -y skills add JuliusBrussee/caveman -a opencode -s "*" -g -y'
+    }
+}
+
 function Get-PythonRuntimeStatus {
     $candidates = @(
         @{ Name = "python"; Args = @("--version") },
@@ -2168,6 +2268,7 @@ Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 Invoke-AutoSetup -IsLocalSource:$isLocalSource
 Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
 Ensure-OpencodePathEntries
+Ensure-AdjunctRuntimeReady
 
 if (Test-Path $TMP_DIR) {
     Remove-Item -Recurse -Force $TMP_DIR -ErrorAction SilentlyContinue

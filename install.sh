@@ -604,6 +604,89 @@ ensure_text_file_exists_if_writable() {
   return 1
 }
 
+find_caveman_skill_source() {
+  local base_home="${HOME}"
+  local candidates=(
+    "${base_home}/.agents/skills/caveman"
+    "${base_home}/.claude/plugins/marketplaces/caveman/skills/caveman"
+    "${base_home}/.claude/plugins/marketplaces/caveman/plugins/caveman/skills/caveman"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "${candidate}/SKILL.md" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+
+  local root
+  for root in "${base_home}/.claude/plugins/cache/caveman/caveman"/*; do
+    [[ -d "${root}" ]] || continue
+    for candidate in \
+      "${root}/skills/caveman" \
+      "${root}/plugins/caveman/skills/caveman"; do
+      if [[ -f "${candidate}/SKILL.md" ]]; then
+        printf '%s\n' "${candidate}"
+        return 0
+      fi
+    done
+  done
+
+  return 1
+}
+
+sync_caveman_skill_marker() {
+  local target_dir="${HOME}/.config/opencode/skills/caveman"
+  local target_marker="${target_dir}/SKILL.md"
+  [[ ! -f "${target_marker}" ]] || return 0
+
+  local source_dir=""
+  source_dir="$(find_caveman_skill_source)" || return 1
+
+  mkdir -p "$(dirname "${target_dir}")"
+  rm -rf "${target_dir}"
+  cp -R "${source_dir}" "${target_dir}"
+  [[ -f "${target_marker}" ]]
+}
+
+ensure_adjunct_runtime_ready() {
+  local native_bin="${HOME}/.opencode/bin"
+  local rtk_plugin="${HOME}/.config/opencode/plugins/rtk.ts"
+  local caveman_marker="${HOME}/.config/opencode/skills/caveman/SKILL.md"
+
+  if [[ -d "${native_bin}" ]]; then
+    export PATH="${native_bin}:${PATH}"
+    hash -r 2>/dev/null || true
+  fi
+
+  if [[ ! -f "${caveman_marker}" ]]; then
+    if sync_caveman_skill_marker; then
+      success "Synced Caveman skill into target OpenCode skills dir: ${HOME}/.config/opencode/skills/caveman"
+    fi
+  fi
+
+  local rtk_ok=0
+  if command -v rtk >/dev/null 2>&1 && [[ -f "${rtk_plugin}" ]]; then
+    if rtk --version >/dev/null 2>&1 && rtk init --show >/dev/null 2>&1 && rtk gain >/dev/null 2>&1; then
+      rtk_ok=1
+      success "RTK runtime verification passed."
+    fi
+  fi
+
+  if (( ! rtk_ok )); then
+    warn "RTK runtime is not fully ready yet. Expected PATH entry: ${native_bin}"
+    info "Verify manually: rtk --version && rtk init --show && rtk gain"
+  fi
+
+  if [[ -f "${caveman_marker}" ]]; then
+    success "Caveman skill marker present after install."
+  else
+    warn "Caveman skill marker missing after install: ${caveman_marker}"
+    info "Verify manually: npx -y skills add JuliusBrussee/caveman -a opencode -s '*' -g -y"
+  fi
+}
+
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
   local config_dir="${HOME}/.config/opencode"
@@ -2032,6 +2115,8 @@ fi
 
 ensure_system_command_links
 
+ensure_adjunct_runtime_ready
+
 if opencode_works; then
   info "opencode verification passed."
 elif install_opencode_shim && opencode_works; then
@@ -2067,6 +2152,6 @@ ensure_antigravity_oauth_integrity "${setup_script}"
   echo ""
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]-}" == "$0" ]]; then
   main "$@"
 fi
