@@ -34,7 +34,7 @@ gh auth login -h github.com -w
 Install specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 3.0.0
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 3.1.0
 ```
 
 ### Windows (PowerShell 7)
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 Install specific version:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.0.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.1.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
