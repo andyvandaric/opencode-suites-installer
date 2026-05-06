@@ -51,6 +51,7 @@ INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
+CONFIG_ROOT="${HOME}/.config/opencode"
 TOKEN_FILE="${HOME}/.opencode-suites/.token"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 REQUESTED_VERSION="${OCS_VERSION:-}"
@@ -64,6 +65,35 @@ info()    { echo "  $*"; }
 success() { echo "✅ $*"; }
 error()   { echo "❌ $*" >&2; exit 1; }
 warn()    { echo "⚠️  $*" >&2; }
+
+sync_bundle_runtime_root() {
+  local bundle_root="$1"
+  local target_root="$2"
+
+  [[ -d "${bundle_root}" ]] || error "Bundle root ${bundle_root} not found for runtime sync."
+  mkdir -p "${target_root}"
+  cp -R "${bundle_root}/." "${target_root}/"
+  success "Synced bundled runtime root to ${target_root}"
+}
+
+resolve_installer_setup_script() {
+  local is_local_source="$1"
+  local plugin_dir="$2"
+  local config_root="$3"
+
+  if [[ "${is_local_source}" == "true" ]]; then
+    printf '%s\n' "${plugin_dir}/scripts/setup.js"
+    return 0
+  fi
+
+  local target_root_script="${config_root}/scripts/setup.js"
+  if [[ -f "${target_root_script}" ]]; then
+    printf '%s\n' "${target_root_script}"
+    return 0
+  fi
+
+  printf '%s\n' "${plugin_dir}/scripts/setup.js"
+}
 
 is_root_user() {
   [[ "${EUID:-$(id -u)}" -eq 0 ]]
@@ -499,7 +529,7 @@ collect_node_bin_entries() {
 
   if command -v npm >/dev/null 2>&1; then
     prefix="$(npm config get prefix 2>/dev/null || true)"
-    if [[ -n "$prefix" ]]; then
+    if [[ -n "$prefix" && "$prefix" != "undefined" && "$prefix" != "null" ]]; then
       entries+=("${prefix}/bin")
     fi
     bin_dir="$(resolve_binary_dir npm 2>/dev/null || true)"
@@ -510,7 +540,7 @@ collect_node_bin_entries() {
 
   if command -v pnpm >/dev/null 2>&1; then
     prefix="$(pnpm config get prefix 2>/dev/null || true)"
-    if [[ -n "$prefix" ]]; then
+    if [[ -n "$prefix" && "$prefix" != "undefined" && "$prefix" != "null" ]]; then
       entries+=("${prefix}/bin")
     fi
     bin_dir="$(resolve_binary_dir pnpm 2>/dev/null || true)"
@@ -1166,13 +1196,27 @@ EOF
 }
 
 install_ocs_shim_from_opencode() {
-  local shim_cmd='bunx --bun opencode-ai "\$@"'
   local bunx_exec="${HOME}/.bun/bin/bunx"
-  if [[ -x "$bunx_exec" ]]; then
-    shim_cmd="\"$bunx_exec\" --bun opencode-ai \"\$@\""
-  fi
-  if command -v opencode >/dev/null 2>&1; then
-    shim_cmd='opencode "\$@"'
+  local config_ocs_js="${HOME}/.config/opencode/bin/ocs.cjs"
+  local config_ocs_js_fallback="${HOME}/.config/opencode/bin/ocs.js"
+  local shim_cmd='bunx --bun opencode-ai "$@"'
+
+  if [[ -f "$config_ocs_js" ]]; then
+    if [[ -x "$bunx_exec" ]]; then
+      printf -v shim_cmd '"%s" "%s" "$@"' "${HOME}/.bun/bin/bun" "$config_ocs_js"
+    else
+      printf -v shim_cmd 'bun "%s" "$@"' "$config_ocs_js"
+    fi
+  elif [[ -f "$config_ocs_js_fallback" ]]; then
+    if [[ -x "$bunx_exec" ]]; then
+      printf -v shim_cmd '"%s" "%s" "$@"' "${HOME}/.bun/bin/bun" "$config_ocs_js_fallback"
+    else
+      printf -v shim_cmd 'bun "%s" "$@"' "$config_ocs_js_fallback"
+    fi
+  elif [[ -x "$bunx_exec" ]]; then
+    printf -v shim_cmd '"%s" --bun opencode-ai "$@"' "$bunx_exec"
+  elif command -v opencode >/dev/null 2>&1; then
+    shim_cmd='opencode "$@"'
   fi
 
   local bun_bin="${HOME}/.bun/bin"
@@ -1340,6 +1384,15 @@ ensure_shell_path_priority() {
     elif [[ -n "$fish_line" ]]; then
       warn "Cannot write to fish config at ${fish_cfg}."
     fi
+  fi
+}
+
+source_shell_path_priority() {
+  local shell_snippet="$HOME/.config/opencode/shell/ocs-path.sh"
+  if [[ -f "$shell_snippet" ]]; then
+    # shellcheck disable=SC1090
+    source "$shell_snippet" >/dev/null 2>&1 || true
+    hash -r 2>/dev/null || true
   fi
 }
 
@@ -2053,6 +2106,7 @@ main() {
   local plugin_source_dir="${extract_tmp}"
   [[ -f "${plugin_source_dir}/package.json" ]] || error "Invalid plugin bundle: package.json not found"
   cp -R "${plugin_source_dir}/." "${PLUGIN_DIR}/"
+  sync_bundle_runtime_root "${plugin_source_dir}" "${CONFIG_ROOT}"
 
   local version
   version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
@@ -2072,11 +2126,7 @@ main() {
   echo ""
   info "Running setup script..."
   local setup_script
-  if [[ "${is_local_source}" == "true" ]]; then
-    setup_script="${root_dir}/scripts/setup.js"
-  else
-    setup_script="${PLUGIN_DIR}/scripts/setup.js"
-  fi
+  setup_script="$(resolve_installer_setup_script "${is_local_source}" "${PLUGIN_DIR}" "${CONFIG_ROOT}")"
 
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
@@ -2084,6 +2134,7 @@ main() {
   ensure_pnpm_runtime
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
+  source_shell_path_priority
 
   if [[ "${OCS_SKIP_AUTO_SETUP:-0}" == "1" ]]; then
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
@@ -2099,6 +2150,19 @@ main() {
     fi
     unset OCS_SETUP_INSTALLER_MODE
   fi
+
+  if [[ -d "${root_dir}" ]]; then
+    cd "${root_dir}"
+  else
+    cd "${CONFIG_ROOT}"
+  fi
+
+  enable_legacy_shell_fallbacks
+  ensure_pnpm_runtime
+  ensure_shell_path_priority
+  ensure_agent_dependency_runtime
+  source_shell_path_priority
+  hash -r 2>/dev/null || true
 
   echo ""
   success "opencode-multi-auth ${version} (${RESOLVED_SOURCE_BRANCH}) installed and configured!"
