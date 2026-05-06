@@ -1706,7 +1706,7 @@ ensure_gh_cli_for_oauth() {
 
 gh_supports_auth_token() {
   command -v gh >/dev/null 2>&1 || return 1
-  gh auth token --help >/dev/null 2>&1
+  gh auth token --help </dev/null >/dev/null 2>&1
 }
 
 upgrade_gh_cli_for_oauth() {
@@ -1734,7 +1734,7 @@ upgrade_gh_cli_for_oauth() {
 get_gh_token_if_supported() {
   gh_supports_auth_token || return 1
   local token=""
-  token="$(gh auth token 2>/dev/null || true)"
+  token="$(gh auth token </dev/null 2>/dev/null || true)"
   token="$(printf '%s' "$token" | tr -d '\r\n')"
   [[ -n "$token" ]] || return 1
   printf '%s' "$token"
@@ -1794,7 +1794,7 @@ resolve_token() {
   # Path 3: OAuth via gh CLI
   if command -v gh >/dev/null 2>&1 || ensure_gh_cli_for_oauth; then
     upgrade_gh_cli_for_oauth >/dev/null 2>&1 || true
-    if gh auth status >/dev/null 2>&1; then
+    if gh auth status </dev/null >/dev/null 2>&1; then
       GH_TOKEN="$(get_gh_token_if_supported 2>/dev/null || true)"
       if [[ -n "${GH_TOKEN}" ]]; then
         echo "  Auth: using gh CLI token" >&2
@@ -1807,15 +1807,15 @@ resolve_token() {
     elif has_interactive_tty; then
       warn "GitHub CLI (gh) is installed but not authenticated."
       info "Opening OAuth login in browser..."
-      if gh auth login; then
-        gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
+      if gh auth login </dev/null; then
+        gh config set -h github.com git_protocol https </dev/null >/dev/null 2>&1 || true
         GH_TOKEN="$(get_gh_token_if_supported 2>/dev/null || true)"
         if [[ -n "${GH_TOKEN}" ]]; then
           echo "  Auth: using gh CLI token" >&2
           printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
           return 0
         fi
-        if gh auth status >/dev/null 2>&1; then
+        if gh auth status </dev/null >/dev/null 2>&1; then
           echo "  Auth: using existing gh CLI session" >&2
           printf '%s' ""
           return 0
@@ -1840,11 +1840,11 @@ verify_access() {
   token="$(printf '%s' "$token" | tr -d '\r\n')"
 
   if command -v gh >/dev/null 2>&1; then
-    if GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+    if GH_TOKEN="$token" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" </dev/null >/dev/null 2>&1; then
       return 0
     fi
 
-    if gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+    if gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" </dev/null >/dev/null 2>&1; then
       return 0
     fi
   fi
@@ -1858,17 +1858,17 @@ verify_access() {
     "https://api.github.com/repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}")"
 
   if [[ "${status_code}" == "000" && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
-    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" </dev/null >/dev/null 2>&1; then
       status_code="200"
     fi
   fi
 
   if [[ ("${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "404") && -n "${token}" ]] && command -v gh >/dev/null 2>&1; then
-    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+    if GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" </dev/null >/dev/null 2>&1; then
       status_code="200"
     elif [[ "${status_code}" == "401" ]] && has_interactive_tty; then
       info "gh token may be missing repo scope. Running: gh auth refresh -h github.com -s repo"
-      if gh auth refresh -h github.com -s repo; then
+      if gh auth refresh -h github.com -s repo </dev/null; then
         local refreshed_token
         refreshed_token="$(get_gh_token_if_supported 2>/dev/null || true)"
         refreshed_token="$(printf '%s' "$refreshed_token" | tr -d '\r\n')"
@@ -1883,7 +1883,7 @@ verify_access() {
           if [[ "${status_code}" != "200" ]] && GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
             status_code="200"
           fi
-        elif gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+        elif gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" </dev/null >/dev/null 2>&1; then
           status_code="200"
         fi
       fi
