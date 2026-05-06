@@ -1548,7 +1548,7 @@ ensure_system_command_links() {
     elif run_with_privilege mkdir -p "${target_dir}" && run_with_privilege ln -sfn "${source_path}" "${target_path}"; then
       :
     else
-      warn "Cannot create ${target_path}. Keep using shell profile PATH entries."
+      info "Cannot create ${target_path}. Continuing with shell profile PATH entries."
     fi
   done
 
@@ -1704,6 +1704,42 @@ ensure_gh_cli_for_oauth() {
   return 1
 }
 
+gh_supports_auth_token() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh auth token --help >/dev/null 2>&1
+}
+
+upgrade_gh_cli_for_oauth() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh_supports_auth_token && return 0
+  has_interactive_tty || return 1
+
+  local pm
+  pm="$(detect_package_manager)"
+  if [[ -z "$pm" ]]; then
+    warn "gh is installed but too old for 'gh auth token', and no supported package manager was detected for auto-upgrade."
+    return 1
+  fi
+
+  info "GitHub CLI is installed but missing 'gh auth token'. Attempting auto-upgrade via ${pm}..."
+  if install_packages_auto "$pm" gh && gh_supports_auth_token; then
+    success "GitHub CLI upgraded with token support."
+    return 0
+  fi
+
+  warn "gh auto-upgrade did not add 'gh auth token'. Continuing with existing authenticated gh session if available."
+  return 1
+}
+
+get_gh_token_if_supported() {
+  gh_supports_auth_token || return 1
+  local token=""
+  token="$(gh auth token 2>/dev/null || true)"
+  token="$(printf '%s' "$token" | tr -d '\r\n')"
+  [[ -n "$token" ]] || return 1
+  printf '%s' "$token"
+}
+
 print_gh_auth_terminal_guide() {
   warn "Run this command in terminal, then rerun installer:"
   warn "gh auth login"
@@ -1757,22 +1793,31 @@ resolve_token() {
 
   # Path 3: OAuth via gh CLI
   if command -v gh >/dev/null 2>&1 || ensure_gh_cli_for_oauth; then
+    upgrade_gh_cli_for_oauth >/dev/null 2>&1 || true
     if gh auth status >/dev/null 2>&1; then
-      GH_TOKEN="$(gh auth token 2>/dev/null)"
+      GH_TOKEN="$(get_gh_token_if_supported 2>/dev/null || true)"
       if [[ -n "${GH_TOKEN}" ]]; then
         echo "  Auth: using gh CLI token" >&2
         printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
         return 0
       fi
+      echo "  Auth: using existing gh CLI session" >&2
+      printf '%s' ""
+      return 0
     elif has_interactive_tty; then
       warn "GitHub CLI (gh) is installed but not authenticated."
       info "Opening OAuth login in browser..."
       if gh auth login; then
         gh config set -h github.com git_protocol https >/dev/null 2>&1 || true
-        GH_TOKEN="$(gh auth token 2>/dev/null)"
+        GH_TOKEN="$(get_gh_token_if_supported 2>/dev/null || true)"
         if [[ -n "${GH_TOKEN}" ]]; then
           echo "  Auth: using gh CLI token" >&2
           printf '%s' "${GH_TOKEN}" | tr -d '\r\n'
+          return 0
+        fi
+        if gh auth status >/dev/null 2>&1; then
+          echo "  Auth: using existing gh CLI session" >&2
+          printf '%s' ""
           return 0
         fi
       else
@@ -1825,7 +1870,7 @@ verify_access() {
       info "gh token may be missing repo scope. Running: gh auth refresh -h github.com -s repo"
       if gh auth refresh -h github.com -s repo; then
         local refreshed_token
-        refreshed_token="$(gh auth token 2>/dev/null || true)"
+        refreshed_token="$(get_gh_token_if_supported 2>/dev/null || true)"
         refreshed_token="$(printf '%s' "$refreshed_token" | tr -d '\r\n')"
         if [[ -n "$refreshed_token" ]]; then
           token="$refreshed_token"
@@ -1838,6 +1883,8 @@ verify_access() {
           if [[ "${status_code}" != "200" ]] && GH_TOKEN="${token}" gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
             status_code="200"
           fi
+        elif gh api "repos/${GITHUB_SOURCE_REPO}/branches/${GITHUB_SOURCE_BRANCH}" >/dev/null 2>&1; then
+          status_code="200"
         fi
       fi
     fi
@@ -2169,15 +2216,22 @@ main() {
   echo ""
   if [[ "${OCS_ENABLE_OCS_AUTO_INSTALL:-1}" == "1" ]]; then
     if ! ensure_ocs_command "${token}" "${root_dir}" "${is_local_source}" "${PLUGIN_DIR}"; then
-      info "ocs command still unavailable after auto-install attempts."
-      info "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
-      info "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
+      source_shell_path_priority
+      if ocs_works; then
+        info "ocs verification passed after sourcing the installer PATH snippet."
+      else
+        info "ocs command still unavailable after auto-install attempts."
+        info "Manual fallback: clone private suite repo, then run bun install -g <repo-path>."
+        info "If needed, ensure PATH includes ${HOME}/.bun/bin and open a new terminal."
+      fi
     fi
 else
   info "Skipping automatic ocs command installation because OCS_ENABLE_OCS_AUTO_INSTALL=0."
 fi
 
 ensure_system_command_links
+source_shell_path_priority
+hash -r 2>/dev/null || true
 
 ensure_adjunct_runtime_ready
 
@@ -2216,6 +2270,6 @@ ensure_antigravity_oauth_integrity "${setup_script}"
   echo ""
 }
 
-if [[ "${BASH_SOURCE[0]-}" == "$0" ]]; then
+if [[ -z "${BASH_SOURCE[0]-}" || "${BASH_SOURCE[0]-}" == "$0" ]]; then
   main "$@"
 fi
