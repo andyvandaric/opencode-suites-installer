@@ -51,6 +51,176 @@ $TMP_DIR = [System.IO.Path]::Combine(
 $script:PathResolutionRunId = [System.Guid]::NewGuid().ToString('N')
 $script:PathResolutionDiagnosticFile = [System.IO.Path]::Combine($TMP_DIR, 'diagnostics', "path-resolution-$($script:PathResolutionRunId).log")
 
+function Get-ProgressNarrationThresholdMilliseconds {
+    param([string]$Channel)
+
+    switch ($Channel) {
+        'install' { return 3000 }
+        'doctor' { return 5000 }
+        'index' { return 5000 }
+        'release' { return 8000 }
+        default { return 4000 }
+    }
+}
+
+function Get-ProgressNarrationMessages {
+    param(
+        [string]$Channel,
+        [string]$Scenario = 'default'
+    )
+
+    switch ("$Channel::$Scenario") {
+        'install::dependency-install' {
+            return @(
+                'Installing runtime dependencies so OCS commands behave consistently in new shells.',
+                'Package manager work can stay quiet for a moment while downloads and lock checks finish.',
+                'Once this step completes, plugin commands and shims should be ready to use.'
+            )
+        }
+        'install::setup-profile' {
+            return @(
+                'Applying your selected OCS profile and runtime defaults.',
+                'OCS is keeping account state while refreshing the managed config surface.',
+                'You will be able to use the updated profile as soon as this setup step completes.'
+            )
+        }
+        'install::cocoindex-bootstrap' {
+            return @(
+                'Checking CocoIndex support for this project session.',
+                'If CocoIndex is already healthy, OCS will reuse it instead of rebuilding from scratch.',
+                'Python and MCP checks can take a little longer on fresh environments.'
+            )
+        }
+        'install::runtime-bootstrap' {
+            return @(
+                'Checking native support tools that OCS uses for command routing and recovery.',
+                'If a healthy runtime already exists, OCS will reuse it instead of rebuilding from scratch.',
+                'First-time native tool setup can pause briefly while installers and shell hooks are verified.'
+            )
+        }
+        default {
+            return @(
+                'Still working: preparing your OCS runtime and profile wiring.',
+                'This can take a bit on first install because package tools are being checked.',
+                'OCS is validating command paths so new shells work without manual fixes.'
+            )
+        }
+    }
+}
+
+function Test-ProgressNarrationEnabled {
+    if ($env:OCS_PROGRESS_TEXT -eq '0') {
+        return $false
+    }
+
+    if ($env:OCS_QUIET -eq '1') {
+        return $false
+    }
+
+    if (("$($env:CI)".ToLowerInvariant()) -eq 'true') {
+        return $false
+    }
+
+    try {
+        if ([Console]::IsOutputRedirected) {
+            return $false
+        }
+    } catch {
+        return $false
+    }
+
+    return $true
+}
+
+function Resolve-ProgressNarrationHost {
+    if ($PwshPath -and (Test-Path $PwshPath)) {
+        return $PwshPath
+    }
+
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($pwsh) {
+        return $pwsh.Source
+    }
+
+    $powershell = Get-Command powershell -ErrorAction SilentlyContinue
+    if ($powershell) {
+        return $powershell.Source
+    }
+
+    return $null
+}
+
+function Start-ProgressNarration {
+    param(
+        [string]$Channel,
+        [string]$Scenario = 'default',
+        [int]$ThresholdMilliseconds = (Get-ProgressNarrationThresholdMilliseconds -Channel $Channel),
+        [int]$IntervalMilliseconds = 4000
+    )
+
+    if (-not (Test-ProgressNarrationEnabled)) {
+        return $null
+    }
+
+    $messages = Get-ProgressNarrationMessages -Channel $Channel -Scenario $Scenario
+    if (-not $messages -or $messages.Count -eq 0) {
+        return $null
+    }
+
+    $hostCommand = Resolve-ProgressNarrationHost
+    if (-not $hostCommand) {
+        return $null
+    }
+
+    $json = ($messages | ConvertTo-Json -Compress)
+    $progressScript = @"
+`$messages = ConvertFrom-Json @'
+$json
+'@
+Start-Sleep -Milliseconds $ThresholdMilliseconds
+`$index = 0
+while (`$true) {
+    [Console]::WriteLine("   ⏳ " + `$messages[`$index % `$messages.Count])
+    `$index += 1
+    Start-Sleep -Milliseconds $IntervalMilliseconds
+}
+"@
+
+    try {
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($progressScript))
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $hostCommand
+        $startInfo.Arguments = "-NoProfile -EncodedCommand $encoded"
+        $startInfo.UseShellExecute = $false
+        return [System.Diagnostics.Process]::Start($startInfo)
+    } catch {
+        return $null
+    }
+}
+
+function Stop-ProgressNarration {
+    param([System.Diagnostics.Process]$Process)
+
+    if (-not $Process) {
+        return
+    }
+
+    try {
+        if (-not $Process.HasExited) {
+            $Process.Kill()
+            $null = $Process.WaitForExit(250)
+        }
+    } catch {
+        # best effort only
+    } finally {
+        try {
+            $Process.Dispose()
+        } catch {
+            # ignore dispose issues
+        }
+    }
+}
+
 function Is-EnvPathSafe {
     param([string]$Value)
 
@@ -281,8 +451,55 @@ function Join-SafeEnvPath {
     return Join-Path $rootPath $RelativePath
 }
 
-$PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-$TOKEN_FILE = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode-suites\.token' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+function Get-InstallerPathContract {
+    $homeDir = Get-SafeEnvValue -Names @("USERPROFILE", "HOME") -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $explicitTargetConfigDir = [System.Environment]::GetEnvironmentVariable("OPENCODE_CONFIG_DIR")
+    if (-not [string]::IsNullOrWhiteSpace($explicitTargetConfigDir)) {
+        $explicitTargetConfigDir = $explicitTargetConfigDir.Trim()
+    }
+
+    if ($explicitTargetConfigDir) {
+        $configHome = Split-Path -Parent $explicitTargetConfigDir
+        $targetConfigDir = $explicitTargetConfigDir
+    } else {
+        $configHome = Get-SafeEnvValue -Names @("XDG_CONFIG_HOME")
+        if ([string]::IsNullOrWhiteSpace($configHome)) {
+            $configHome = Join-Path $homeDir ".config"
+        }
+        $targetConfigDir = Join-Path $configHome "opencode"
+    }
+
+    $skillsRoot = Join-Path $targetConfigDir "skills"
+    $pluginsRoot = Join-Path $targetConfigDir "plugins"
+    $pluginDir = Join-Path $pluginsRoot "opencode-multi-auth"
+    $shellSnippetDir = Join-Path $targetConfigDir "shell"
+    $cavemanSkillDir = Join-Path $skillsRoot "caveman"
+
+    return [pscustomobject]@{
+        HomeDir = $homeDir
+        ConfigHome = $configHome
+        TargetConfigDir = $targetConfigDir
+        SkillsRoot = $skillsRoot
+        PluginsRoot = $pluginsRoot
+        PluginDir = $pluginDir
+        TokenFile = Join-Path $homeDir '.opencode-suites\.token'
+        NativeBinDir = Join-Path $homeDir '.opencode\bin'
+        LocalBinDir = Join-Path $homeDir '.local\bin'
+        ShellSnippetDir = $shellSnippetDir
+        ShellSnippetPath = Join-Path $shellSnippetDir 'ocs-path.sh'
+        RtkPluginPath = Join-Path $pluginsRoot 'rtk.ts'
+        CavemanSkillDir = $cavemanSkillDir
+        CavemanSkillPath = Join-Path $cavemanSkillDir 'SKILL.md'
+        OcsCliCjsPath = Join-Path $targetConfigDir 'bin\ocs.cjs'
+        OcsCliJsPath = Join-Path $targetConfigDir 'bin\ocs.js'
+        PluginOcsCliCjsPath = Join-Path $pluginDir 'bin\ocs.cjs'
+        PluginOcsCliJsPath = Join-Path $pluginDir 'bin\ocs.js'
+    }
+}
+
+$script:InstallerPathContract = Get-InstallerPathContract
+$PLUGIN_DIR = $script:InstallerPathContract.PluginDir
+$TOKEN_FILE = $script:InstallerPathContract.TokenFile
 
 $tokenFallbackHint = 'env: USERPROFILE/HOME; fallback: UserProfile special folder'
 $tokenFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.opencode-suites\.token' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
@@ -625,7 +842,7 @@ function Ensure-OpencodePathEntries {
 }
 
 function Find-CavemanSkillSource {
-    $homeRoot = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::UserProfile) }
+    $homeRoot = $script:InstallerPathContract.HomeDir
 
     $candidates = @(
         (Join-Path $homeRoot '.agents\skills\caveman'),
@@ -658,9 +875,9 @@ function Find-CavemanSkillSource {
 }
 
 function Sync-CavemanSkillMarker {
-    $skillsRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\skills' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    $targetDir = Join-Path $skillsRoot 'caveman'
-    $targetMarker = Join-Path $targetDir 'SKILL.md'
+    $skillsRoot = $script:InstallerPathContract.SkillsRoot
+    $targetDir = $script:InstallerPathContract.CavemanSkillDir
+    $targetMarker = $script:InstallerPathContract.CavemanSkillPath
     if (Test-Path $targetMarker) {
         return $true
     }
@@ -679,15 +896,14 @@ function Sync-CavemanSkillMarker {
 }
 
 function Ensure-AdjunctRuntimeReady {
-    $nativeBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.opencode\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $nativeBin = $script:InstallerPathContract.NativeBinDir
     if ($nativeBin) {
         Add-PathEntryToUserPath -PathEntry $nativeBin
         Refresh-SessionPath
     }
 
-    $configRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    $rtkPlugin = Join-Path $configRoot 'plugins\rtk.ts'
-    $cavemanMarker = Join-Path $configRoot 'skills\caveman\SKILL.md'
+    $rtkPlugin = $script:InstallerPathContract.RtkPluginPath
+    $cavemanMarker = $script:InstallerPathContract.CavemanSkillPath
 
     if (-not (Test-Path $cavemanMarker)) {
         if (Sync-CavemanSkillMarker) {
@@ -1374,7 +1590,12 @@ function Install-OcsFromPath {
         $lastOutput = ""
         try {
             Write-Output "Attempting ocs install from local path (attempt $attempt/$maxAttempts)..."
-            $bunOutput = & bun install -g $resolvedSource 2>&1
+            $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'dependency-install'
+            try {
+                $bunOutput = & bun install -g $resolvedSource 2>&1
+            } finally {
+                Stop-ProgressNarration -Process $progressProcess
+            }
             if ($bunOutput) {
                 $lastOutput = ($bunOutput | Out-String).Trim()
             }
@@ -1847,7 +2068,12 @@ function Invoke-BunInstallWithRetry {
             }
 
             try {
-                $bunOutput = & bun @args 2>&1
+                $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'dependency-install'
+                try {
+                    $bunOutput = & bun @args 2>&1
+                } finally {
+                    Stop-ProgressNarration -Process $progressProcess
+                }
                 if ($bunOutput) {
                     $lastOutput = ($bunOutput | Out-String).Trim()
                 }
@@ -1955,7 +2181,12 @@ function Invoke-AutoSetup {
     $headlessExitCode = 1
 
     try {
-        & bun $setupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
+        $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'setup-profile'
+        try {
+            & bun $setupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
+        } finally {
+            Stop-ProgressNarration -Process $progressProcess
+        }
         $headlessExitCode = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } else { 0 }
         if ($headlessExitCode -ne 0) {
             $headlessSucceeded = $false
@@ -1967,7 +2198,12 @@ function Invoke-AutoSetup {
     if (($headlessExitCode -ne 0) -or (-not $headlessSucceeded)) {
         Write-Warning "Headless setup failed. Falling back to interactive setup..."
         try {
-            & bun $setupScript
+            $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'setup-profile'
+            try {
+                & bun $setupScript
+            } finally {
+                Stop-ProgressNarration -Process $progressProcess
+            }
         } catch {
             Write-Error "Auto setup failed: $($_.Exception.Message)"
             Write-Error "Run setup manually: bun $setupScript"
@@ -2037,8 +2273,8 @@ function Resolve-InstallerSetupScript {
 function Assert-AntigravityOauthIntegrity {
     param([string]$SetupScript)
 
-    $configDir = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    $configFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $configDir = $script:InstallerPathContract.TargetConfigDir
+    $configFallbackPath = Join-Path $script:InstallerPathContract.HomeDir '.config\opencode'
     if (-not (Ensure-EnvPathValue -Value $configDir -Context 'opencode config directory' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath $configFallbackPath -Fail)) {
         throw "Installer cannot continue without a valid opencode config directory."
     }
@@ -2111,7 +2347,7 @@ function Reset-RuntimePluginsDirectory {
         return
     }
 
-    $pluginsRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $pluginsRoot = $script:InstallerPathContract.PluginsRoot
 
     if (Test-Path $pluginsRoot) {
         Write-Warning "Removing existing plugin directory to avoid stale plugin manager conflicts: $pluginsRoot"
@@ -2164,13 +2400,13 @@ $version = "local-source"
 if ($isLocalSource) {
     $PLUGIN_DIR = Join-Path $rootDir "plugins\opencode-multi-auth"
 } else {
-    $PLUGIN_DIR = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $PLUGIN_DIR = $script:InstallerPathContract.PluginDir
 }
 
     $pluginContext = if ($isLocalSource) { 'local workspace plugin directory' } else { 'env-derived plugin directory' }
     $pluginFallbackHint = if ($isLocalSource) { 'local workspace path' } else { 'env: USERPROFILE/HOME; fallback: UserProfile special folder' }
     if (-not $isLocalSource) {
-        $pluginFallbackPath = Get-EnvFallbackCandidatePath -RelativePath '.config\opencode\plugins\opencode-multi-auth' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+        $pluginFallbackPath = $script:InstallerPathContract.PluginDir
     } else {
         $pluginFallbackPath = ''
     }
@@ -2300,8 +2536,8 @@ Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
 Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
 }
 
-    $configRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
-    if (-not (Ensure-EnvPathValue -Value $configRoot -Context 'env-derived opencode config root' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath (Get-EnvFallbackCandidatePath -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)) -Fail)) {
+    $configRoot = $script:InstallerPathContract.TargetConfigDir
+    if (-not (Ensure-EnvPathValue -Value $configRoot -Context 'env-derived opencode config root' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath (Join-Path $script:InstallerPathContract.HomeDir '.config\opencode') -Fail)) {
         exit 1
     }
     Sync-BundleRuntimeRoot -BundleRoot $pluginSource -TargetRoot $configRoot
@@ -2318,7 +2554,7 @@ Apply-InstallerDefaults -PluginPath $pluginFullPath
 Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
-$resolvedConfigRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+$resolvedConfigRoot = $script:InstallerPathContract.TargetConfigDir
 $resolvedSetupScript = Resolve-InstallerSetupScript -IsLocalSource:$isLocalSource -PluginDir $PLUGIN_DIR -ConfigRoot $resolvedConfigRoot
 Invoke-AutoSetup -IsLocalSource:$isLocalSource -SetupScript $resolvedSetupScript
 Assert-AntigravityOauthIntegrity -SetupScript $resolvedSetupScript

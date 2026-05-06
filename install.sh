@@ -42,6 +42,100 @@ if [[ -n "${TARGET_HOME}" && "${TARGET_HOME}" != "${HOME}" ]]; then
   export HOME
 fi
 
+resolve_path_contract_home_dir() {
+  if [[ -n "${HOME:-}" ]]; then
+    printf '%s\n' "${HOME}"
+    return 0
+  fi
+
+  if [[ -n "${USERPROFILE:-}" ]]; then
+    printf '%s\n' "${USERPROFILE}"
+    return 0
+  fi
+
+  if [[ -n "${HOMEDRIVE:-}" && -n "${HOMEPATH:-}" ]]; then
+    printf '%s%s\n' "${HOMEDRIVE}" "${HOMEPATH}"
+    return 0
+  fi
+
+  printf '%s\n' "/tmp"
+}
+
+resolve_path_contract_config_home() {
+  if [[ -n "${OPENCODE_CONFIG_DIR:-}" ]]; then
+    dirname "${OPENCODE_CONFIG_DIR}"
+    return 0
+  fi
+
+  if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "${XDG_CONFIG_HOME}"
+    return 0
+  fi
+
+  printf '%s/.config\n' "$(resolve_path_contract_home_dir)"
+}
+
+resolve_path_contract_target_config_dir() {
+  if [[ -n "${OPENCODE_CONFIG_DIR:-}" ]]; then
+    printf '%s\n' "${OPENCODE_CONFIG_DIR}"
+    return 0
+  fi
+
+  printf '%s/opencode\n' "$(resolve_path_contract_config_home)"
+}
+
+resolve_path_contract_native_bin_dir() {
+  printf '%s/.opencode/bin\n' "$(resolve_path_contract_home_dir)"
+}
+
+resolve_path_contract_local_bin_dir() {
+  printf '%s/.local/bin\n' "$(resolve_path_contract_home_dir)"
+}
+
+resolve_path_contract_plugin_dir() {
+  printf '%s/plugins/opencode-multi-auth\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_token_file() {
+  printf '%s/.opencode-suites/.token\n' "$(resolve_path_contract_home_dir)"
+}
+
+resolve_path_contract_shell_snippet_dir() {
+  printf '%s/shell\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_shell_snippet_path() {
+  printf '%s/ocs-path.sh\n' "$(resolve_path_contract_shell_snippet_dir)"
+}
+
+resolve_path_contract_caveman_skill_dir() {
+  printf '%s/skills/caveman\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_caveman_skill_path() {
+  printf '%s/SKILL.md\n' "$(resolve_path_contract_caveman_skill_dir)"
+}
+
+resolve_path_contract_rtk_plugin_path() {
+  printf '%s/plugins/rtk.ts\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_ocs_cli_cjs_path() {
+  printf '%s/bin/ocs.cjs\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_ocs_cli_js_path() {
+  printf '%s/bin/ocs.js\n' "$(resolve_path_contract_target_config_dir)"
+}
+
+resolve_path_contract_plugin_ocs_cli_cjs_path() {
+  printf '%s/bin/ocs.cjs\n' "$(resolve_path_contract_plugin_dir)"
+}
+
+resolve_path_contract_plugin_ocs_cli_js_path() {
+  printf '%s/bin/ocs.js\n' "$(resolve_path_contract_plugin_dir)"
+}
+
 # ─── Config ──────────────────────────────────────────────────────────────────
 GITHUB_SOURCE_REPO="andyvandaric/andyvand-opencode-config"
 INSTALLER_SOURCE_BRANCH_HINT="main"
@@ -50,9 +144,21 @@ DEFAULT_RELEASE_BRANCH="${OCS_FALLBACK_RELEASE_BRANCH:-}"
 INSTALLER_DEFAULT_PROFILE="codex-5.3-token-saver"
 INSTALLER_DEFAULT_MODE="performance"
 WHATSAPP_ORDER_URL="https://wa.me/6281289731212?text=Mau%20order%20OCS%20nya%2C%20mohon%20infonya%20ya"
-PLUGIN_DIR="${HOME}/.config/opencode/plugins/opencode-multi-auth"
-CONFIG_ROOT="${HOME}/.config/opencode"
-TOKEN_FILE="${HOME}/.opencode-suites/.token"
+CONFIG_HOME="$(resolve_path_contract_config_home)"
+CONFIG_ROOT="$(resolve_path_contract_target_config_dir)"
+PLUGIN_DIR="$(resolve_path_contract_plugin_dir)"
+TOKEN_FILE="$(resolve_path_contract_token_file)"
+NATIVE_BIN_DIR="$(resolve_path_contract_native_bin_dir)"
+LOCAL_BIN_DIR="$(resolve_path_contract_local_bin_dir)"
+SHELL_SNIPPET_DIR="$(resolve_path_contract_shell_snippet_dir)"
+SHELL_SNIPPET_PATH="$(resolve_path_contract_shell_snippet_path)"
+RTK_PLUGIN_PATH="$(resolve_path_contract_rtk_plugin_path)"
+CAVEMAN_SKILL_DIR="$(resolve_path_contract_caveman_skill_dir)"
+CAVEMAN_SKILL_PATH="$(resolve_path_contract_caveman_skill_path)"
+OCS_CLI_CJS_PATH="$(resolve_path_contract_ocs_cli_cjs_path)"
+OCS_CLI_JS_PATH="$(resolve_path_contract_ocs_cli_js_path)"
+PLUGIN_OCS_CLI_CJS_PATH="$(resolve_path_contract_plugin_ocs_cli_cjs_path)"
+PLUGIN_OCS_CLI_JS_PATH="$(resolve_path_contract_plugin_ocs_cli_js_path)"
 TMP_DIR="$(mktemp -d /tmp/ocs-install-XXXXXX)"
 REQUESTED_VERSION="${OCS_VERSION:-}"
 RESOLVED_SOURCE_BRANCH=""
@@ -65,6 +171,104 @@ info()    { echo "  $*"; }
 success() { echo "✅ $*"; }
 error()   { echo "❌ $*" >&2; exit 1; }
 warn()    { echo "⚠️  $*" >&2; }
+
+progress_threshold_seconds() {
+  case "$1" in
+    install) printf '%s\n' '3' ;;
+    doctor|index) printf '%s\n' '5' ;;
+    release) printf '%s\n' '8' ;;
+    *) printf '%s\n' '4' ;;
+  esac
+}
+
+progress_messages() {
+  case "$1:$2" in
+    install:dependency-install)
+      cat <<'EOF'
+Installing runtime dependencies so OCS commands behave consistently in new shells.
+Package manager work can stay quiet for a moment while downloads and lock checks finish.
+Once this step completes, plugin commands and shims should be ready to use.
+EOF
+      ;;
+    install:setup-profile)
+      cat <<'EOF'
+Applying your selected OCS profile and runtime defaults.
+OCS is keeping account state while refreshing the managed config surface.
+You will be able to use the updated profile as soon as this setup step completes.
+EOF
+      ;;
+    install:cocoindex-bootstrap)
+      cat <<'EOF'
+Checking CocoIndex support for this project session.
+If CocoIndex is already healthy, OCS will reuse it instead of rebuilding from scratch.
+Python and MCP checks can take a little longer on fresh environments.
+EOF
+      ;;
+    install:runtime-bootstrap)
+      cat <<'EOF'
+Checking native support tools that OCS uses for command routing and recovery.
+If a healthy runtime already exists, OCS will reuse it instead of rebuilding from scratch.
+First-time native tool setup can pause briefly while installers and shell hooks are verified.
+EOF
+      ;;
+    *)
+      cat <<'EOF'
+Still working: preparing your OCS runtime and profile wiring.
+This can take a bit on first install because package tools are being checked.
+OCS is validating command paths so new shells work without manual fixes.
+EOF
+      ;;
+  esac
+}
+
+progress_narration_enabled() {
+  [[ "${OCS_PROGRESS_TEXT:-1}" != "0" ]] || return 1
+  [[ "${OCS_QUIET:-0}" != "1" ]] || return 1
+  [[ "${CI:-}" != "true" ]] || return 1
+  [[ -t 1 ]] || return 1
+}
+
+start_progress_narration() {
+  local channel="$1"
+  local scenario="${2:-default}"
+  local threshold="${3:-$(progress_threshold_seconds "$channel")}" 
+  local interval="${4:-4}"
+  local raw_messages=""
+
+  progress_narration_enabled || return 1
+  raw_messages="$(progress_messages "$channel" "$scenario")"
+  [[ -n "$raw_messages" ]] || return 1
+
+  OCS_PROGRESS_MESSAGES=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && OCS_PROGRESS_MESSAGES+=("$line")
+  done <<EOF
+$raw_messages
+EOF
+
+  [[ ${#OCS_PROGRESS_MESSAGES[@]} -gt 0 ]] || return 1
+
+  (
+    sleep "$threshold"
+    local index=0
+    while true; do
+      printf '  ⏳ %s\n' "${OCS_PROGRESS_MESSAGES[$((index % ${#OCS_PROGRESS_MESSAGES[@]}))]}"
+      index=$((index + 1))
+      sleep "$interval"
+    done
+  ) &
+  OCS_PROGRESS_PID=$!
+  return 0
+}
+
+stop_progress_narration() {
+  if [[ -n "${OCS_PROGRESS_PID:-}" ]]; then
+    kill "${OCS_PROGRESS_PID}" >/dev/null 2>&1 || true
+    wait "${OCS_PROGRESS_PID}" 2>/dev/null || true
+    unset OCS_PROGRESS_PID
+  fi
+  unset OCS_PROGRESS_MESSAGES
+}
 
 sync_bundle_runtime_root() {
   local bundle_root="$1"
@@ -670,7 +874,7 @@ find_caveman_skill_source() {
 }
 
 sync_caveman_skill_marker() {
-  local target_dir="${HOME}/.config/opencode/skills/caveman"
+  local target_dir="${CAVEMAN_SKILL_DIR}"
   local target_marker="${target_dir}/SKILL.md"
   [[ ! -f "${target_marker}" ]] || return 0
 
@@ -684,9 +888,9 @@ sync_caveman_skill_marker() {
 }
 
 ensure_adjunct_runtime_ready() {
-  local native_bin="${HOME}/.opencode/bin"
-  local rtk_plugin="${HOME}/.config/opencode/plugins/rtk.ts"
-  local caveman_marker="${HOME}/.config/opencode/skills/caveman/SKILL.md"
+  local native_bin="${NATIVE_BIN_DIR}"
+  local rtk_plugin="${RTK_PLUGIN_PATH}"
+  local caveman_marker="${CAVEMAN_SKILL_PATH}"
 
   if [[ -d "${native_bin}" ]]; then
     export PATH="${native_bin}:${PATH}"
@@ -695,7 +899,7 @@ ensure_adjunct_runtime_ready() {
 
   if [[ ! -f "${caveman_marker}" ]]; then
     if sync_caveman_skill_marker; then
-      success "Synced Caveman skill into target OpenCode skills dir: ${HOME}/.config/opencode/skills/caveman"
+      success "Synced Caveman skill into target OpenCode skills dir: ${CAVEMAN_SKILL_DIR}"
     fi
   fi
 
@@ -722,7 +926,7 @@ ensure_adjunct_runtime_ready() {
 
 ensure_antigravity_oauth_integrity() {
   local setup_script="$1"
-  local config_dir="${HOME}/.config/opencode"
+  local config_dir="${CONFIG_ROOT}"
   local runtime_opencode="${config_dir}/opencode.json"
   local runtime_antigravity="${config_dir}/antigravity.json"
   local template_antigravity="${PLUGIN_DIR}/backups/antigravity.json.template"
@@ -973,9 +1177,12 @@ install_bun_global_with_retry() {
   local i
 
   for ((i=1; i<=attempts; i++)); do
+    start_progress_narration "install" "dependency-install"
     if bun install -g "$source_path" >/tmp/ocs-bun-global.err 2>&1; then
+      stop_progress_narration
       return 0
     fi
+    stop_progress_narration
 
     local err
     err="$(cat /tmp/ocs-bun-global.err 2>/dev/null || true)"
@@ -1121,10 +1328,10 @@ resolve_windows_ocs_entry() {
 
 CANDIDATES=(
   "$ocs_js"
-  "$HOME/.config/opencode/bin/ocs.cjs"
-  "$HOME/.config/opencode/bin/ocs.js"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
+  "$OCS_CLI_CJS_PATH"
+  "$OCS_CLI_JS_PATH"
+  "$PLUGIN_OCS_CLI_CJS_PATH"
+  "$PLUGIN_OCS_CLI_JS_PATH"
 )
 
 for candidate in "\${CANDIDATES[@]}"; do
@@ -1171,10 +1378,10 @@ resolve_windows_ocs_entry() {
 
 CANDIDATES=(
   "$ocs_js"
-  "$HOME/.config/opencode/bin/ocs.cjs"
-  "$HOME/.config/opencode/bin/ocs.js"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.cjs"
-  "$HOME/.config/opencode/plugins/opencode-multi-auth/bin/ocs.js"
+  "$OCS_CLI_CJS_PATH"
+  "$OCS_CLI_JS_PATH"
+  "$PLUGIN_OCS_CLI_CJS_PATH"
+  "$PLUGIN_OCS_CLI_JS_PATH"
 )
 
 for candidate in "\${CANDIDATES[@]}"; do
@@ -1200,8 +1407,8 @@ EOF
 
 install_ocs_shim_from_opencode() {
   local bunx_exec="${HOME}/.bun/bin/bunx"
-  local config_ocs_js="${HOME}/.config/opencode/bin/ocs.cjs"
-  local config_ocs_js_fallback="${HOME}/.config/opencode/bin/ocs.js"
+  local config_ocs_js="${OCS_CLI_CJS_PATH}"
+  local config_ocs_js_fallback="${OCS_CLI_JS_PATH}"
   local shim_cmd='bunx --bun opencode-ai "$@"'
 
   if [[ -f "$config_ocs_js" ]]; then
@@ -1291,15 +1498,15 @@ ensure_ocs_command() {
 }
 
 ensure_shell_path_priority() {
-  local snippet_dir="${HOME}/.config/opencode/shell"
-  local snippet_path="${snippet_dir}/ocs-path.sh"
+  local snippet_dir="${SHELL_SNIPPET_DIR}"
+  local snippet_path="${SHELL_SNIPPET_PATH}"
   local profile
   local shell_name
   shell_name="$(resolve_shell_name)"
   local profile
   local base_entries=(
-    "${HOME}/.opencode/bin"
-    "${HOME}/.local/bin"
+    "${NATIVE_BIN_DIR}"
+    "${LOCAL_BIN_DIR}"
     "${HOME}/.local/pipx/bin"
     "${HOME}/.local/share/uv/tools/bin"
     "${HOME}/.bun/bin"
@@ -1347,7 +1554,7 @@ ensure_shell_path_priority() {
   fi
   hash -r 2>/dev/null || true
 
-  local source_line='[ -f "$HOME/.config/opencode/shell/ocs-path.sh" ] && . "$HOME/.config/opencode/shell/ocs-path.sh"'
+  local source_line="[ -f \"${snippet_path}\" ] && . \"${snippet_path}\""
 
   mkdir -p "${snippet_dir}" 2>/dev/null || true
   if ! ensure_text_file_exists_if_writable "${snippet_path}"; then
@@ -1391,7 +1598,7 @@ ensure_shell_path_priority() {
 }
 
 source_shell_path_priority() {
-  local shell_snippet="$HOME/.config/opencode/shell/ocs-path.sh"
+  local shell_snippet="${SHELL_SNIPPET_PATH}"
   if [[ -f "$shell_snippet" ]]; then
     # shellcheck disable=SC1090
     source "$shell_snippet" >/dev/null 2>&1 || true
@@ -1638,7 +1845,9 @@ install_dependencies_with_retry() {
   fi
 
   for ((i=1; i<=attempts; i++)); do
+    start_progress_narration "install" "dependency-install"
     if bun install --frozen-lockfile >/dev/null 2>&1; then
+      stop_progress_narration
       local new_fingerprint
       new_fingerprint="$(compute_dependency_fingerprint "$install_dir" 2>/dev/null || true)"
       if [[ -n "$new_fingerprint" ]]; then
@@ -1647,8 +1856,11 @@ install_dependencies_with_retry() {
       fi
       return 0
     fi
+    stop_progress_narration
 
+    start_progress_narration "install" "dependency-install"
     if bun install >/tmp/ocs-bun-install.err 2>&1; then
+      stop_progress_narration
       local new_fingerprint
       new_fingerprint="$(compute_dependency_fingerprint "$install_dir" 2>/dev/null || true)"
       if [[ -n "$new_fingerprint" ]]; then
@@ -1657,6 +1869,7 @@ install_dependencies_with_retry() {
       fi
       return 0
     fi
+    stop_progress_narration
 
     local err
     err="$(cat /tmp/ocs-bun-install.err 2>/dev/null || true)"
@@ -2042,7 +2255,7 @@ install_bun() {
 }
 
 cleanup_runtime_plugins_dir() {
-  local plugins_root="${HOME}/.config/opencode/plugins"
+  local plugins_root="${CONFIG_ROOT}/plugins"
   local purge_plugins="${OCS_INSTALLER_PURGE_PLUGINS:-1}"
 
   if [[ "${purge_plugins}" != "1" ]]; then
@@ -2190,13 +2403,19 @@ main() {
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
   else
     export OCS_SETUP_INSTALLER_MODE=1
+    start_progress_narration "install" "setup-profile"
     if bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}"; then
+      stop_progress_narration
       success "Setup completed automatically (headless)."
     else
+      stop_progress_narration
       warn "Headless setup failed. Falling back to interactive setup..."
+      start_progress_narration "install" "setup-profile"
       if ! bun "${setup_script}"; then
+        stop_progress_narration
         error "Setup script failed."
       fi
+      stop_progress_narration
     fi
     unset OCS_SETUP_INSTALLER_MODE
   fi
