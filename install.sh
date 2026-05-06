@@ -414,7 +414,10 @@ ocs_works() {
     return 1
   fi
   ocs --version >/dev/null 2>&1 || return 1
-  ocs --help >/dev/null 2>&1 || return 1
+  local help_output
+  help_output="$(ocs --help 2>/dev/null || true)"
+  [[ -n "$help_output" ]] || return 1
+  grep -q "OpenCode Config Suites CLI" <<<"$help_output" || return 1
   return 0
 }
 
@@ -1257,13 +1260,13 @@ ensure_ocs_command() {
     fi
   fi
 
-  if ocs_works; then
-    info "ocs verification passed."
+  if install_ocs_shim_from_bundle "$plugin_dir" "$root_dir"; then
+    success "ocs shim install and verification passed."
     return 0
   fi
 
-  if install_ocs_shim_from_bundle "$plugin_dir" "$root_dir"; then
-    success "ocs shim install and verification passed."
+  if ocs_works; then
+    info "ocs verification passed."
     return 0
   fi
 

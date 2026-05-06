@@ -10,12 +10,13 @@
 - Fixed: 0
 - Changed: 0
 - Docs: 0
-- Chore/Build/CI: 7
+- Chore/Build/CI: 8
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `3b2c3e2` chore(installer): sync main v3.1.0 release wave
 - `d0e972e` chore(installer): sync main v3.1.0 release wave
 - `708e875` chore(installer): sync main v3.1.0 release wave
 - `f920a04` chore(installer): sync main v3.1.0 release wave
