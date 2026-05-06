@@ -10,12 +10,13 @@
 - Fixed: 0
 - Changed: 0
 - Docs: 0
-- Chore/Build/CI: 1
+- Chore/Build/CI: 2
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `c5b4df2` chore(installer): sync scripts from opencode-config-suites
 - `3af04f6` chore(installer): sync main v3.0.0 release wave
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## [3.0.0] - 2026-05-05
