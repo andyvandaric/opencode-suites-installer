@@ -1921,7 +1921,10 @@ function Invoke-BunInstallWithRetry {
 }
 
 function Invoke-AutoSetup {
-    param([bool]$IsLocalSource)
+    param(
+        [bool]$IsLocalSource,
+        [string]$SetupScript
+    )
 
     $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
     $env:OCS_SETUP_INSTALLER_MODE = "1"
@@ -1936,7 +1939,6 @@ function Invoke-AutoSetup {
         return
     }
 
-    $setupScript = "$PLUGIN_DIR\scripts\setup.js"
     if (-not (Test-Path $setupScript)) {
         Write-Warning "Setup script not found at $setupScript. Skipping auto setup."
         return
@@ -1985,6 +1987,47 @@ function Invoke-AutoSetup {
     } else {
         $env:OCS_SETUP_INSTALLER_MODE = $previousInstallerMode
     }
+}
+
+function Sync-BundleRuntimeRoot {
+    param(
+        [string]$BundleRoot,
+        [string]$TargetRoot
+    )
+
+    if (-not (Test-Path $BundleRoot)) {
+        Write-Error "Bundle root $BundleRoot not found for runtime sync."
+        exit 1
+    }
+
+    if (-not (Test-Path $TargetRoot)) {
+        New-Item -ItemType Directory -Force $TargetRoot | Out-Null
+    }
+
+    Get-ChildItem -Path $BundleRoot -Force | ForEach-Object {
+        Copy-Item -Path $_.FullName -Destination $TargetRoot -Recurse -Force
+    }
+
+    Write-Output "Synced bundled runtime root to $TargetRoot"
+}
+
+function Resolve-InstallerSetupScript {
+    param(
+        [bool]$IsLocalSource,
+        [string]$PluginDir,
+        [string]$ConfigRoot
+    )
+
+    if ($IsLocalSource) {
+        return (Join-Path $PluginDir "scripts\setup.js")
+    }
+
+    $targetRootScript = Join-Path $ConfigRoot "scripts\setup.js"
+    if (Test-Path $targetRootScript) {
+        return $targetRootScript
+    }
+
+    return (Join-Path $PluginDir "scripts\setup.js")
 }
 
 function Assert-AntigravityOauthIntegrity {
@@ -2253,6 +2296,12 @@ Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
 Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
 }
 
+    $configRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    if (-not (Ensure-EnvPathValue -Value $configRoot -Context 'env-derived opencode config root' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath (Get-EnvFallbackCandidatePath -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)) -Fail)) {
+        exit 1
+    }
+    Sync-BundleRuntimeRoot -BundleRoot $pluginSource -TargetRoot $configRoot
+
     if (-not (Test-Path (Join-Path $PLUGIN_DIR "package.json"))) {
         Write-Error "Installation failed: package.json not found in $PLUGIN_DIR after extraction."
         exit 1
@@ -2265,8 +2314,10 @@ Apply-InstallerDefaults -PluginPath $pluginFullPath
 Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
-Invoke-AutoSetup -IsLocalSource:$isLocalSource
-Assert-AntigravityOauthIntegrity -SetupScript (Join-Path $PLUGIN_DIR "scripts\setup.js")
+$resolvedConfigRoot = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.config\opencode' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+$resolvedSetupScript = Resolve-InstallerSetupScript -IsLocalSource:$isLocalSource -PluginDir $PLUGIN_DIR -ConfigRoot $resolvedConfigRoot
+Invoke-AutoSetup -IsLocalSource:$isLocalSource -SetupScript $resolvedSetupScript
+Assert-AntigravityOauthIntegrity -SetupScript $resolvedSetupScript
 Ensure-OpencodePathEntries
 Ensure-AdjunctRuntimeReady
 
