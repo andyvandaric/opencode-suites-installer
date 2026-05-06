@@ -1345,8 +1345,12 @@ function Test-OcsWorks {
         return $false
     }
 
-    & $commandToRun --help *> $null
+    $helpOutput = & $commandToRun --help 2>$null | Out-String
     if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    if (-not $helpOutput -or -not $helpOutput.Contains("OpenCode Config Suites CLI")) {
         return $false
     }
 
@@ -1592,13 +1596,13 @@ function Ensure-OcsCommand {
         }
     }
 
-    if (Test-OcsWorks) {
-        Write-Output "ocs verification passed."
+    if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
+        Write-Output "ocs shim install and verification passed."
         return $true
     }
 
-    if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
-        Write-Output "ocs shim install and verification passed."
+    if (Test-OcsWorks) {
+        Write-Output "ocs verification passed."
         return $true
     }
 
