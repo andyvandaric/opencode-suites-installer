@@ -1714,10 +1714,24 @@ function Install-OcsShimFromBundle {
     return $true
 }
 
+function Resolve-OcsRuntimeEntrypoint {
+    $candidatePaths = @(
+        $script:InstallerPathContract.OcsCliCjsPath,
+        $script:InstallerPathContract.OcsCliJsPath,
+        $script:InstallerPathContract.PluginOcsCliCjsPath,
+        $script:InstallerPathContract.PluginOcsCliJsPath
+    )
+
+    return $candidatePaths | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+}
+
 function Install-OcsShimFromOpencode {
-    $opencodeCmd = Get-Command opencode -ErrorAction SilentlyContinue
-    $cmdLine = if ($opencodeCmd) { "opencode %*" } else { "bunx opencode-ai %*" }
-    $psLine = if ($opencodeCmd) { "& opencode @Args" } else { "& bunx opencode-ai @Args" }
+    $ocsJs = Resolve-OcsRuntimeEntrypoint
+
+    if (-not $ocsJs) {
+        Write-Warning "Unable to repair ocs shim because no OCS entrypoint was found."
+        return $false
+    }
 
     $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
     if (-not (Ensure-EnvPathValue -Value $bunBin -Context 'bun shim directory (opencode)' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder')) {
@@ -1727,6 +1741,10 @@ function Install-OcsShimFromOpencode {
 
     $cmdPath = Join-Path $bunBin "ocs.cmd"
     $ps1Path = Join-Path $bunBin "ocs.ps1"
+
+    $bunExe = Join-Path $bunBin "bun.exe"
+    $cmdLine = if (Test-Path $bunExe) { "`"$bunExe`" `"$ocsJs`" %*" } else { "bun `"$ocsJs`" %*" }
+    $psLine = if (Test-Path $bunExe) { "& `"$bunExe`" `"$ocsJs`" @Args" } else { "& bun `"$ocsJs`" @Args" }
 
     $cmdContent = "@echo off`r`n$cmdLine`r`n"
     Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
@@ -1828,7 +1846,7 @@ function Ensure-OcsCommand {
     }
 
     if (Install-OcsShimFromOpencode) {
-        Write-Output "ocs shim via opencode install and verification passed."
+        Write-Output "ocs shim fallback from installed runtime and verification passed."
         return $true
     }
 
