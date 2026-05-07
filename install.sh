@@ -1405,28 +1405,56 @@ EOF
   ocs_works
 }
 
-install_ocs_shim_from_opencode() {
-  local bunx_exec="${HOME}/.bun/bin/bunx"
-  local config_ocs_js="${OCS_CLI_CJS_PATH}"
-  local config_ocs_js_fallback="${OCS_CLI_JS_PATH}"
-  local shim_cmd='bunx --bun opencode-ai "$@"'
+resolve_runtime_ocs_entry() {
+  local candidate
+  local candidates=(
+    "$OCS_CLI_CJS_PATH"
+    "$OCS_CLI_JS_PATH"
+    "$PLUGIN_OCS_CLI_CJS_PATH"
+    "$PLUGIN_OCS_CLI_JS_PATH"
+  )
 
-  if [[ -f "$config_ocs_js" ]]; then
-    if [[ -x "$bunx_exec" ]]; then
-      printf -v shim_cmd '"%s" "%s" "$@"' "${HOME}/.bun/bin/bun" "$config_ocs_js"
-    else
-      printf -v shim_cmd 'bun "%s" "$@"' "$config_ocs_js"
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
     fi
-  elif [[ -f "$config_ocs_js_fallback" ]]; then
-    if [[ -x "$bunx_exec" ]]; then
-      printf -v shim_cmd '"%s" "%s" "$@"' "${HOME}/.bun/bin/bun" "$config_ocs_js_fallback"
-    else
-      printf -v shim_cmd 'bun "%s" "$@"' "$config_ocs_js_fallback"
+  done
+
+  local cmd_path
+  while IFS= read -r cmd_path; do
+    [[ -f "${cmd_path}" ]] || continue
+    local line
+    line=$(sed -n '2p' "${cmd_path}" 2>/dev/null || true)
+    [[ -n "${line}" ]] || continue
+    local win_path
+    win_path=$(printf '%s' "${line}" | sed -n 's/^bun "\(.*\)" %\*$/\1/p')
+    [[ -n "${win_path}" ]] || continue
+    local wsl_path
+    wsl_path=$(wslpath -u "${win_path}" 2>/dev/null || true)
+    if [[ -n "${wsl_path}" && -f "${wsl_path}" ]]; then
+      printf '%s\n' "${wsl_path}"
+      return 0
     fi
-  elif [[ -x "$bunx_exec" ]]; then
-    printf -v shim_cmd '"%s" --bun opencode-ai "$@"' "$bunx_exec"
-  elif command -v opencode >/dev/null 2>&1; then
-    shim_cmd='opencode "$@"'
+  done < <(find /mnt/c/Users -maxdepth 3 -type f -path '*/.bun/bin/ocs.cmd' 2>/dev/null)
+
+  return 1
+}
+
+install_ocs_shim_from_opencode() {
+  local bun_exec="${HOME}/.bun/bin/bun"
+  local ocs_js=""
+  local shim_cmd=""
+
+  if ! ocs_js="$(resolve_runtime_ocs_entry)"; then
+    warn "Unable to repair ocs shim because no OCS entrypoint was found."
+    return 1
+  fi
+
+  if [[ -x "$bun_exec" ]]; then
+    printf -v shim_cmd '"%s" "%s" "$@"' "$bun_exec" "$ocs_js"
+  else
+    printf -v shim_cmd 'bun "%s" "$@"' "$ocs_js"
   fi
 
   local bun_bin="${HOME}/.bun/bin"
@@ -1478,7 +1506,7 @@ ensure_ocs_command() {
   fi
 
   if install_ocs_shim_from_opencode; then
-    success "ocs shim via opencode install and verification passed."
+    success "ocs shim fallback from installed runtime and verification passed."
     return 0
   fi
 
