@@ -1177,7 +1177,7 @@ install_bun_global_with_retry() {
   local i
 
   for ((i=1; i<=attempts; i++)); do
-    start_progress_narration "install" "dependency-install"
+    start_progress_narration "install" "dependency-install" || true
     if bun install -g "$source_path" >/tmp/ocs-bun-global.err 2>&1; then
       stop_progress_narration
       return 0
@@ -1873,7 +1873,7 @@ install_dependencies_with_retry() {
   fi
 
   for ((i=1; i<=attempts; i++)); do
-    start_progress_narration "install" "dependency-install"
+    start_progress_narration "install" "dependency-install" || true
     if bun install --frozen-lockfile >/dev/null 2>&1; then
       stop_progress_narration
       local new_fingerprint
@@ -1886,7 +1886,7 @@ install_dependencies_with_retry() {
     fi
     stop_progress_narration
 
-    start_progress_narration "install" "dependency-install"
+    start_progress_narration "install" "dependency-install" || true
     if bun install >/tmp/ocs-bun-install.err 2>&1; then
       stop_progress_narration
       local new_fingerprint
@@ -2431,14 +2431,14 @@ main() {
     warn "Skipping auto setup because OCS_SKIP_AUTO_SETUP=1"
   else
     export OCS_SETUP_INSTALLER_MODE=1
-    start_progress_narration "install" "setup-profile"
+    start_progress_narration "install" "setup-profile" || true
     if bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}"; then
       stop_progress_narration
       success "Setup completed automatically (headless)."
     else
       stop_progress_narration
       warn "Headless setup failed. Falling back to interactive setup..."
-      start_progress_narration "install" "setup-profile"
+      start_progress_narration "install" "setup-profile" || true
       if ! bun "${setup_script}"; then
         stop_progress_narration
         error "Setup script failed."
