@@ -16,6 +16,27 @@ Everything else is intended to stay feature-parity identical. The difference is 
 - Choose `v3.0.0` if you specifically want the current local-plugin behavior.
 - Choose `latest` or pin `v3.1.0` if you want the direct-core behavior.
 
+Version surfaces are unified across setup and CLI commands: `ocs setup profile`, `ocs setup:profile:update`, `ocs --version`, and `ocs doctor` resolve the same bundled version contract.
+
+## POSIX bootstrap contract (installer lane)
+
+`install.sh` is the POSIX bootstrap owner for:
+
+- `apt`
+- `dnf`
+- `yum`
+- `pacman`
+- `zypper`
+- `apk`
+- `brew`
+
+It performs native Node-family bootstrap, activates PATH in the current shell, and persists PATH through `~/.config/opencode/shell/ocs-path.sh` sourced from primary `bash`/`zsh` profiles.
+
+Proof scope for this wave:
+
+- Runtime-proofed lanes: WSL `apt` and source-lane WSL execution.
+- macOS/Linux matrix coverage is broader than runtime-smoke proof in this wave; native macOS smoke remains pending.
+
 ## Why OCS
 
 - 🚀 **Fast start** — install, login, pick a profile, and ship.
@@ -74,6 +95,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.1.0"; ir
 ```
 
 > Use `pwsh` (PowerShell 7), not `powershell.exe` (5.1), for the smoothest install experience.
+
+If a new shell still cannot see `ocs` or `opencode`, run `ocs doctor` first and then `ocs doctor --fix` when remediation is offered.
 
 ## After Install (2 minutes)
 
@@ -145,6 +168,8 @@ Recommended daily profile:
 Public installer docs are intentionally lightweight (install/uninstall + onboarding).
 
 For deep technical docs (MCP setup, advanced runtime tuning, release-level details), use the **buyer repository README/docs**.
+
+This installer README is intentionally a separate channel from the buyer root README and should not be used as the buyer-source README replacement.
 
 ---
 

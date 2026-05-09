@@ -3,16 +3,63 @@
 # Supports 3 auth paths: gh CLI → GITHUB_TOKEN env → interactive prompt
 set -euo pipefail
 
-# Recover HOME when missing (can happen in some pipe-to-bash shells).
-if [[ -z "${HOME:-}" ]]; then
-  HOME="$(getent passwd "$(id -u)" | cut -d: -f6 2>/dev/null || true)"
-  if [[ -z "${HOME:-}" ]]; then
-    HOME="$(cd ~ 2>/dev/null && pwd || true)"
+home_dir_is_invalid() {
+  local home_dir="${1:-}"
+  if [[ -z "${home_dir}" ]]; then
+    return 0
   fi
-  if [[ -z "${HOME:-}" ]]; then
-    HOME="/tmp"
+
+  if [[ "${home_dir}" != /* ]]; then
+    return 0
   fi
+
+  if [[ "${home_dir}" == "/home" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+recover_home_dir() {
+  local recovered_home=""
+  recovered_home="$(getent passwd "$(id -u)" | cut -d: -f6 2>/dev/null || true)"
+  if [[ -z "${recovered_home}" ]]; then
+    recovered_home="$(cd ~ 2>/dev/null && pwd || true)"
+  fi
+  if [[ -z "${recovered_home}" ]]; then
+    recovered_home="/tmp"
+  fi
+
+  printf '%s\n' "${recovered_home}"
+}
+
+resolve_runtime_user_name() {
+  local runtime_user="${USER:-${LOGNAME:-}}"
+  if [[ -n "${runtime_user}" ]]; then
+    printf '%s\n' "${runtime_user}"
+    return 0
+  fi
+
+  runtime_user="$(id -un 2>/dev/null || true)"
+  if [[ -n "${runtime_user}" ]]; then
+    printf '%s\n' "${runtime_user}"
+  fi
+}
+
+# Recover HOME when missing or malformed (can happen in pipe-to-bash and WSL env contamination).
+if home_dir_is_invalid "${HOME:-}"; then
+  HOME="$(recover_home_dir)"
   export HOME
+fi
+
+if [[ -z "${USER:-}" ]]; then
+  USER="$(resolve_runtime_user_name)"
+  export USER
+fi
+
+if [[ -z "${LOGNAME:-}" && -n "${USER:-}" ]]; then
+  LOGNAME="${USER}"
+  export LOGNAME
 fi
 
 resolve_target_home_early() {
@@ -31,6 +78,11 @@ resolve_target_home_early() {
       printf '%s\n' "${sudo_home}"
       return 0
     fi
+  fi
+
+  if home_dir_is_invalid "${HOME:-}"; then
+    recover_home_dir
+    return 0
   fi
 
   printf '%s\n' "${HOME:-/tmp}"
@@ -518,6 +570,166 @@ detect_package_manager() {
   echo ""
 }
 
+supported_posix_package_managers() {
+  printf '%s\n' 'apt, dnf, yum, pacman, zypper, apk, brew'
+}
+
+is_macos_host() {
+  [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]
+}
+
+resolve_node_runtime_packages() {
+  case "$1" in
+    brew)
+      printf '%s\n' 'node'
+      ;;
+    apt)
+      printf '%s\n' 'NodeSource 22.x nodejs'
+      ;;
+    dnf|yum|pacman|zypper|apk)
+      printf '%s\n' 'nodejs npm'
+      ;;
+    *)
+      printf '%s\n' ''
+      ;;
+  esac
+}
+
+required_node_major_version() {
+  printf '%s\n' '22'
+}
+
+install_nodesource_node_runtime() {
+  local setup_tmp=""
+  local conflicting_packages=()
+  local package_name=""
+  setup_tmp="$(mktemp)"
+  trap '[[ -n "${setup_tmp:-}" ]] && rm -f "${setup_tmp}"' RETURN
+
+  while IFS= read -r package_name; do
+    [[ -n "${package_name}" ]] || continue
+    conflicting_packages+=("${package_name}")
+  done < <(
+    dpkg-query -W -f='${Package}\n' 2>/dev/null | grep -E '^(nodejs|npm|libnode-dev|libnode[0-9]+|nodejs-doc)$' || true
+  )
+
+  if [[ ${#conflicting_packages[@]} -gt 0 ]]; then
+    run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get remove -y "${conflicting_packages[@]}" || return 1
+    run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y || return 1
+  fi
+
+  curl -fsSL https://deb.nodesource.com/setup_22.x >"${setup_tmp}" || return 1
+  run_with_privilege env DEBIAN_FRONTEND=noninteractive bash "${setup_tmp}" || return 1
+  run_with_privilege env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y nodejs || return 1
+}
+
+resolve_local_node_version() {
+  local node_cmd
+  node_cmd="$(resolve_local_runtime_command_path node 2>/dev/null || true)"
+  [[ -n "${node_cmd}" ]] || return 1
+  "${node_cmd}" -p 'process.versions.node' 2>/dev/null | tr -d '\r\n'
+}
+
+local_node_runtime_meets_minimum() {
+  local version
+  local major
+  local required_major
+  version="$(resolve_local_node_version 2>/dev/null || true)"
+  [[ -n "${version}" ]] || return 1
+  major="${version%%.*}"
+  required_major="$(required_node_major_version)"
+  [[ "${major}" =~ ^[0-9]+$ ]] || return 1
+  [[ "${required_major}" =~ ^[0-9]+$ ]] || return 1
+  (( major >= required_major ))
+}
+
+error_missing_supported_package_manager() {
+  local subject="$1"
+
+  if is_macos_host; then
+    error "Cannot auto-install ${subject} on macOS because Homebrew is unavailable or not on PATH. Install Homebrew, then rerun install.sh."
+  fi
+
+  error "Cannot auto-install ${subject}: no supported package manager detected. Supported POSIX managers: $(supported_posix_package_managers)."
+}
+
+error_package_manager_bootstrap_failure() {
+  local pm="$1"
+  local subject="$2"
+  local packages="$3"
+
+  case "$pm" in
+    apt)
+      error "Failed to auto-install ${subject} via apt (${packages}). This POSIX bootstrap lane requires native package installation with sudo/root access before setup can continue."
+      ;;
+    dnf|yum|pacman|zypper|apk)
+      error "Failed to auto-install ${subject} via ${pm} (${packages}). This package-manager lane is supported only when native bootstrap succeeds, so install.sh stopped before setup and adjunct runtime work."
+      ;;
+    brew)
+      error "Failed to auto-install ${subject} via brew (${packages}). Ensure Homebrew is installed, healthy, and able to install native runtimes in this shell, then rerun install.sh."
+      ;;
+    *)
+      error "Failed to auto-install ${subject} via ${pm} (${packages})."
+      ;;
+  esac
+}
+
+error_pnpm_runtime_bootstrap_failure() {
+  local pm="$1"
+
+  case "$pm" in
+    apt)
+      error "Failed to bootstrap pnpm after native Node.js repair on apt. install.sh requires corepack or npm-based pnpm activation to succeed before setup continues."
+      ;;
+    dnf|yum|pacman|zypper|apk)
+      error "Failed to bootstrap pnpm after native Node.js repair on ${pm}. This package-manager lane is explicitly supported only when pnpm activation succeeds, so install.sh stopped before setup and adjunct runtime work."
+      ;;
+    brew)
+      error "Failed to bootstrap pnpm after native Homebrew Node.js repair. Ensure brew installed a working node/corepack toolchain, or rerun after native npm can install pnpm."
+      ;;
+    *)
+      error "Failed to bootstrap pnpm after native Node.js repair."
+      ;;
+  esac
+}
+
+report_rejected_cross_os_node_tools() {
+  local tool_name
+  local resolved_path
+  local debug_cross_os_runtime="${OCS_DEBUG_CROSS_OS_RUNTIME:-0}"
+
+  for tool_name in node npm pnpm corepack; do
+    resolved_path="$(command -v "${tool_name}" 2>/dev/null || true)"
+    [[ -n "${resolved_path}" ]] || continue
+    if is_windows_mounted_command_path "${resolved_path}"; then
+      if [[ "${debug_cross_os_runtime}" == "1" ]]; then
+        warn "Debug: filtered Windows-mounted ${tool_name} candidate at ${resolved_path}."
+      fi
+    fi
+  done
+}
+
+resolve_local_runtime_command_path() {
+  local command_name="$1"
+  local resolved_path=""
+
+  while IFS= read -r resolved_path; do
+    [[ -n "${resolved_path}" ]] || continue
+    if is_windows_mounted_command_path "${resolved_path}"; then
+      continue
+    fi
+    printf '%s\n' "${resolved_path}"
+    return 0
+  done < <(type -aP "${command_name}" 2>/dev/null || true)
+
+  resolved_path="$(command -v "${command_name}" 2>/dev/null || true)"
+  [[ -n "${resolved_path}" ]] || return 1
+  if is_windows_mounted_command_path "${resolved_path}"; then
+    return 1
+  fi
+  printf '%s\n' "${resolved_path}"
+}
+
 install_packages_auto() {
   local pm="$1"
   shift
@@ -559,7 +771,7 @@ ensure_shell_dependencies() {
   local total
   local idx=0
 
-  if ! command -v bun >/dev/null 2>&1; then
+  if ! command_is_usable_local_runtime bun; then
     required+=(unzip)
   fi
 
@@ -587,13 +799,13 @@ ensure_shell_dependencies() {
   local pm
   pm="$(detect_package_manager)"
   if [[ -z "$pm" ]]; then
-    error "Cannot auto-install dependencies (${missing[*]}): no supported package manager detected"
+    error_missing_supported_package_manager "dependencies (${missing[*]})"
   fi
 
   info "Attempting to auto-install dependencies via ${pm}..."
   info "Installing: ${missing[*]}"
   if ! install_packages_auto "$pm" "${missing[@]}"; then
-    error "Auto-install failed for dependencies (${missing[*]}). Please install them manually and rerun."
+    error_package_manager_bootstrap_failure "$pm" "dependencies" "${missing[*]}"
   fi
 
   local verify_total
@@ -667,6 +879,21 @@ normalize_path_entry() {
   printf '%s\n' "${entry}"
 }
 
+join_safe_env_path() {
+  local relative_path="$1"
+  local home_dir="${HOME}"
+
+  [[ -n "${relative_path}" ]] || return 1
+  [[ -n "${home_dir}" ]] || return 1
+
+  if [[ "${relative_path}" = /* ]]; then
+    printf '%s\n' "$(normalize_path_entry "${relative_path}")"
+    return 0
+  fi
+
+  printf '%s\n' "$(normalize_path_entry "${home_dir}/${relative_path}")"
+}
+
 resolve_primary_shell_profiles() {
   local shell_name
   shell_name="$(resolve_shell_name)"
@@ -715,7 +942,7 @@ resolve_binary_dir() {
   fi
 
   local resolved
-  resolved="$(command -v "$bin" 2>/dev/null || true)"
+  resolved="$(resolve_local_runtime_command_path "$bin" 2>/dev/null || true)"
   if [[ -z "$resolved" ]]; then
     return 1
   fi
@@ -733,9 +960,12 @@ collect_node_bin_entries() {
   )
   local prefix
   local bin_dir
+  local npm_cmd
+  local pnpm_cmd
 
-  if command -v npm >/dev/null 2>&1; then
-    prefix="$(npm config get prefix 2>/dev/null || true)"
+  if command_is_usable_local_runtime npm; then
+    npm_cmd="$(resolve_local_runtime_command_path npm 2>/dev/null || true)"
+    prefix="$("${npm_cmd}" config get prefix 2>/dev/null || true)"
     if [[ -n "$prefix" && "$prefix" != "undefined" && "$prefix" != "null" ]]; then
       entries+=("${prefix}/bin")
     fi
@@ -745,8 +975,9 @@ collect_node_bin_entries() {
     fi
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
-    prefix="$(pnpm config get prefix 2>/dev/null || true)"
+  if command_is_usable_local_runtime pnpm; then
+    pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+    prefix="$("${pnpm_cmd}" config get prefix 2>/dev/null || true)"
     if [[ -n "$prefix" && "$prefix" != "undefined" && "$prefix" != "null" ]]; then
       entries+=("${prefix}/bin")
     fi
@@ -798,6 +1029,10 @@ ensure_node_runtime_paths() {
     [[ -n "${entry}" ]] || continue
     entries+=("${entry}")
   done < <(collect_node_manager_bin_entries)
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    entries+=("${entry}")
+  done < <(collect_node_bin_entries)
 
   local path_prefix=""
   for entry in "${entries[@]}"; do
@@ -820,6 +1055,41 @@ ensure_node_runtime_paths() {
     export PATH="${path_prefix}:${PATH}"
     hash -r 2>/dev/null || true
   fi
+  ensure_native_node_tool_shims
+}
+
+ensure_native_npm_user_prefix() {
+  local npm_prefix="${HOME}/.npm-global"
+  mkdir -p "${npm_prefix}/bin"
+  export NPM_CONFIG_PREFIX="${npm_prefix}"
+  export npm_config_prefix="${npm_prefix}"
+  if [[ ":${PATH}:" != *":${npm_prefix}/bin:"* ]]; then
+    export PATH="${npm_prefix}/bin:${PATH}"
+  fi
+  hash -r 2>/dev/null || true
+}
+
+ensure_native_node_tool_shims() {
+  local target_dir="${NATIVE_BIN_DIR}"
+  local tool_name
+  local resolved_path
+  local shim_path
+
+  mkdir -p "${target_dir}" 2>/dev/null || true
+
+  for tool_name in node npm pnpm corepack; do
+    resolved_path="$(resolve_local_runtime_command_path "${tool_name}" 2>/dev/null || true)"
+    [[ -n "${resolved_path}" ]] || continue
+    shim_path="${target_dir}/${tool_name}"
+    cat >"${shim_path}" <<EOF
+#!/usr/bin/env bash
+exec "${resolved_path}" "\$@"
+EOF
+    chmod +x "${shim_path}" 2>/dev/null || true
+  done
+
+  export PATH="${target_dir}:${PATH}"
+  hash -r 2>/dev/null || true
 }
 
 is_windows_mounted_command_path() {
@@ -830,12 +1100,8 @@ is_windows_mounted_command_path() {
 command_is_usable_local_runtime() {
   local command_name="$1"
   local resolved_path
-  resolved_path="$(command -v "$command_name" 2>/dev/null || true)"
-  [[ -n "$resolved_path" ]] || return 1
-  if is_windows_mounted_command_path "$resolved_path"; then
-    return 1
-  fi
-  return 0
+  resolved_path="$(resolve_local_runtime_command_path "$command_name" 2>/dev/null || true)"
+  [[ -n "$resolved_path" ]]
 }
 
 ensure_text_file_exists_if_writable() {
@@ -964,7 +1230,7 @@ ensure_antigravity_oauth_integrity() {
   if (( needs_repair )); then
     info "Repairing final Antigravity OAuth visibility before installer exit..."
     export OCS_SETUP_INSTALLER_MODE=1
-    bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
+    "$(resolve_local_runtime_command_path bun)" "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
     unset OCS_SETUP_INSTALLER_MODE
     if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
       cp "${template_antigravity}" "${runtime_antigravity}"
@@ -1080,10 +1346,12 @@ install_opencode_official() {
 }
 
 install_opencode_bun_global() {
-  command -v bun >/dev/null 2>&1 || return 1
+  local bun_cmd
+  bun_cmd="$(resolve_local_runtime_command_path bun 2>/dev/null || true)"
+  [[ -n "${bun_cmd}" ]] || return 1
 
   info "Installing opencode-ai via bun global package..."
-  if ! bun add -g opencode-ai@latest >/tmp/ocs-opencode-bun-global.log 2>&1; then
+  if ! "${bun_cmd}" add -g opencode-ai@latest >/tmp/ocs-opencode-bun-global.log 2>&1; then
     warn "$(cat /tmp/ocs-opencode-bun-global.log 2>/dev/null || true)"
     return 1
   fi
@@ -1133,7 +1401,9 @@ ensure_opencode_command() {
 }
 
 ensure_nodejs_runtime() {
-  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  ensure_node_runtime_paths
+
+  if command_is_usable_local_runtime node && command_is_usable_local_runtime npm && local_node_runtime_meets_minimum; then
     return 0
   fi
 
@@ -1144,7 +1414,7 @@ ensure_nodejs_runtime() {
   info "Attempting to auto-install Node.js runtime via ${pm}..."
   case "$pm" in
     apt)
-      install_packages_auto "$pm" nodejs npm || return 1
+      install_nodesource_node_runtime || return 1
       ;;
     dnf|yum|zypper|apk)
       install_packages_auto "$pm" nodejs npm || return 1
@@ -1160,7 +1430,32 @@ ensure_nodejs_runtime() {
       ;;
   esac
 
-  command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1
+  ensure_node_runtime_paths
+  command_is_usable_local_runtime node && command_is_usable_local_runtime npm && local_node_runtime_meets_minimum
+}
+
+ensure_nodejs_runtime_or_stop() {
+  report_rejected_cross_os_node_tools
+
+  if ensure_nodejs_runtime; then
+    return 0
+  fi
+
+  local pm
+  pm="$(detect_package_manager)"
+  if [[ -z "$pm" ]]; then
+    error_missing_supported_package_manager "native Node.js runtime"
+  fi
+
+  local packages
+  packages="$(resolve_node_runtime_packages "${pm}")"
+  [[ -n "${packages}" ]] || packages="nodejs npm"
+  local detected_node_version
+  detected_node_version="$(resolve_local_node_version 2>/dev/null || true)"
+  if [[ -n "${detected_node_version}" ]]; then
+    error "Failed to provision a supported native Node.js runtime via ${pm}. Detected native node ${detected_node_version}, but install.sh requires Node >=$(required_node_major_version) before setup can continue."
+  fi
+  error_package_manager_bootstrap_failure "$pm" "native Node.js runtime" "${packages}"
 }
 
 ensure_pnpm_runtime() {
@@ -1168,39 +1463,61 @@ ensure_pnpm_runtime() {
 
   local pnpm_version
   local pnpm_log="/tmp/ocs-pnpm-install.log"
+  local pnpm_cmd
+  local npm_cmd
+  local corepack_cmd
   if [[ "${OCS_ENABLE_PNPM_AUTO_INSTALL:-1}" != "1" ]]; then
     warn "pnpm auto-install disabled (set OCS_ENABLE_PNPM_AUTO_INSTALL=1 to enable)."
     return 1
   fi
 
   if command_is_usable_local_runtime pnpm; then
-    pnpm_version="$(pnpm --version 2>/dev/null || true)"
+    pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+    pnpm_version="$(${pnpm_cmd} --version 2>/dev/null || true)"
     info "pnpm already available: ${pnpm_version:-unknown version}."
     return 0
   fi
 
+  if ! command_is_usable_local_runtime node || ! command_is_usable_local_runtime npm || ! local_node_runtime_meets_minimum; then
+    info "Native Node.js runtime incomplete. Repairing node/npm before pnpm bootstrap..."
+    if ! ensure_nodejs_runtime; then
+      warn "Native Node.js runtime unavailable; pnpm auto-install skipped."
+      return 1
+    fi
+    ensure_node_runtime_paths
+  fi
+
   rm -f "$pnpm_log" >/dev/null 2>&1 || true
 
-  if command -v corepack >/dev/null 2>&1; then
+  if command_is_usable_local_runtime corepack; then
+    corepack_cmd="$(resolve_local_runtime_command_path corepack 2>/dev/null || true)"
     info "Enabling pnpm via corepack..."
-    if corepack enable pnpm >>"$pnpm_log" 2>&1; then
-      corepack prepare pnpm@latest --activate >>"$pnpm_log" 2>&1 || true
+    if "${corepack_cmd}" enable pnpm >>"$pnpm_log" 2>&1; then
+      "${corepack_cmd}" prepare pnpm@10 --activate >>"$pnpm_log" 2>&1 || true
     else
       warn "corepack enable pnpm failed. See $pnpm_log for details."
     fi
 
     if command_is_usable_local_runtime pnpm; then
-      pnpm_version="$(pnpm --version 2>/dev/null || true)"
+      pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+      pnpm_version="$(${pnpm_cmd} --version 2>/dev/null || true)"
       success "pnpm ${pnpm_version:-available via corepack}."
       return 0
     fi
   fi
 
   if command_is_usable_local_runtime npm; then
+    npm_cmd="$(resolve_local_runtime_command_path npm 2>/dev/null || true)"
     info "Installing pnpm via npm global install..."
-    if npm install -g pnpm >>"$pnpm_log" 2>&1; then
+    ensure_native_npm_user_prefix
+    if env NPM_CONFIG_PREFIX="${NPM_CONFIG_PREFIX}" npm_config_prefix="${npm_config_prefix}" "${npm_cmd}" install -g pnpm@10 >>"$pnpm_log" 2>&1; then
+      ensure_node_runtime_paths
       if command_is_usable_local_runtime pnpm; then
-        pnpm_version="$(pnpm --version 2>/dev/null || true)"
+        pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+        pnpm_version="$(${pnpm_cmd} --version 2>/dev/null || true)"
+        ensure_native_node_tool_shims
+        ensure_shell_path_priority
+        source_shell_path_priority
         success "pnpm ${pnpm_version:-installed via npm}."
         return 0
       fi
@@ -1212,7 +1529,8 @@ ensure_pnpm_runtime() {
   fi
 
   if command_is_usable_local_runtime pnpm; then
-    pnpm_version="$(pnpm --version 2>/dev/null || true)"
+    pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+    pnpm_version="$(${pnpm_cmd} --version 2>/dev/null || true)"
     success "pnpm ${pnpm_version:-available}."
     return 0
   fi
@@ -1221,17 +1539,41 @@ ensure_pnpm_runtime() {
   return 1
 }
 
+ensure_pnpm_runtime_or_stop() {
+  if ensure_pnpm_runtime; then
+    return 0
+  fi
+
+  local pm
+  pm="$(detect_package_manager)"
+  if [[ -z "$pm" ]]; then
+    error_missing_supported_package_manager "pnpm runtime bootstrap"
+  fi
+
+  error_pnpm_runtime_bootstrap_failure "$pm"
+}
+
+ensure_posix_bootstrap_prerequisites() {
+  ensure_nodejs_runtime_or_stop
+  ensure_pnpm_runtime || true
+  ensure_pnpm_runtime_or_stop
+  ensure_shell_path_priority
+  source_shell_path_priority
+}
+
 install_opencode_npm_global() {
-  command -v npm >/dev/null 2>&1 || return 1
+  command_is_usable_local_runtime npm || return 1
+  local npm_cmd
+  npm_cmd="$(resolve_local_runtime_command_path npm 2>/dev/null || true)"
 
   info "Installing opencode-ai globally via npm..."
-  if ! npm install -g opencode-ai@latest >/tmp/ocs-opencode-npm.err 2>&1; then
+  if ! "${npm_cmd}" install -g opencode-ai@latest >/tmp/ocs-opencode-npm.err 2>&1; then
     warn "$(cat /tmp/ocs-opencode-npm.err 2>/dev/null || true)"
     return 1
   fi
 
   local npm_prefix
-  npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+  npm_prefix="$("${npm_cmd}" config get prefix 2>/dev/null || true)"
   if [[ -n "$npm_prefix" && -d "$npm_prefix/bin" ]]; then
     export PATH="$npm_prefix/bin:${PATH}"
   fi
@@ -1243,10 +1585,14 @@ install_bun_global_with_retry() {
   local source_path="$1"
   local attempts=5
   local i
+  local bun_cmd
+
+  bun_cmd="$(resolve_local_runtime_command_path bun 2>/dev/null || true)"
+  [[ -n "${bun_cmd}" ]] || return 1
 
   for ((i=1; i<=attempts; i++)); do
     start_progress_narration "install" "dependency-install" || true
-    if bun install -g "$source_path" >/tmp/ocs-bun-global.err 2>&1; then
+    if "${bun_cmd}" install -g "$source_path" >/tmp/ocs-bun-global.err 2>&1; then
       stop_progress_narration
       return 0
     fi
@@ -1283,9 +1629,11 @@ install_ocs_from_path() {
     ocs_works && return 0
   fi
 
-  if command -v npm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime npm; then
+    local npm_cmd
+    npm_cmd="$(resolve_local_runtime_command_path npm 2>/dev/null || true)"
     warn "bun global install failed, trying npm global install..."
-    if npm install -g "$source_path" >/tmp/ocs-npm-global.err 2>&1; then
+    if "${npm_cmd}" install -g "$source_path" >/tmp/ocs-npm-global.err 2>&1; then
       if [[ -d "${HOME}/.bun/bin" ]]; then
         export PATH="${HOME}/.bun/bin:${PATH}"
       fi
@@ -1295,9 +1643,11 @@ install_ocs_from_path() {
     fi
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime pnpm; then
+    local pnpm_cmd
+    pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
     warn "npm fallback unavailable/failed, trying pnpm global install..."
-    if pnpm add -g "$source_path" >/tmp/ocs-pnpm-global.err 2>&1; then
+    if "${pnpm_cmd}" add -g "$source_path" >/tmp/ocs-pnpm-global.err 2>&1; then
       if [[ -d "${HOME}/.bun/bin" ]]; then
         export PATH="${HOME}/.bun/bin:${PATH}"
       fi
@@ -1669,28 +2019,6 @@ ensure_shell_path_priority() {
       warn "Cannot write to shell profile ${profile}. Current-session PATH is active, but persistence was skipped."
     fi
   done < <(resolve_primary_shell_profiles)
-
-  local fish_cfg="${HOME}/.config/fish/config.fish"
-  local fish_args=""
-  for entry in "${unique_entries[@]}"; do
-    fish_args="${fish_args} ${entry}"
-  done
-  fish_args="${fish_args# }"
-  local fish_line=""
-  if [[ -n "$fish_args" ]]; then
-    fish_line="fish_add_path -m ${fish_args}"
-  fi
-
-  if [[ "${shell_name}" == "fish" || -f "$fish_cfg" ]]; then
-    mkdir -p "$(dirname "$fish_cfg")" 2>/dev/null || true
-    if [[ -n "$fish_line" ]] && ensure_text_file_exists_if_writable "$fish_cfg"; then
-      if ! grep -Fq "$fish_line" "$fish_cfg"; then
-        printf '\n# OCS installer path\n%s\n' "$fish_line" >> "$fish_cfg"
-      fi
-    elif [[ -n "$fish_line" ]]; then
-      warn "Cannot write to fish config at ${fish_cfg}."
-    fi
-  fi
 }
 
 source_shell_path_priority() {
@@ -1790,9 +2118,15 @@ ensure_pnpm_command() {
 
   info "pnpm not found. Bootstrapping pnpm via corepack/npm..."
   local bootstraped=false
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable >/tmp/ocs-corepack-enable.err 2>&1 || true
-    if corepack prepare pnpm@latest --activate >/tmp/ocs-corepack-pnpm.err 2>&1; then
+  local npm_cmd=""
+  local pnpm_cmd=""
+  local corepack_cmd=""
+  if command_is_usable_local_runtime corepack; then
+    corepack_cmd="$(resolve_local_runtime_command_path corepack 2>/dev/null || true)"
+    if [[ -n "${corepack_cmd}" ]]; then
+      "${corepack_cmd}" enable >/tmp/ocs-corepack-enable.err 2>&1 || true
+    fi
+    if [[ -n "${corepack_cmd}" ]] && "${corepack_cmd}" prepare pnpm@10 --activate >/tmp/ocs-corepack-pnpm.err 2>&1; then
       bootstraped=true
     else
       warn "corepack pnpm preparation failed: $(cat /tmp/ocs-corepack-pnpm.err 2>/dev/null || true)"
@@ -1800,13 +2134,16 @@ ensure_pnpm_command() {
   fi
 
   if [[ "${bootstraped}" != "true" ]] && command_is_usable_local_runtime npm; then
+    npm_cmd="$(resolve_local_runtime_command_path npm 2>/dev/null || true)"
     info "Attempting npm install -g pnpm..."
-    if npm install -g pnpm >/tmp/ocs-pnpm-npm.err 2>&1; then
+    ensure_native_npm_user_prefix
+    if [[ -n "${npm_cmd}" ]] && env NPM_CONFIG_PREFIX="${NPM_CONFIG_PREFIX}" npm_config_prefix="${npm_config_prefix}" "${npm_cmd}" install -g pnpm@10 >/tmp/ocs-pnpm-npm.err 2>&1; then
       local npm_prefix
-      npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+      npm_prefix="$("${npm_cmd}" config get prefix 2>/dev/null || true)"
       if [[ -n "${npm_prefix}" && -d "${npm_prefix}/bin" ]]; then
         export PATH="${npm_prefix}/bin:${PATH}"
       fi
+      ensure_node_runtime_paths
       hash -r 2>/dev/null || true
       bootstraped=true
     else
@@ -1815,6 +2152,13 @@ ensure_pnpm_command() {
   fi
 
   if command_is_usable_local_runtime pnpm; then
+    pnpm_cmd="$(resolve_local_runtime_command_path pnpm 2>/dev/null || true)"
+    if [[ -n "${pnpm_cmd}" ]]; then
+      "${pnpm_cmd}" --version >/dev/null 2>&1 || true
+    fi
+    ensure_native_node_tool_shims
+    ensure_shell_path_priority
+    source_shell_path_priority
     success "pnpm ready for agent/tooling workflows."
     return 0
   fi
@@ -2475,10 +2819,13 @@ install_bun() {
     export PATH="${HOME}/.local/bin:${PATH}"
   fi
   
-  if ! command -v bun &>/dev/null; then
+  if ! command_is_usable_local_runtime bun; then
     error "Bun installation failed or not found in PATH. Please install manually at https://bun.sh"
   fi
-  success "Bun $(bun --version) installed successfully"
+
+  local bun_cmd
+  bun_cmd="$(resolve_local_runtime_command_path bun)"
+  success "Bun $(${bun_cmd} --version) installed successfully"
 }
 
 cleanup_runtime_plugins_dir() {
@@ -2510,12 +2857,14 @@ main() {
   ensure_shell_dependencies
 
   # Bun version check
-  if ! command -v bun &>/dev/null; then
+  if ! command_is_usable_local_runtime bun; then
     install_bun
   fi
 
+  local bun_cmd
+  bun_cmd="$(resolve_local_runtime_command_path bun)"
   local bun_version
-  bun_version="$(bun --version)"
+  bun_version="$(${bun_cmd} --version)"
   local bun_major
   bun_major="$(echo "${bun_version}" | cut -d. -f1)"
   if [[ "${bun_major}" -lt 1 ]]; then
@@ -2639,8 +2988,7 @@ main() {
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
   enable_legacy_shell_fallbacks
-  ensure_pnpm_runtime || true
-  ensure_shell_path_priority
+  ensure_posix_bootstrap_prerequisites
   ensure_agent_dependency_runtime
   source_shell_path_priority
 
@@ -2672,8 +3020,7 @@ main() {
   fi
 
   enable_legacy_shell_fallbacks
-  ensure_pnpm_runtime || true
-  ensure_shell_path_priority
+  ensure_posix_bootstrap_prerequisites
   ensure_agent_dependency_runtime
   source_shell_path_priority
   hash -r 2>/dev/null || true
