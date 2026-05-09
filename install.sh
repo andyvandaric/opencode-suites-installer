@@ -1340,10 +1340,10 @@ install_ocs_shim_from_bundle() {
   local ocs_js=""
   local candidate
   local candidates=(
-    "${root_path}/bin/ocs.cjs"
-    "${root_path}/bin/ocs.js"
     "${plugin_path}/bin/ocs.cjs"
     "${plugin_path}/bin/ocs.js"
+    "${root_path}/bin/ocs.cjs"
+    "${root_path}/bin/ocs.js"
   )
 
   if [[ -z "$root_path" ]]; then
@@ -1563,6 +1563,11 @@ ensure_ocs_command() {
     fi
   fi
 
+  if install_ocs_shim_from_opencode; then
+    success "ocs shim refreshed from installed runtime and verification passed."
+    return 0
+  fi
+
   if install_ocs_shim_from_bundle "$plugin_dir" "$root_dir"; then
     success "ocs shim install and verification passed."
     return 0
@@ -1570,11 +1575,6 @@ ensure_ocs_command() {
 
   if ocs_works; then
     info "ocs verification passed."
-    return 0
-  fi
-
-  if install_ocs_shim_from_opencode; then
-    success "ocs shim fallback from installed runtime and verification passed."
     return 0
   fi
 
