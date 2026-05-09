@@ -1144,6 +1144,9 @@ ensure_native_node_tool_shims() {
     resolved_path="$(resolve_local_runtime_command_path "${tool_name}" 2>/dev/null || true)"
     [[ -n "${resolved_path}" ]] || continue
     shim_path="${target_dir}/${tool_name}"
+    if [[ "${resolved_path}" == "${shim_path}" ]]; then
+      continue
+    fi
     cat >"${shim_path}" <<EOF
 #!/usr/bin/env bash
 exec "${resolved_path}" "\$@"
