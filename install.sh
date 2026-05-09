@@ -822,6 +822,22 @@ ensure_node_runtime_paths() {
   fi
 }
 
+is_windows_mounted_command_path() {
+  local resolved_path="$1"
+  [[ -n "$resolved_path" && "$resolved_path" == /mnt/[A-Za-z]/* ]]
+}
+
+command_is_usable_local_runtime() {
+  local command_name="$1"
+  local resolved_path
+  resolved_path="$(command -v "$command_name" 2>/dev/null || true)"
+  [[ -n "$resolved_path" ]] || return 1
+  if is_windows_mounted_command_path "$resolved_path"; then
+    return 1
+  fi
+  return 0
+}
+
 ensure_text_file_exists_if_writable() {
   local file_path="$1"
   local parent_dir
@@ -965,24 +981,66 @@ ensure_antigravity_oauth_integrity() {
 }
 
 opencode_works() {
-  command -v opencode >/dev/null 2>&1 || return 1
+  local bun_bin local_bin opencode_cmd
+  bun_bin="$(join_safe_env_path '.bun/bin')"
+  local_bin="$(join_safe_env_path '.local/bin')"
+
+  if [[ -x "${bun_bin}/opencode" ]]; then
+    opencode_cmd="${bun_bin}/opencode"
+  elif [[ -x "${local_bin}/opencode" ]]; then
+    opencode_cmd="${local_bin}/opencode"
+  else
+    opencode_cmd="$(command -v opencode 2>/dev/null || true)"
+  fi
+
+  [[ -n "$opencode_cmd" ]] || return 1
 
   if command -v timeout >/dev/null 2>&1; then
-    timeout 8 opencode --version >/dev/null 2>&1 || timeout 8 opencode --help >/dev/null 2>&1 || return 1
+    timeout 8 "$opencode_cmd" --version >/dev/null 2>&1 || return 1
+    local help_output
+    help_output="$(timeout 8 "$opencode_cmd" --help 2>/dev/null)" || return 1
+    grep -q "Usage: oh-my-opencode" <<<"$help_output" && return 1
+    grep -q "The ultimate OpenCode plugin" <<<"$help_output" && return 1
     return 0
   fi
 
   return 0
 }
 
+resolve_opencode_native_binary() {
+  local candidates=(
+    "${HOME}/.opencode/bin/opencode"
+    "${HOME}/.opencode/bin/opencode.exe"
+    "${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode"
+    "${HOME}/.bun/install/global/node_modules/opencode-ai/bin/.opencode.exe"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 install_opencode_shim() {
   local bun_bin="${HOME}/.bun/bin"
   local local_bin="${HOME}/.local/bin"
+  local bun_exec="${HOME}/.bun/bin/bun"
   local bunx_exec="${HOME}/.bun/bin/bunx"
+  local native_binary
   mkdir -p "$bun_bin" "$local_bin"
+
+  native_binary="$(resolve_opencode_native_binary || true)"
 
 cat > "${bun_bin}/opencode" <<EOF
 #!/usr/bin/env bash
+if [[ -n "$native_binary" ]] && [[ -x "$native_binary" ]]; then
+  exec "$native_binary" "\$@"
+fi
 if [[ -x "$bunx_exec" ]]; then
   exec "$bunx_exec" --bun opencode-ai "\$@"
 fi
@@ -992,6 +1050,9 @@ EOF
 
 cat > "${local_bin}/opencode" <<EOF
 #!/usr/bin/env bash
+if [[ -n "$native_binary" ]] && [[ -x "$native_binary" ]]; then
+  exec "$native_binary" "\$@"
+fi
 if [[ -x "$bunx_exec" ]]; then
   exec "$bunx_exec" --bun opencode-ai "\$@"
 fi
@@ -1037,13 +1098,20 @@ ensure_opencode_command() {
     return 0
   fi
 
+  finalize_opencode_repair() {
+    install_opencode_shim >/dev/null 2>&1 || true
+    export PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${HOME}/.bun/bin:${PATH}"
+    hash -r 2>/dev/null || true
+    opencode_works
+  }
+
   warn "opencode command not healthy. Trying official installer..."
-  if install_opencode_official && opencode_works; then
+  if install_opencode_official && finalize_opencode_repair; then
     return 0
   fi
 
   warn "official installer did not recover opencode. Trying bun global install..."
-  if install_opencode_bun_global && opencode_works; then
+  if install_opencode_bun_global && finalize_opencode_repair; then
     return 0
   fi
 
@@ -1105,7 +1173,7 @@ ensure_pnpm_runtime() {
     return 1
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime pnpm; then
     pnpm_version="$(pnpm --version 2>/dev/null || true)"
     info "pnpm already available: ${pnpm_version:-unknown version}."
     return 0
@@ -1121,17 +1189,17 @@ ensure_pnpm_runtime() {
       warn "corepack enable pnpm failed. See $pnpm_log for details."
     fi
 
-    if command -v pnpm >/dev/null 2>&1; then
+    if command_is_usable_local_runtime pnpm; then
       pnpm_version="$(pnpm --version 2>/dev/null || true)"
       success "pnpm ${pnpm_version:-available via corepack}."
       return 0
     fi
   fi
 
-  if command -v npm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime npm; then
     info "Installing pnpm via npm global install..."
     if npm install -g pnpm >>"$pnpm_log" 2>&1; then
-      if command -v pnpm >/dev/null 2>&1; then
+      if command_is_usable_local_runtime pnpm; then
         pnpm_version="$(pnpm --version 2>/dev/null || true)"
         success "pnpm ${pnpm_version:-installed via npm}."
         return 0
@@ -1143,7 +1211,7 @@ ensure_pnpm_runtime() {
     warn "npm command not available; pnpm auto-install skipped."
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime pnpm; then
     pnpm_version="$(pnpm --version 2>/dev/null || true)"
     success "pnpm ${pnpm_version:-available}."
     return 0
@@ -1715,7 +1783,7 @@ ensure_agent_dependency_runtime() {
 }
 
 ensure_pnpm_command() {
-  if command -v pnpm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime pnpm; then
     info "pnpm already available."
     return 0
   fi
@@ -1731,7 +1799,7 @@ ensure_pnpm_command() {
     fi
   fi
 
-  if [[ "${bootstraped}" != "true" ]] && command -v npm >/dev/null 2>&1; then
+  if [[ "${bootstraped}" != "true" ]] && command_is_usable_local_runtime npm; then
     info "Attempting npm install -g pnpm..."
     if npm install -g pnpm >/tmp/ocs-pnpm-npm.err 2>&1; then
       local npm_prefix
@@ -1746,7 +1814,7 @@ ensure_pnpm_command() {
     fi
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
+  if command_is_usable_local_runtime pnpm; then
     success "pnpm ready for agent/tooling workflows."
     return 0
   fi
@@ -1759,7 +1827,7 @@ ensure_system_command_links() {
   local target_dir="/usr/local/bin"
   local cmd source_path target_path current_target
 
-  for cmd in ocs opencode ccc; do
+  for cmd in ocs opencode; do
     source_path=""
     if [[ -x "${HOME}/.local/bin/${cmd}" ]]; then
       source_path="${HOME}/.local/bin/${cmd}"
@@ -1791,6 +1859,64 @@ ensure_system_command_links() {
   done
 
   hash -r 2>/dev/null || true
+}
+
+resolve_supported_cocoindex_python() {
+  local candidate
+
+  for candidate in python3.13 python3.12 python3.11 python3 python; do
+    command -v "${candidate}" >/dev/null 2>&1 || continue
+    if "${candidate}" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+      command -v "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+repair_recursive_cocoindex_shim() {
+  local local_ccc="${HOME}/.local/bin/ccc"
+  local system_ccc="/usr/local/bin/ccc"
+  local current_target=""
+  local python_cmd=""
+
+  if [[ -L "${system_ccc}" ]]; then
+    current_target="$(readlink "${system_ccc}" 2>/dev/null || true)"
+    if [[ "${current_target}" == "${local_ccc}" ]]; then
+      if [[ -w "$(dirname "${system_ccc}")" ]]; then
+        rm -f "${system_ccc}" || true
+      elif run_with_privilege rm -f "${system_ccc}"; then
+        :
+      else
+        info "Cannot remove recursive ${system_ccc} system link automatically. Continuing with local shim repair."
+      fi
+    fi
+  fi
+
+  if [[ ! -f "${local_ccc}" ]]; then
+    return 0
+  fi
+
+  if ! grep -Fq 'exec "/usr/local/bin/ccc" "$@"' "${local_ccc}" && \
+     ! grep -Fq "exec \"${local_ccc}\" \"\$@\"" "${local_ccc}"; then
+    return 0
+  fi
+
+  python_cmd="$(resolve_supported_cocoindex_python || true)"
+  if [[ -z "${python_cmd}" ]]; then
+    warn "Unable to repair recursive ccc shim automatically because Python 3.11+ is unavailable."
+    return 1
+  fi
+
+  mkdir -p "${HOME}/.local/bin"
+  cat > "${local_ccc}" <<EOF
+#!/bin/sh
+exec "${python_cmd}" -m cocoindex_code.cli "\$@"
+EOF
+  chmod +x "${local_ccc}"
+  hash -r 2>/dev/null || true
+  success "Repaired recursive local ccc shim to use ${python_cmd}."
 }
 
 is_lock_error() {
@@ -2259,6 +2385,79 @@ verify_sha256() {
   success "Checksum verification passed"
 }
 
+read_installed_plugin_version() {
+  local plugin_dir="$1"
+  local package_json="${plugin_dir}/package.json"
+
+  [[ -f "${package_json}" ]] || return 0
+
+  grep -o '"version": *"[^"]*"' "${package_json}" 2>/dev/null | head -1 | cut -d '"' -f4
+}
+
+installed_same_version_skip_is_trusted() {
+  local requested_version="$1"
+  local plugin_dir="$2"
+  local config_root="$3"
+  local provenance_file="${config_root}/BUILD_PROVENANCE.json"
+  local installed_version=""
+  local provenance_summary=""
+  local provenance_version=""
+  local provenance_git_tag=""
+  local provenance_is_dirty=""
+
+  installed_version="$(read_installed_plugin_version "${plugin_dir}")"
+  if [[ -z "${installed_version}" ]]; then
+    info "Identity unknown: unable to read installed plugin version from ${plugin_dir}/package.json."
+    return 1
+  fi
+
+  if [[ "${installed_version}" != "${requested_version}" ]]; then
+    info "Identity unknown: installed plugin version v${installed_version} does not match requested v${requested_version}."
+    return 1
+  fi
+
+  if [[ ! -f "${provenance_file}" ]]; then
+    info "Skip denied: missing installed provenance at ${provenance_file}; identity is unknown."
+    return 1
+  fi
+
+  if ! provenance_summary="$(PROVENANCE_FILE="${provenance_file}" bun -e '
+    const provenanceFile = process.env.PROVENANCE_FILE
+    try {
+      const data = JSON.parse(await Bun.file(provenanceFile).text())
+      const version = typeof data.version === "string" ? data.version : ""
+      const gitTag = typeof data?.source?.gitTag === "string" ? data.source.gitTag : ""
+      const isDirty = data?.source?.isDirty === true ? "true" : data?.source?.isDirty === false ? "false" : ""
+      process.stdout.write([version, gitTag, isDirty].join("\t"))
+    } catch {
+      process.exit(1)
+    }
+  ')"; then
+    info "Skip denied: provenance file at ${provenance_file} is unreadable or malformed; identity is unknown."
+    return 1
+  fi
+
+  IFS=$'\t' read -r provenance_version provenance_git_tag provenance_is_dirty <<< "${provenance_summary}"
+
+  if [[ "${provenance_version}" != "${requested_version}" ]]; then
+    info "Identity unknown: provenance version ${provenance_version:-<missing>} does not match requested v${requested_version}."
+    return 1
+  fi
+
+  if [[ "${provenance_git_tag}" != "v${requested_version}" ]]; then
+    info "Identity unknown: provenance gitTag ${provenance_git_tag:-<missing>} does not match expected v${requested_version}."
+    return 1
+  fi
+
+  if [[ "${provenance_is_dirty}" != "false" ]]; then
+    info "Identity unknown: provenance source.isDirty=${provenance_is_dirty:-<missing>} is not clean."
+    return 1
+  fi
+
+  info "Trusted installed provenance accepted from ${provenance_file} (version v${requested_version}, tag v${requested_version}, clean tree)."
+  return 0
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 # ─── Bun installation ───────────────────────────────────────────────────────────
 install_bun() {
@@ -2309,7 +2508,6 @@ main() {
   echo "────────────────────────────────────────"
 
   ensure_shell_dependencies
-  cleanup_runtime_plugins_dir
 
   # Bun version check
   if ! command -v bun &>/dev/null; then
@@ -2333,6 +2531,7 @@ main() {
   local force_local_source="${OCS_FORCE_LOCAL_SOURCE:-0}"
   local local_bundle_path="${OCS_LOCAL_BUNDLE_PATH:-}"
   local resolved_local_bundle=""
+  local installed_version=""
   is_local_source=false
   if [[ "${force_local_source}" == "1" ]]; then
     if [[ -f "${root_dir}/plugins/opencode-multi-auth/package.json" && -f "${root_dir}/scripts/setup.js" && -f "${root_dir}/scripts/constants/profile-catalog.json" && -d "${root_dir}/configs" ]]; then
@@ -2347,6 +2546,22 @@ main() {
     resolved_local_bundle="$(resolve_absolute_path_safe "${local_bundle_path}")"
     [[ -f "${resolved_local_bundle}" ]] || error "OCS_LOCAL_BUNDLE_PATH not found: ${local_bundle_path}"
   fi
+
+  if [[ -z "${resolved_local_bundle}" && "${is_local_source}" != "true" && -n "${REQUESTED_VERSION}" ]]; then
+    installed_version="$(read_installed_plugin_version "${PLUGIN_DIR}")"
+    if [[ -n "${installed_version}" && "${installed_version}" == "${REQUESTED_VERSION}" ]]; then
+      if installed_same_version_skip_is_trusted "${REQUESTED_VERSION}" "${PLUGIN_DIR}" "${CONFIG_ROOT}"; then
+        info "Requested version v${REQUESTED_VERSION} is already installed at ${PLUGIN_DIR}."
+        info "Trusted installed identity was detected, but the normal installer path will still purge and refresh plugin payloads so same-version patches land correctly."
+      else
+        info "Same-version installed payload found, but trusted identity was not established; continuing with the normal purge-and-refresh path."
+      fi
+    fi
+  fi
+
+  info "Resolved installer target root: ${CONFIG_ROOT}"
+  info "Resolved installer plugin dir: ${PLUGIN_DIR}"
+  cleanup_runtime_plugins_dir
 
   local token=""
   if [[ -n "${resolved_local_bundle}" ]]; then
@@ -2369,6 +2584,7 @@ main() {
   fi
 
   echo ""
+  local version="${installed_version}"
   info "Preparing plugin bundle source..."
   local tar_filename="plugin-bundle.tar.gz"
   local tar_path="${TMP_DIR}/${tar_filename}"
@@ -2399,17 +2615,18 @@ main() {
   cp -R "${plugin_source_dir}/." "${PLUGIN_DIR}/"
   sync_bundle_runtime_root "${plugin_source_dir}" "${CONFIG_ROOT}"
 
-  local version
   version="$(grep -o '"version": *"[^"]*"' "${plugin_source_dir}/package.json" | head -1 | cut -d '"' -f4)"
   [[ -n "${version}" ]] || version="${GITHUB_SOURCE_BRANCH}"
 
+  [[ -n "${version}" ]] || version="${GITHUB_SOURCE_BRANCH}"
+
   echo ""
-  info "Installing dependencies..."
   if [[ "${is_local_source}" == "true" ]]; then
     PLUGIN_DIR="${root_dir}/plugins/opencode-multi-auth"
   fi
 
   cd "${PLUGIN_DIR}"
+  info "Installing dependencies..."
   install_dependencies_with_retry "${PLUGIN_DIR}" || error "Dependency installation failed after retries."
 
   echo ""
@@ -2422,7 +2639,7 @@ main() {
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
   enable_legacy_shell_fallbacks
-  ensure_pnpm_runtime
+  ensure_pnpm_runtime || true
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
   source_shell_path_priority
@@ -2455,7 +2672,7 @@ main() {
   fi
 
   enable_legacy_shell_fallbacks
-  ensure_pnpm_runtime
+  ensure_pnpm_runtime || true
   ensure_shell_path_priority
   ensure_agent_dependency_runtime
   source_shell_path_priority
@@ -2480,6 +2697,7 @@ else
 fi
 
 ensure_system_command_links
+repair_recursive_cocoindex_shim || true
 source_shell_path_priority
 hash -r 2>/dev/null || true
 
@@ -2487,17 +2705,14 @@ ensure_adjunct_runtime_ready
 
 if opencode_works; then
   info "opencode verification passed."
-elif install_opencode_shim && opencode_works; then
-  info "opencode shim installed and verification passed."
-elif [[ "${OCS_ENABLE_OPENCODE_AUTO_RECOVERY:-0}" == "1" ]]; then
-  warn "opencode command not healthy. Auto-recovery enabled; attempting repair..."
-  if ! ensure_opencode_command; then
-    warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
-  fi
 else
-  warn "opencode command check failed. Skipping heavy auto-recovery to avoid long waits."
-  info "Manual check: opencode --version"
-  info "To force auto-recovery on rerun: OCS_ENABLE_OPENCODE_AUTO_RECOVERY=1"
+  warn "opencode command not healthy. Attempting automatic repair..."
+  if ensure_opencode_command; then
+    info "opencode repair and verification passed."
+  else
+    warn "opencode command is still unavailable. Install Node.js or ensure bunx can run opencode-ai."
+    info "Manual check: opencode --version"
+  fi
 fi
 
 ensure_antigravity_oauth_integrity "${setup_script}"
