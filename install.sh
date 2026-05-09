@@ -136,6 +136,15 @@ resolve_path_contract_target_config_dir() {
   printf '%s/opencode\n' "$(resolve_path_contract_config_home)"
 }
 
+resolve_path_contract_shell_config_home() {
+  if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "${XDG_CONFIG_HOME}"
+    return 0
+  fi
+
+  printf '%s/.config\n' "$(resolve_path_contract_home_dir)"
+}
+
 resolve_path_contract_native_bin_dir() {
   printf '%s/.opencode/bin\n' "$(resolve_path_contract_home_dir)"
 }
@@ -153,7 +162,7 @@ resolve_path_contract_token_file() {
 }
 
 resolve_path_contract_shell_snippet_dir() {
-  printf '%s/shell\n' "$(resolve_path_contract_target_config_dir)"
+  printf '%s/opencode/shell\n' "$(resolve_path_contract_shell_config_home)"
 }
 
 resolve_path_contract_shell_snippet_path() {
@@ -277,7 +286,6 @@ progress_narration_enabled() {
   [[ "${OCS_PROGRESS_TEXT:-1}" != "0" ]] || return 1
   [[ "${OCS_QUIET:-0}" != "1" ]] || return 1
   [[ "${CI:-}" != "true" ]] || return 1
-  [[ -t 1 ]] || return 1
 }
 
 start_progress_narration() {
@@ -929,10 +937,65 @@ resolve_primary_shell_profiles() {
   printf '%s\n' "${selected[@]}"
 }
 
+resolve_supported_shell_profiles() {
+  local selected=()
+  local candidate
+
+  for candidate in \
+    "${HOME}/.zprofile" \
+    "${HOME}/.zshrc" \
+    "${HOME}/.bash_profile" \
+    "${HOME}/.profile"
+  do
+    [[ -n "${candidate}" ]] || continue
+    if append_unique_value "${candidate}" "${selected[@]}" >/dev/null; then
+      selected+=("${candidate}")
+    fi
+  done
+
+  if [[ -f "${HOME}/.bashrc" ]]; then
+    if append_unique_value "${HOME}/.bashrc" "${selected[@]}" >/dev/null; then
+      selected+=("${HOME}/.bashrc")
+    fi
+  fi
+
+  printf '%s\n' "${selected[@]}"
+}
+
 profile_contains_ocs_path_source() {
   local profile="$1"
   [[ -f "${profile}" ]] || return 1
   grep -Fq 'ocs-path.sh' "${profile}"
+}
+
+rewrite_ocs_path_source_lines() {
+  local profile="$1"
+  local source_line="$2"
+  [[ -f "${profile}" ]] || return 0
+
+  python3 - "$profile" "$source_line" <<'PY'
+from pathlib import Path
+import sys
+
+profile = Path(sys.argv[1])
+source_line = sys.argv[2]
+lines = profile.read_text(encoding="utf-8").splitlines()
+rewritten = []
+replaced = False
+
+for line in lines:
+    if "ocs-path.sh" in line:
+        if not replaced:
+            rewritten.append(source_line)
+            replaced = True
+        continue
+    rewritten.append(line)
+
+text = "\n".join(rewritten)
+if lines:
+    text += "\n"
+profile.write_text(text, encoding="utf-8")
+PY
 }
 
 resolve_binary_dir() {
@@ -2012,13 +2075,15 @@ ensure_shell_path_priority() {
   while IFS= read -r profile; do
     [[ -n "${profile}" ]] || continue
     if ensure_text_file_exists_if_writable "${profile}"; then
-      if ! profile_contains_ocs_path_source "${profile}"; then
+      if profile_contains_ocs_path_source "${profile}"; then
+        rewrite_ocs_path_source_lines "${profile}" "${source_line}"
+      else
         printf '\n# OCS installer path\n%s\n' "${source_line}" >> "${profile}"
       fi
     else
       warn "Cannot write to shell profile ${profile}. Current-session PATH is active, but persistence was skipped."
     fi
-  done < <(resolve_primary_shell_profiles)
+  done < <(resolve_supported_shell_profiles)
 }
 
 source_shell_path_priority() {
