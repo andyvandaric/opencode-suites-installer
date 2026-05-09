@@ -439,7 +439,11 @@ function Join-SafeEnvPath {
         [System.Environment+SpecialFolder]$FallbackFolder
     )
 
-    $rootPath = Get-SafeEnvValue -Names $EnvNames -FallbackFolder:$FallbackFolder
+    $rootPath = if ($PSBoundParameters.ContainsKey('FallbackFolder')) {
+        Get-SafeEnvValue -Names $EnvNames -FallbackFolder $FallbackFolder
+    } else {
+        Get-SafeEnvValue -Names $EnvNames
+    }
     if (-not (Is-EnvPathSafe $rootPath)) {
         return $null
     }
@@ -1766,17 +1770,23 @@ function Install-OpencodeShimFromBun {
     New-Item -ItemType Directory -Path $bunBin -Force | Out-Null
 
     $bunxExe = Join-Path $bunBin "bunx.exe"
+    $bunExe = Join-Path $bunBin "bun.exe"
     $cmdPath = Join-Path $bunBin "opencode.cmd"
     $ps1Path = Join-Path $bunBin "opencode.ps1"
+    $nativeBinary = Resolve-OpencodeNativeBinary
 
-    $cmdLine = if (Test-Path $bunxExe) {
+    $cmdLine = if ($nativeBinary) {
+        "@echo off`r`n`"$nativeBinary`" %*`r`n"
+    } elseif (Test-Path $bunxExe) {
         "@echo off`r`n`"$bunxExe`" --bun opencode-ai %*`r`n"
     } else {
         "@echo off`r`nbunx --bun opencode-ai %*`r`n"
     }
     Set-Content -Path $cmdPath -Value $cmdLine -Encoding ASCII
 
-    $psLine = if (Test-Path $bunxExe) {
+    $psLine = if ($nativeBinary) {
+        "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& `"$nativeBinary`" @Args`r`n"
+    } elseif (Test-Path $bunxExe) {
         "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& `"$bunxExe`" --bun opencode-ai @Args`r`n"
     } else {
         "param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)`r`n& bunx --bun opencode-ai @Args`r`n"
@@ -1787,6 +1797,101 @@ function Install-OpencodeShimFromBun {
     Refresh-SessionPath
 
     return (Test-Path $cmdPath)
+}
+
+function Resolve-OpencodeNativeBinary {
+    $userHome = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $candidates = @(
+        (Join-Path $userHome '.opencode\bin\opencode.exe'),
+        (Join-Path $userHome '.opencode\bin\opencode'),
+        (Join-Path $userHome '.bun\install\global\node_modules\opencode-ai\bin\.opencode.exe'),
+        (Join-Path $userHome '.bun\install\global\node_modules\opencode-ai\bin\.opencode')
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Test-OpencodeWorks {
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $managedCmdPath = Join-Path $bunBin 'opencode.cmd'
+
+    $opencodeCommandPath = if (Test-Path $managedCmdPath) {
+        $managedCmdPath
+    } else {
+        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+        if ($opencodeCommand) { $opencodeCommand.Source } else { $null }
+    }
+
+    if (-not $opencodeCommandPath) {
+        return $false
+    }
+
+    try {
+        & $opencodeCommandPath --version *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $helpOutput = & $opencodeCommandPath --help 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                return $false
+            }
+            if ($helpOutput -match 'Usage:\s+oh-my-opencode' -or $helpOutput -match 'The ultimate OpenCode plugin') {
+                return $false
+            }
+            return $true
+        }
+    } catch {
+    }
+
+    try {
+        $helpOutput = & $opencodeCommandPath --help 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        if ($helpOutput -match 'Usage:\s+oh-my-opencode' -or $helpOutput -match 'The ultimate OpenCode plugin') {
+            return $false
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Ensure-OpencodeCommand {
+    if (Test-OpencodeWorks) {
+        return $true
+    }
+
+    if (Install-OpencodeShimFromBun) {
+        Refresh-SessionPath
+        if (Test-OpencodeWorks) {
+            return $true
+        }
+    }
+
+    $bunBin = Join-SafeEnvPath -EnvNames @("USERPROFILE", "HOME") -RelativePath '.bun\bin' -FallbackFolder ([System.Environment+SpecialFolder]::UserProfile)
+    $bunExe = Join-Path $bunBin 'bun.exe'
+    $bunCommand = if (Test-Path $bunExe) { $bunExe } else { 'bun' }
+
+    try {
+        & $bunCommand add -g opencode-ai@latest *> $null
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    } catch {
+        return $false
+    }
+
+    if (Install-OpencodeShimFromBun) {
+        Refresh-SessionPath
+        return (Test-OpencodeWorks)
+    }
+
+    return $false
 }
 
 function Install-OcsFromPrivateRepo {
@@ -2247,6 +2352,106 @@ function Invoke-AutoSetup {
     }
 }
 
+function Get-InstalledPluginVersion {
+    param([string]$PluginDir)
+
+    $packageJson = Join-Path $PluginDir "package.json"
+    if (-not (Test-Path $packageJson)) {
+        return ""
+    }
+
+    try {
+        $pkg = Get-Content $packageJson -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($pkg.version) {
+            return [string]$pkg.version
+        }
+    } catch {
+        return ""
+    }
+
+    return ""
+}
+
+function Test-TrustedInstalledSameVersionSkip {
+    param(
+        [string]$RequestedVersion,
+        [string]$PluginDir,
+        [string]$ConfigRoot
+    )
+
+    $installedVersion = Get-InstalledPluginVersion -PluginDir $PluginDir
+    if ([string]::IsNullOrWhiteSpace($installedVersion)) {
+        Write-Warning "Identity unknown: unable to read installed plugin version from $(Join-Path $PluginDir 'package.json')."
+        return $false
+    }
+
+    if ($installedVersion -ne $RequestedVersion) {
+        Write-Warning "Identity unknown: installed plugin version v$installedVersion does not match requested v$RequestedVersion."
+        return $false
+    }
+
+    $provenancePath = Join-Path $ConfigRoot "BUILD_PROVENANCE.json"
+    if (-not (Test-Path $provenancePath)) {
+        Write-Warning "Skip denied: missing installed provenance at $provenancePath; identity is unknown."
+        return $false
+    }
+
+    try {
+        $provenance = Get-Content -Raw -Path $provenancePath -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        Write-Warning "Skip denied: provenance file at $provenancePath is unreadable or malformed; identity is unknown."
+        return $false
+    }
+
+    if ($null -eq $provenance -or $provenance -isnot [pscustomobject]) {
+        Write-Warning "Skip denied: provenance file at $provenancePath is malformed; identity is unknown."
+        return $false
+    }
+
+    $provenanceVersion = ""
+    if ($provenance.PSObject.Properties.Name -contains "version" -and $null -ne $provenance.version) {
+        $provenanceVersion = [string]$provenance.version
+    }
+
+    $source = $null
+    if ($provenance.PSObject.Properties.Name -contains "source") {
+        $source = $provenance.source
+    }
+
+    $gitTag = ""
+    $isDirty = $null
+    if ($null -ne $source -and $source -is [pscustomobject]) {
+        if ($source.PSObject.Properties.Name -contains "gitTag" -and $null -ne $source.gitTag) {
+            $gitTag = [string]$source.gitTag
+        }
+
+        if ($source.PSObject.Properties.Name -contains "isDirty") {
+            $isDirty = $source.isDirty
+        }
+    }
+
+    if ($provenanceVersion -ne $RequestedVersion) {
+        $displayVersion = if ([string]::IsNullOrWhiteSpace($provenanceVersion)) { "<missing>" } else { $provenanceVersion }
+        Write-Warning "Identity unknown: provenance version $displayVersion does not match requested v$RequestedVersion."
+        return $false
+    }
+
+    if ($gitTag -ne "v$RequestedVersion") {
+        $displayTag = if ([string]::IsNullOrWhiteSpace($gitTag)) { "<missing>" } else { $gitTag }
+        Write-Warning "Identity unknown: provenance gitTag $displayTag does not match expected v$RequestedVersion."
+        return $false
+    }
+
+    if (($null -eq $isDirty) -or ($isDirty -ne $false)) {
+        $displayDirty = if ($null -eq $isDirty) { "<missing>" } else { [string]$isDirty }
+        Write-Warning "Identity unknown: provenance source.isDirty=$displayDirty is not clean."
+        return $false
+    }
+
+    Write-Host "Trusted installed provenance accepted from $provenancePath (version v$RequestedVersion, tag v$RequestedVersion, clean tree)."
+    return $true
+}
+
 function Sync-BundleRuntimeRoot {
     param(
         [string]$BundleRoot,
@@ -2387,7 +2592,6 @@ if ($relaunchHandled) {
 Ensure-Bun
 Ensure-WindowsShellEnv
 Ensure-OpencodePathEntries
-Reset-RuntimePluginsDirectory
 Ensure-PnpmRuntime | Out-Null
 Ensure-PythonRuntimeForAgents | Out-Null
 Write-Output "Installer source branch: $GITHUB_SOURCE_BRANCH"
@@ -2414,6 +2618,7 @@ if ($forceLocalSource) {
 }
 
 $version = "local-source"
+$installedVersion = ""
 
 if ($isLocalSource) {
     $PLUGIN_DIR = Join-Path $rootDir "plugins\opencode-multi-auth"
@@ -2460,6 +2665,22 @@ if ($isLocalSource) {
 
         Write-Output "OCS_LOCAL_BUNDLE_PATH detected. Skipping GitHub auth and repo access checks."
     }
+
+    if (-not $resolvedLocalBundle -and $REQUESTED_VERSION) {
+        $installedVersion = Get-InstalledPluginVersion -PluginDir $PLUGIN_DIR
+        if ($installedVersion -and ($installedVersion -eq $REQUESTED_VERSION)) {
+            if (Test-TrustedInstalledSameVersionSkip -RequestedVersion $REQUESTED_VERSION -PluginDir $PLUGIN_DIR -ConfigRoot $script:InstallerPathContract.TargetConfigDir) {
+                Write-Output "Requested version v$REQUESTED_VERSION is already installed at $PLUGIN_DIR."
+                Write-Output "Trusted installed identity was detected, but the normal installer path will still purge and refresh plugin payloads so same-version patches land correctly."
+            } else {
+                Write-Output "Same-version installed payload found, but trusted identity was not established; continuing with the normal purge-and-refresh path."
+            }
+        }
+    }
+
+    Write-Output "Resolved installer target root: $($script:InstallerPathContract.TargetConfigDir)"
+    Write-Output "Resolved installer plugin dir: $PLUGIN_DIR"
+    Reset-RuntimePluginsDirectory
 
     Write-Output ""
     if (-not $resolvedLocalBundle) {
@@ -2550,9 +2771,9 @@ if ($isLocalSource) {
         $version = "$($script:ResolvedSourceBranch)"
     }
 
-Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
-Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
-}
+    Get-ChildItem -Path $pluginSource -Force | ForEach-Object {
+        Copy-Item -Path $_.FullName -Destination $PLUGIN_DIR -Recurse -Force
+    }
 
     $configRoot = $script:InstallerPathContract.TargetConfigDir
     if (-not (Ensure-EnvPathValue -Value $configRoot -Context 'env-derived opencode config root' -FallbackHint 'env: USERPROFILE/HOME; fallback: UserProfile special folder' -FallbackPath (Join-Path $script:InstallerPathContract.HomeDir '.config\opencode') -Fail)) {
@@ -2597,17 +2818,10 @@ if (-not (Ensure-OcsCommand -PluginPath $PLUGIN_DIR -BasePath $rootDir -IsLocalS
 Write-Output ""
 Ensure-OpencodePathEntries
 Write-Output "Checking opencode command..."
-$opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-if (-not $opencodeCommand) {
-    if (Install-OpencodeShimFromBun) {
-        $opencodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
-    }
-}
-
-if ($opencodeCommand) {
+if (Ensure-OpencodeCommand) {
     Write-Output "opencode verification passed."
 } else {
-    Write-Warning "opencode command not found. Skipping heavy auto-recovery to avoid long waits."
+    Write-Warning "opencode command is still unavailable after automatic repair."
     Write-Output "Manual check: opencode --version"
 }
 Write-Output ""
