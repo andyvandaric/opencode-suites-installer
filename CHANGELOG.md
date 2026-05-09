@@ -1,5 +1,12 @@
 > Temporary release-lane note: `v3.0.0` is the local-plugin lane and `v3.1.0` is the direct-core lane until OpenAI path convergence is complete. All other features are intended to stay in parity.
 
+## [3.1.1] - 2026-05-09
+
+- Updated installer/setup contract docs to reflect first-class POSIX bootstrap ownership in `install.sh` across `apt`, `dnf`, `yum`, `pacman`, `zypper`, `apk`, and `brew`.
+- Clarified shell persistence contract: current-shell PATH activation plus persisted `~/.config/opencode/shell/ocs-path.sh` sourcing through primary `bash`/`zsh` profiles.
+- Documented unified setup/CLI bundled version resolution and removed stale wording that implied manual PATH exports or shipped `v0.0.0` output were acceptable outcomes.
+- Explicitly scoped runtime-proof claims to the currently validated lanes (WSL `apt` and source-lane WSL execution), with native macOS smoke still pending.
+
 ## [3.1.0] - 2026-05-06
 - Added per-project CocoIndex wrapper recovery so first project sessions can scaffold local `.cocoindex_code/settings.yml` without requiring setup-time global `ccc init`.
 - Hardened Windows RTK health messaging so stale shells now distinguish "PATH not refreshed yet" from a truly missing native RTK install.
