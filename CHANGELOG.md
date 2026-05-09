@@ -1,3 +1,5 @@
+> Temporary release-lane note: `v3.0.0` is the local-plugin lane and `v3.1.0` is the direct-core lane until OpenAI path convergence is complete. All other features are intended to stay in parity.
+
 ## [3.1.0] - 2026-05-06
 - Added per-project CocoIndex wrapper recovery so first project sessions can scaffold local `.cocoindex_code/settings.yml` without requiring setup-time global `ccc init`.
 - Hardened Windows RTK health messaging so stale shells now distinguish "PATH not refreshed yet" from a truly missing native RTK install.
@@ -28,6 +30,7 @@
 <!-- OCS_COMMIT_COVERAGE_END -->
 ## [3.0.0] - 2026-05-05
 
+- Temporary lane role: this version remains the pinned local-plugin compatibility lane while `v3.1.0` serves as the temporary direct-core lane.
 - Switched the public release wave fully to the `main` lane and aligned pinned install commands to `3.0.0`.
 - Shipped the redesigned buyer-facing built-in skill bundle, including `ocs-technical-copy-seo`, `ocs-product-marketing-context`, and `ocs-seo-audit`.
 - Added native-first RTK and Caveman bootstrap so installer-managed adjunct runtime dependencies reconcile into OpenCode target state instead of staying policy-only.

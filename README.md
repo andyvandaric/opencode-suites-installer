@@ -4,6 +4,18 @@ Install OCS (OpenCode Config Suites) in minutes on **Windows, Linux, and macOS**
 
 OCS is built for people who want to code faster with AI without wasting time on manual setup and trial-error config.
 
+## Temporary Release Lanes
+
+Until OpenAI path convergence is fully finished, the installer temporarily exposes two lanes:
+
+- `v3.0.0` = **local-plugin lane**
+- `v3.1.0` = **direct-core lane**
+
+Everything else is intended to stay feature-parity identical. The difference is only the OpenAI runtime path.
+
+- Choose `v3.0.0` if you specifically want the current local-plugin behavior.
+- Choose `latest` or pin `v3.1.0` if you want the direct-core behavior.
+
 ## Why OCS
 
 - 🚀 **Fast start** — install, login, pick a profile, and ship.
@@ -34,6 +46,12 @@ gh auth login -h github.com -w
 Install specific version:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 3.0.0
+```
+
+Temporary direct-core lane:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.sh | bash -s -- --version 3.1.0
 ```
 
@@ -44,6 +62,12 @@ curl -fsSL https://raw.githubusercontent.com/andyvandaric/opencode-suites-instal
 ```
 
 Install specific version:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.0.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
+```
+
+Temporary direct-core lane:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -Command '$env:OCS_VERSION = "3.1.0"; irm https://raw.githubusercontent.com/andyvandaric/opencode-suites-installer/main/install.ps1 | iex'
