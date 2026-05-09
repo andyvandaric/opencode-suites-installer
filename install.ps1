@@ -1675,13 +1675,13 @@ function Install-OcsShimFromBundle {
     $baseAbsPath = Resolve-AbsolutePathSafe -BasePath $null -Candidate $BasePath
 
     $candidatePaths = @()
-    if ($baseAbsPath) {
-        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.cjs")
-        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.js")
-    }
     if ($pluginAbsPath) {
         $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.cjs")
         $candidatePaths += (Join-Path $pluginAbsPath "bin\ocs.js")
+    }
+    if ($baseAbsPath) {
+        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.cjs")
+        $candidatePaths += (Join-Path $baseAbsPath "bin\ocs.js")
     }
 
     $ocsJs = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -1940,6 +1940,11 @@ function Ensure-OcsCommand {
         }
     }
 
+    if (Install-OcsShimFromOpencode) {
+        Write-Output "ocs shim refreshed from installed runtime and verification passed."
+        return $true
+    }
+
     if (Install-OcsShimFromBundle -PluginPath $PluginPath -BasePath $BasePath) {
         Write-Output "ocs shim install and verification passed."
         return $true
@@ -1947,11 +1952,6 @@ function Ensure-OcsCommand {
 
     if (Test-OcsWorks) {
         Write-Output "ocs verification passed."
-        return $true
-    }
-
-    if (Install-OcsShimFromOpencode) {
-        Write-Output "ocs shim fallback from installed runtime and verification passed."
         return $true
     }
 
