@@ -139,8 +139,8 @@ Optional later:
 
 Recommended daily profile:
 
-- `codex-5.3-token-saver` (primary)
-- `gpt-5.4-best-perform` (backup)
+- `gpt-5.4-best-perform` (primary)
+- `codex-5.3-token-saver` (backup)
 - `gpt-5.4-token-saver` (backup)
 
 ## Runtime Recommendation
