@@ -16,15 +16,27 @@
 <!-- OCS_AUTO_SUMMARY_START -->
 - Commit window: `v3.0.0..v3.1.0`
 - Added: 0
-- Fixed: 0
+- Fixed: 1
 - Changed: 0
-- Docs: 0
-- Chore/Build/CI: 10
+- Docs: 1
+- Chore/Build/CI: 20
 - Other: 0
 <!-- OCS_AUTO_SUMMARY_END -->
 
 ### Commit Coverage (auto-generated)
 <!-- OCS_COMMIT_COVERAGE_START -->
+- `c7171c1` chore(installer): sync scripts from opencode-config-suites
+- `220b2b3` chore(installer): sync scripts from opencode-config-suites
+- `53213de` chore(installer): sync scripts from opencode-config-suites
+- `e7f3558` chore(installer): sync scripts from opencode-config-suites
+- `6667e5f` chore(installer): sync scripts from opencode-config-suites
+- `0290170` chore(installer): sync scripts from opencode-config-suites
+- `f7b7ac7` chore(installer): sync scripts from opencode-config-suites
+- `5cab234` fix(installer): refresh lane-aware install scripts
+- `35d0180` docs(installer): add temporary dual-lane guidance
+- `0b7d690` chore(installer): sync scripts from opencode-config-suites
+- `9052be7` chore(installer): sync scripts from opencode-config-suites
+- `434fd65` chore(installer): sync scripts from opencode-config-suites
 - `970739e` chore(installer): sync main v3.1.0 release wave
 - `d98d7c3` chore(installer): sync main v3.1.0 release wave
 - `3b2c3e2` chore(installer): sync main v3.1.0 release wave
