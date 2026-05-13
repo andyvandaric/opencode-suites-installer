@@ -2276,7 +2276,7 @@ function Invoke-BunInstallWithRetry {
 function Invoke-AutoSetup {
     param(
         [bool]$IsLocalSource,
-        [string]$SetupScript
+        [string]$SetupEntrypoint
     )
 
     $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
@@ -2292,8 +2292,8 @@ function Invoke-AutoSetup {
         return
     }
 
-    if (-not (Test-Path $setupScript)) {
-        Write-Warning "Setup script not found at $setupScript. Skipping auto setup."
+    if (-not (Test-Path $setupEntrypoint)) {
+        Write-Warning "Setup entrypoint not found at $setupEntrypoint. Skipping auto setup."
         return
     }
 
@@ -2306,7 +2306,7 @@ function Invoke-AutoSetup {
     try {
         $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'setup-profile'
         try {
-            & bun $setupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
+            & bun $setupEntrypoint --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE
         } finally {
             Stop-ProgressNarration -Process $progressProcess
         }
@@ -2323,18 +2323,18 @@ function Invoke-AutoSetup {
         try {
             $progressProcess = Start-ProgressNarration -Channel 'install' -Scenario 'setup-profile'
             try {
-                & bun $setupScript
+                & bun $setupEntrypoint
             } finally {
                 Stop-ProgressNarration -Process $progressProcess
             }
         } catch {
             Write-Error "Auto setup failed: $($_.Exception.Message)"
-            Write-Error "Run setup manually: bun $setupScript"
+            Write-Error "Run setup manually: bun $setupEntrypoint"
             exit 1
         }
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Interactive setup failed. Run manually: bun $setupScript"
+            Write-Error "Interactive setup failed. Run manually: bun $setupEntrypoint"
             if ($null -eq $previousInstallerMode) {
                 Remove-Item Env:OCS_SETUP_INSTALLER_MODE -ErrorAction SilentlyContinue
             } else {
@@ -2474,7 +2474,7 @@ function Sync-BundleRuntimeRoot {
     Write-Output "Synced bundled runtime root to $TargetRoot"
 }
 
-function Resolve-InstallerSetupScript {
+function Resolve-InstallerSetupEntrypoint {
     param(
         [bool]$IsLocalSource,
         [string]$PluginDir,
@@ -2482,19 +2482,19 @@ function Resolve-InstallerSetupScript {
     )
 
     if ($IsLocalSource) {
-        return (Join-Path $PluginDir "scripts\setup.js")
+        return (Join-Path $PluginDir "dist\installer\setup.cjs")
     }
 
-    $targetRootScript = Join-Path $ConfigRoot "scripts\setup.js"
+    $targetRootScript = Join-Path $ConfigRoot "dist\installer\setup.cjs"
     if (Test-Path $targetRootScript) {
         return $targetRootScript
     }
 
-    return (Join-Path $PluginDir "scripts\setup.js")
+    return (Join-Path $PluginDir "dist\installer\setup.cjs")
 }
 
 function Assert-AntigravityOauthIntegrity {
-    param([string]$SetupScript)
+    param([string]$SetupEntrypoint)
 
     $configDir = $script:InstallerPathContract.TargetConfigDir
     $configFallbackPath = Join-Path $script:InstallerPathContract.HomeDir '.config\opencode'
@@ -2529,7 +2529,7 @@ function Assert-AntigravityOauthIntegrity {
         $previousInstallerMode = $env:OCS_SETUP_INSTALLER_MODE
         $env:OCS_SETUP_INSTALLER_MODE = "1"
         try {
-            & bun $SetupScript --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
+            & bun $SetupEntrypoint --headless --profile $INSTALLER_DEFAULT_PROFILE --mode $INSTALLER_DEFAULT_MODE *> $null
         } catch {
             # best effort repair
         } finally {
@@ -2605,7 +2605,7 @@ $forceLocalSource = (($env:OCS_FORCE_LOCAL_SOURCE ?? "0") -eq "1")
 $isLocalSource = $false
 $hasLocalSourceMarkers =
     (Test-Path (Join-Path $rootDir "plugins\opencode-multi-auth\package.json")) -and
-    (Test-Path (Join-Path $rootDir "scripts\setup.js")) -and
+    (Test-Path (Join-Path $rootDir "dist\installer\setup.cjs")) -and
     (Test-Path (Join-Path $rootDir "configs"))
 
 if ($forceLocalSource) {
@@ -2794,9 +2794,9 @@ Write-Output "Installing dependencies..."
 Invoke-BunInstallWithRetry -Directory $pluginFullPath -MaxAttempts 5
 
 $resolvedConfigRoot = $script:InstallerPathContract.TargetConfigDir
-$resolvedSetupScript = Resolve-InstallerSetupScript -IsLocalSource:$isLocalSource -PluginDir $PLUGIN_DIR -ConfigRoot $resolvedConfigRoot
-Invoke-AutoSetup -IsLocalSource:$isLocalSource -SetupScript $resolvedSetupScript
-Assert-AntigravityOauthIntegrity -SetupScript $resolvedSetupScript
+$resolvedSetupEntrypoint = Resolve-InstallerSetupEntrypoint -IsLocalSource:$isLocalSource -PluginDir $PLUGIN_DIR -ConfigRoot $resolvedConfigRoot
+Invoke-AutoSetup -IsLocalSource:$isLocalSource -SetupEntrypoint $resolvedSetupEntrypoint
+Assert-AntigravityOauthIntegrity -SetupEntrypoint $resolvedSetupEntrypoint
 Ensure-OpencodePathEntries
 Ensure-AdjunctRuntimeReady
 

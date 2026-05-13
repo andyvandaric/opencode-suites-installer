@@ -340,23 +340,23 @@ sync_bundle_runtime_root() {
   success "Synced bundled runtime root to ${target_root}"
 }
 
-resolve_installer_setup_script() {
+resolve_installer_setup_entrypoint() {
   local is_local_source="$1"
   local plugin_dir="$2"
   local config_root="$3"
 
   if [[ "${is_local_source}" == "true" ]]; then
-    printf '%s\n' "${plugin_dir}/scripts/setup.js"
+    printf '%s\n' "${plugin_dir}/dist/installer/setup.cjs"
     return 0
   fi
 
-  local target_root_script="${config_root}/scripts/setup.js"
-  if [[ -f "${target_root_script}" ]]; then
-    printf '%s\n' "${target_root_script}"
+  local target_root_entrypoint="${config_root}/dist/installer/setup.cjs"
+  if [[ -f "${target_root_entrypoint}" ]]; then
+    printf '%s\n' "${target_root_entrypoint}"
     return 0
   fi
 
-  printf '%s\n' "${plugin_dir}/scripts/setup.js"
+  printf '%s\n' "${plugin_dir}/dist/installer/setup.cjs"
 }
 
 is_root_user() {
@@ -1273,7 +1273,7 @@ ensure_adjunct_runtime_ready() {
 }
 
 ensure_antigravity_oauth_integrity() {
-  local setup_script="$1"
+  local setup_entrypoint="$1"
   local config_dir="${CONFIG_ROOT}"
   local runtime_opencode="${config_dir}/opencode.json"
   local runtime_antigravity="${config_dir}/antigravity.json"
@@ -1296,7 +1296,7 @@ ensure_antigravity_oauth_integrity() {
   if (( needs_repair )); then
     info "Repairing final Antigravity OAuth visibility before installer exit..."
     export OCS_SETUP_INSTALLER_MODE=1
-    "$(resolve_local_runtime_command_path bun)" "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
+    "$(resolve_local_runtime_command_path bun)" "${setup_entrypoint}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}" >/dev/null 2>&1 || true
     unset OCS_SETUP_INSTALLER_MODE
     if [[ ! -f "${runtime_antigravity}" && -f "${template_antigravity}" ]]; then
       cp "${template_antigravity}" "${runtime_antigravity}"
@@ -2951,7 +2951,7 @@ main() {
   local installed_version=""
   is_local_source=false
   if [[ "${force_local_source}" == "1" ]]; then
-    if [[ -f "${root_dir}/plugins/opencode-multi-auth/package.json" && -f "${root_dir}/scripts/setup.js" && -f "${root_dir}/scripts/constants/profile-catalog.json" && -d "${root_dir}/configs" ]]; then
+    if [[ -f "${root_dir}/plugins/opencode-multi-auth/package.json" && -f "${root_dir}/dist/installer/setup.cjs" && -f "${root_dir}/scripts/constants/profile-catalog.json" && -d "${root_dir}/configs" ]]; then
       is_local_source=true
       warn "OCS_FORCE_LOCAL_SOURCE=1 enabled. Using local workspace plugin source."
     else
@@ -3049,9 +3049,9 @@ main() {
   echo ""
   success "opencode-multi-auth ${version} installed to ${PLUGIN_DIR} from ${RESOLVED_SOURCE_BRANCH}"
   echo ""
-  info "Running setup script..."
-  local setup_script
-  setup_script="$(resolve_installer_setup_script "${is_local_source}" "${PLUGIN_DIR}" "${CONFIG_ROOT}")"
+  info "Running setup entrypoint..."
+  local setup_entrypoint
+  setup_entrypoint="$(resolve_installer_setup_entrypoint "${is_local_source}" "${PLUGIN_DIR}" "${CONFIG_ROOT}")"
 
   # Ensure current installer shell can resolve user-installed binaries
   # (e.g. ccc in ~/.local/bin) before running headless setup.
@@ -3065,16 +3065,16 @@ main() {
   else
     export OCS_SETUP_INSTALLER_MODE=1
     start_progress_narration "install" "setup-profile" || true
-    if bun "${setup_script}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}"; then
+    if bun "${setup_entrypoint}" --headless --profile "${INSTALLER_DEFAULT_PROFILE}" --mode "${INSTALLER_DEFAULT_MODE}"; then
       stop_progress_narration
       success "Setup completed automatically (headless)."
     else
       stop_progress_narration
       warn "Headless setup failed. Falling back to interactive setup..."
       start_progress_narration "install" "setup-profile" || true
-      if ! bun "${setup_script}"; then
+      if ! bun "${setup_entrypoint}"; then
         stop_progress_narration
-        error "Setup script failed."
+        error "Setup entrypoint failed."
       fi
       stop_progress_narration
     fi
@@ -3130,7 +3130,7 @@ else
   fi
 fi
 
-ensure_antigravity_oauth_integrity "${setup_script}"
+ensure_antigravity_oauth_integrity "${setup_entrypoint}"
 
   echo ""
   echo "   Next steps:"
