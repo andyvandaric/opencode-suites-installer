@@ -249,7 +249,7 @@
 
 ## 2.0.5 - 2026-03-04
 
-- Hardened `ocs prefs` schema path resolution and setup defaults for stable hybrid OAuth flow.
+- Hardened the legacy preferences schema path resolution and setup defaults for stable hybrid OAuth flow.
 
 ## 2.0.4 - 2026-03-04
 
