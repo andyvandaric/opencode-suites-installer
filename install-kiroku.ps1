@@ -126,11 +126,11 @@ Write-Info "Downloading $fileName..."
 $tmpFile = Join-Path $env:TEMP "kiroku-install-$([guid]::NewGuid().ToString('N').Substring(0,8)).exe"
 try {
     # Get file info (includes download_url for LFS files)
-    $dlInfoUrl = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/kiroku/$fileName`?ref=$GITHUB_SOURCE_BRANCH"
+    $dlInfoUrl = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/kiroku/${fileName}?ref=$GITHUB_SOURCE_BRANCH"
     $fileInfo = Invoke-RestMethod $dlInfoUrl -Headers @{ Authorization = "token $token"; Accept = "application/vnd.github+json" }
     $downloadUrl = $fileInfo.download_url
     if (-not $downloadUrl) { Write-Err "No download URL found for $fileName" }
-    Invoke-WebRequest $downloadUrl -Headers @{ Authorization = "token $token" } -OutFile $tmpFile
+    Invoke-WebRequest $downloadUrl -OutFile $tmpFile
     Write-Ok "Downloaded: $((Get-Item $tmpFile).Length / 1MB | ForEach-Object { '{0:N1} MB' -f $_ })"
 } catch {
     Write-Err "Download failed: $_"
