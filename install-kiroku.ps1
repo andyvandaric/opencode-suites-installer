@@ -200,6 +200,27 @@ if ($ver -match "kiroku") {
 }
 
 # ─── Done ────────────────────────────────────────────────────────────────────
+
+# ─── Auto-install WezTerm if not present ─────────────────────────────────────
+$wezterm = Get-Command wezterm -ErrorAction SilentlyContinue
+if (-not $wezterm) {
+    Write-Host ""
+    Write-Info "Installing WezTerm (recommended terminal with Shift+Enter support)..."
+    try {
+        $weztermScript = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/kiroku/install-wezterm.ps1?ref=$GITHUB_SOURCE_BRANCH"
+        $weztermInfo = Invoke-RestMethod $weztermScript -Headers @{ Authorization = "token $token"; Accept = "application/vnd.github+json" }
+        $weztermContent = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($weztermInfo.content))
+        Invoke-Expression $weztermContent
+        Write-Ok "WezTerm installed"
+    } catch {
+        Write-Warn "WezTerm auto-install skipped: $_"
+        Write-Info "Install manually later from buyer repo: assets/kiroku/install-wezterm.ps1"
+    }
+} else {
+    Write-Info "WezTerm already installed: $($wezterm.Source)"
+}
+
+# ─── Summary ─────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "────────────────────────────────────────────────" -ForegroundColor Magenta
 Write-Ok "Kiroku v$($manifest.version) installed!"
