@@ -127,11 +127,29 @@ $tmpFile = Join-Path $env:TEMP "kiroku-install-$([guid]::NewGuid().ToString('N')
 try {
     # Get file info (includes download_url for LFS files)
     $dlInfoUrl = "https://api.github.com/repos/$GITHUB_SOURCE_REPO/contents/assets/kiroku/${fileName}?ref=$GITHUB_SOURCE_BRANCH"
-    $fileInfo = Invoke-RestMethod $dlInfoUrl -Headers @{ Authorization = "token $token"; Accept = "application/vnd.github+json" }
+    $fileInfo = Invoke-RestMethod $dlInfoUrl -Headers @{ Authorization = "token $token"; Accept = "application/vnd.github+json" } -UseBasicParsing
     $downloadUrl = $fileInfo.download_url
     if (-not $downloadUrl) { Write-Err "No download URL found for $fileName" }
-    Invoke-WebRequest $downloadUrl -OutFile $tmpFile
-    Write-Ok "Downloaded: $((Get-Item $tmpFile).Length / 1MB | ForEach-Object { '{0:N1} MB' -f $_ })"
+    Invoke-WebRequest $downloadUrl -OutFile $tmpFile -UseBasicParsing
+    $dlSize = (Get-Item $tmpFile).Length
+    if ($dlSize -lt 1000000) {
+        # Likely got LFS pointer, try gh CLI as fallback
+        Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
+        Write-Info "Retrying download via gh CLI..."
+        gh api "repos/$GITHUB_SOURCE_REPO/contents/assets/kiroku/${fileName}?ref=$GITHUB_SOURCE_BRANCH" -H "Accept: application/octet-stream" > $tmpFile 2>$null
+        if (-not $?) {
+            # Final fallback: use git clone with LFS
+            $lfsDir = Join-Path $env:TEMP "kiroku-lfs-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            git clone --depth 1 --filter=blob:none --sparse "https://x-access-token:${token}@github.com/$GITHUB_SOURCE_REPO.git" $lfsDir 2>$null
+            Push-Location $lfsDir
+            git sparse-checkout set "assets/kiroku/$fileName" 2>$null
+            git lfs pull --include="assets/kiroku/$fileName" 2>$null
+            Pop-Location
+            Copy-Item "$lfsDir/assets/kiroku/$fileName" $tmpFile -Force
+            Remove-Item $lfsDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Ok "Downloaded: $([math]::Round((Get-Item $tmpFile).Length / 1MB, 1)) MB"
 } catch {
     Write-Err "Download failed: $_"
 }
