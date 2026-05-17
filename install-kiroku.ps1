@@ -197,7 +197,19 @@ foreach ($p in $pathsToAdd) {
 [Environment]::SetEnvironmentVariable("PATH", $userPath, "User")
 $env:PATH = "$($pathsToAdd -join ';');$env:PATH"
 Write-Ok "PATH updated: $($pathsToAdd -join ', ')"
-Write-Info "NOTE: Open a NEW terminal for PATH to take effect globally."
+
+# Also add to PowerShell profile for immediate availability in new terminals
+$profilePath = $PROFILE
+if ($profilePath) {
+    $profileDir = Split-Path $profilePath -Parent
+    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
+    $profileContent = if (Test-Path $profilePath) { Get-Content $profilePath -Raw } else { "" }
+    if ($profileContent -notlike "*\.kiroku\bin*") {
+        $snippet = "`n# Kiroku PATH`nif (Test-Path `"$INSTALL_DIR`") { `$env:PATH = `"$INSTALL_DIR;`$env:PATH`" }`n"
+        Add-Content $profilePath $snippet
+        Write-Ok "Added to PowerShell profile: $profilePath"
+    }
+}
 
 # ─── Verify ──────────────────────────────────────────────────────────────────
 Write-Host ""
