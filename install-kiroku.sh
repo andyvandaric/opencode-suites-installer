@@ -160,23 +160,28 @@ info "Downloading $FILE_NAME..."
 TMP_FILE="$(mktemp /tmp/kiroku-install-XXXXXX)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
-# Use git LFS sparse checkout (reliable for LFS files)
-LFS_DIR="$(mktemp -d /tmp/kiroku-lfs-XXXXXX)"
-if git clone --depth 1 --filter=blob:none --sparse \
-  "https://x-access-token:${TOKEN}@github.com/${GITHUB_SOURCE_REPO}.git" \
-  "$LFS_DIR" >/dev/null 2>&1; then
-  cd "$LFS_DIR"
-  git sparse-checkout set "assets/kiroku/$FILE_NAME" >/dev/null 2>&1
-  git lfs pull --include="assets/kiroku/$FILE_NAME" >/dev/null 2>&1
-  cd - >/dev/null
-  if [[ -f "$LFS_DIR/assets/kiroku/$FILE_NAME" ]]; then
-    cp "$LFS_DIR/assets/kiroku/$FILE_NAME" "$TMP_FILE"
+# Use git LFS sparse checkout if available, otherwise download_url
+DOWNLOADED=false
+
+if command -v git-lfs >/dev/null 2>&1; then
+  LFS_DIR="$(mktemp -d /tmp/kiroku-lfs-XXXXXX)"
+  if git clone --depth 1 --filter=blob:none --sparse \
+    "https://x-access-token:${TOKEN}@github.com/${GITHUB_SOURCE_REPO}.git" \
+    "$LFS_DIR" >/dev/null 2>&1; then
+    cd "$LFS_DIR"
+    git sparse-checkout set "assets/kiroku/$FILE_NAME" >/dev/null 2>&1
+    git lfs pull --include="assets/kiroku/$FILE_NAME" >/dev/null 2>&1
+    cd - >/dev/null
+    if [[ -f "$LFS_DIR/assets/kiroku/$FILE_NAME" ]] && [[ "$(wc -c < "$LFS_DIR/assets/kiroku/$FILE_NAME")" -gt 1000000 ]]; then
+      cp "$LFS_DIR/assets/kiroku/$FILE_NAME" "$TMP_FILE"
+      DOWNLOADED=true
+    fi
   fi
-  rm -rf "$LFS_DIR"
+  rm -rf "$LFS_DIR" 2>/dev/null || true
 fi
 
-# Fallback: download_url
-if [[ ! -s "$TMP_FILE" ]] || [[ "$(wc -c < "$TMP_FILE")" -lt 1000000 ]]; then
+# Fallback: download_url from contents API
+if [[ "$DOWNLOADED" != "true" ]]; then
   DL_URL="$(curl -fsSL \
     -H "Authorization: token ${TOKEN}" \
     -H "Accept: application/vnd.github+json" \
