@@ -181,13 +181,23 @@ Write-Ok "Installed: $destPath"
 
 # ─── Add to PATH ─────────────────────────────────────────────────────────────
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($userPath -notlike "*$INSTALL_DIR*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$INSTALL_DIR;$userPath", "User")
-    $env:PATH = "$INSTALL_DIR;$env:PATH"
-    Write-Ok "Added $INSTALL_DIR to user PATH"
-} else {
-    Write-Info "PATH already contains $INSTALL_DIR"
+$pathsToAdd = @($INSTALL_DIR)
+
+# Also ensure kiro-cli is in PATH
+$kiroCli = Split-Path $KIRO_CLI_PATH -Parent
+if ((Test-Path $KIRO_CLI_PATH) -and $userPath -notlike "*$kiroCli*") {
+    $pathsToAdd += $kiroCli
 }
+
+foreach ($p in $pathsToAdd) {
+    if ($userPath -notlike "*$p*") {
+        $userPath = "$p;$userPath"
+    }
+}
+[Environment]::SetEnvironmentVariable("PATH", $userPath, "User")
+$env:PATH = "$($pathsToAdd -join ';');$env:PATH"
+Write-Ok "PATH updated: $($pathsToAdd -join ', ')"
+Write-Info "NOTE: Open a NEW terminal for PATH to take effect globally."
 
 # ─── Verify ──────────────────────────────────────────────────────────────────
 Write-Host ""
