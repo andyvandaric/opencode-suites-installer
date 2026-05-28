@@ -1,3 +1,9 @@
+## [0.16.0] - 2026-05-29
+
+### Updated
+- ACS CLI updated to v0.16.0.
+- Installer still installs latest `acs-cli` from buyer release assets; no installer script change needed.
+
 > Temporary release-lane note: `v3.0.0` is the local-plugin lane and `v3.1.0` is the direct-core lane until OpenAI path convergence is complete. All other features are intended to stay in parity.
 
 ## [3.1.1] - 2026-05-09
